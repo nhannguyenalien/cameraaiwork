@@ -1,0 +1,23 @@
+# secrets
+.env
+
+# dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# platform-specific binary, downloaded by infra/setup.sh — not committed
+infra/go2rtc/bin/
+infra/go2rtc/go2rtc.yaml
+
+# data / personal footage — never commit
+data/*.db
+data/clips/
+
+# logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

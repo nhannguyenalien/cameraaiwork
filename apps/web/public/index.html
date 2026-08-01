@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<title>Camera Dashboard</title>
+<style>
+  body { background:#111; color:white; text-align:center; font-family:sans-serif; }
+  iframe { border:0; border-radius: 8px; }
+  button { width:70px; height:40px; margin:4px; font-size:16px; }
+  #logs { max-width:500px; margin:20px auto; text-align:left; }
+  #logs a { color:cyan; }
+</style>
+</head>
+<body>
+  <h2>Camera Dashboard</h2>
+  <iframe id="player" width="640" height="360" frameborder="0"></iframe>
+  <div style="margin:20px">
+    <button onclick="fetch('/move/up')">▲</button><br>
+    <button onclick="fetch('/move/left')">◀</button>
+    <button onclick="fetch('/move/stop')" style="background:red; color:white">■</button>
+    <button onclick="fetch('/move/right')">▶</button><br>
+    <button onclick="fetch('/move/down')">▼</button>
+  </div>
+  <div id="logs"></div>
+
+  <script>
+    async function init() {
+      const cfg = await (await fetch('/config.json')).json();
+      document.getElementById('player').src = `${cfg.go2rtcUrl}/stream.html?src=${cfg.stream}`;
+    }
+
+    async function refreshHistory() {
+      const res = await fetch('/history');
+      const data = await res.json();
+      document.getElementById('logs').innerHTML = data
+        .map(i => `<p>🕒 ${i.timestamp} - <a href="${i.video_link}" target="_blank">Xem Video</a></p>`)
+        .join('');
+    }
+
+    init();
+    refreshHistory();
+    setInterval(refreshHistory, 5000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Keeps go2rtc running and restarts it if it crashes or the machine reboots.
+
+  Install:
+    cp com.cameraaiwork.go2rtc.plist ~/Library/LaunchAgents/
+    # edit the REPLACE_WITH_REPO_ROOT paths below first
+    launchctl load ~/Library/LaunchAgents/com.cameraaiwork.go2rtc.plist
+
+  Logs: /tmp/cameraaiwork-go2rtc.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cameraaiwork.go2rtc</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>REPLACE_WITH_REPO_ROOT/infra/go2rtc/bin/go2rtc</string>
+    <string>-config</string>
+    <string>REPLACE_WITH_REPO_ROOT/infra/go2rtc/go2rtc.yaml</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cameraaiwork-go2rtc.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cameraaiwork-go2rtc.log</string>
+</dict>
+</plist>

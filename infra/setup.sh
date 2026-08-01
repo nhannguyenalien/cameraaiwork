@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# One-time setup: downloads the go2rtc binary for this machine's platform and
+# renders infra/go2rtc/go2rtc.yaml from the template + .env (credentials are
+# never committed — see .env.example).
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN_DIR="$ROOT_DIR/infra/go2rtc/bin"
+mkdir -p "$BIN_DIR"
+
+# --- 1. Download go2rtc (not committed to git, platform-specific binary) ---
+os="$(uname -s)"
+arch="$(uname -m)"
+
+case "$os-$arch" in
+  Darwin-arm64) asset="go2rtc_mac_arm64" ;;
+  Darwin-x86_64) asset="go2rtc_mac_amd64" ;;
+  Linux-x86_64) asset="go2rtc_linux_amd64" ;;
+  Linux-aarch64) asset="go2rtc_linux_arm64" ;;
+  *) echo "Unsupported platform: $os-$arch" >&2; exit 1 ;;
+esac
+
+echo "==> Downloading latest go2rtc ($asset)..."
+url=$(curl -fsSL https://api.github.com/repos/AlexxIT/go2rtc/releases/latest \
+  | grep "browser_download_url.*$asset\"" \
+  | head -1 \
+  | cut -d '"' -f 4)
+
+if [ -z "$url" ]; then
+  echo "Could not resolve download URL for $asset. Check https://github.com/AlexxIT/go2rtc/releases manually." >&2
+  exit 1
+fi
+
+curl -fsSL "$url" -o "$BIN_DIR/go2rtc"
+chmod +x "$BIN_DIR/go2rtc"
+echo "==> go2rtc installed at $BIN_DIR/go2rtc"
+
+# --- 2. Render go2rtc.yaml from template + .env ---
+if [ ! -f "$ROOT_DIR/.env" ]; then
+  echo "!! No .env found. Copy .env.example to .env and fill in camera credentials first." >&2
+  exit 1
+fi
+
+set -a
+source "$ROOT_DIR/.env"
+set +a
+
+if ! command -v envsubst >/dev/null; then
+  echo "envsubst not found. Install gettext (e.g. 'brew install gettext') and retry." >&2
+  exit 1
+fi
+
+envsubst < "$ROOT_DIR/infra/go2rtc/go2rtc.yaml.template" > "$ROOT_DIR/infra/go2rtc/go2rtc.yaml"
+echo "==> Rendered infra/go2rtc/go2rtc.yaml"
+
+echo "==> Setup done. Run: $BIN_DIR/go2rtc -config $ROOT_DIR/infra/go2rtc/go2rtc.yaml"

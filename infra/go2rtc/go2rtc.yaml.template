@@ -1,0 +1,4 @@
+streams:
+  tapo:
+    - rtsp://${CAMERA_USERNAME}:${CAMERA_PASSWORD}@${CAMERA_IP}:554/stream1
+    - onvif://${CAMERA_USERNAME}:${CAMERA_PASSWORD}@${CAMERA_IP}:${CAMERA_ONVIF_PORT}#backchannel=0

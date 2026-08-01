@@ -1,0 +1,19 @@
+{
+  "name": "@cameraaiwork/web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web dashboard + orchestration backend for the camera project (streaming via go2rtc, PTZ, motion alerts, AI hooks).",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "form-data": "^4.0.5",
+    "onvif": "^0.8.1",
+    "sqlite3": "^6.0.1"
+  }
+}

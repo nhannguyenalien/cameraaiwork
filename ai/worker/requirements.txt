@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7
+pillow>=10.4
+numpy>=1.26
+# Uncomment once a real model is wired in:
+# onnxruntime>=1.18       # cross-platform CPU inference
+# onnxruntime-silicon     # Apple Silicon build with CoreMLExecutionProvider (Apple Silicon only)
