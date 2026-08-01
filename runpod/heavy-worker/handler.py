@@ -7,7 +7,7 @@ clips, generating a highlight-reel video, upscaling/enhancing a clip, batch
 re-running a bigger detection model over historical footage.
 
 Deploy: build this directory as a RunPod Serverless endpoint (see Dockerfile),
-then call it from the Node backend — see apps/web/src/services/runpod.js.
+then call it via POST /api/jobs — see apps/pages/functions/api/jobs/index.js.
 """
 
 import runpod

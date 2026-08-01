@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# One-time setup: downloads the go2rtc binary for this machine's platform and
-# renders infra/go2rtc/go2rtc.yaml from the template + .env (credentials are
-# never committed — see .env.example).
+# One-time setup per site: downloads the go2rtc binary for this machine's
+# platform and renders infra/go2rtc/go2rtc.yaml from apps/relay/cameras.json
+# (credentials never committed — see apps/relay/cameras.json.example).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,22 +35,12 @@ curl -fsSL "$url" -o "$BIN_DIR/go2rtc"
 chmod +x "$BIN_DIR/go2rtc"
 echo "==> go2rtc installed at $BIN_DIR/go2rtc"
 
-# --- 2. Render go2rtc.yaml from template + .env ---
-if [ ! -f "$ROOT_DIR/.env" ]; then
-  echo "!! No .env found. Copy .env.example to .env and fill in camera credentials first." >&2
+# --- 2. Render go2rtc.yaml from apps/relay/cameras.json ---
+if [ ! -f "$ROOT_DIR/apps/relay/cameras.json" ]; then
+  echo "!! No apps/relay/cameras.json found. Copy cameras.json.example -> cameras.json and fill in camera credentials first." >&2
   exit 1
 fi
 
-set -a
-source "$ROOT_DIR/.env"
-set +a
-
-if ! command -v envsubst >/dev/null; then
-  echo "envsubst not found. Install gettext (e.g. 'brew install gettext') and retry." >&2
-  exit 1
-fi
-
-envsubst < "$ROOT_DIR/infra/go2rtc/go2rtc.yaml.template" > "$ROOT_DIR/infra/go2rtc/go2rtc.yaml"
-echo "==> Rendered infra/go2rtc/go2rtc.yaml"
+node "$ROOT_DIR/infra/go2rtc/render-config.js"
 
 echo "==> Setup done. Run: $BIN_DIR/go2rtc -config $ROOT_DIR/infra/go2rtc/go2rtc.yaml"

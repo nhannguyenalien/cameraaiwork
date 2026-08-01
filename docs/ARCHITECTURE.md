@@ -3,95 +3,140 @@
 ## Overview
 
 ```
-[Tapo C200] --RTSP/ONVIF (LAN)--> [go2rtc, wherever it runs]
-                                          |
-                                 Cloudflare Tunnel (outbound only,
-                                 no port forwarding at home)
-                                          |
-                                          v
-                              [VPS Mac mini] --- Caddy (HTTPS reverse proxy)
-                                          |
-                     +--------------------+-------------------+
-                     |                    |                   |
-              [apps/web]           [ai/worker]          [data/*.db]
-              Node/Express          Python, local        event metadata,
-              orchestration,        lightweight person    clip links
-              web UI, PTZ,          detector (triggered
-              Telegram alerts       by motion, not
-                     |              continuous)
-                     |
-                     +--> [runpod/heavy-worker] (Python, RunPod Serverless)
-                          on-demand GPU for occasional heavy tasks
+Site A                              Site B (later)
+[Cameras] --RTSP/ONVIF-->            [Cameras] --RTSP/ONVIF-->
+  [go2rtc + apps/relay]                [go2rtc + apps/relay]
+        |                                     |
+        +-------------- Cloudflare Tunnel ----+
+                          (outbound only,
+                          no port forwarding)
+                              |
+                              v
+                 Cloudflare Pages (apps/pages)
+                 static dashboard + Functions:
+                   /api/cameras   /api/events
+                   /api/motion    /api/jobs
+                              |
+              +---------------+----------------+
+              |               |                |
+          [Turso]      [ai/worker on-site,   [RunPod Serverless]
+      accounts, sites,   tunneled, called      (runpod/heavy-worker)
+      cameras, events,    from /api/motion]    on-demand GPU
+      jobs, api_keys
 ```
+
+Everything that must physically sit near a camera is `go2rtc` +
+`apps/relay` — a few hundred lines total. Everything else (accounts, UI,
+API, DB, AI orchestration, RunPod dispatch) is centralized on Cloudflare
+Pages and can be redeployed without touching anything on-site.
 
 ## Why this split
 
-**Single camera, single household.** No message queue, no Kubernetes, no
-microservice mesh — one Mac mini running a handful of supervised processes
-is plenty. Complexity here should track actual load, not hypothetical scale.
+**Cloudflare Pages Functions can't run `go2rtc` or hold long-lived
+connections.** They're stateless edge functions: no arbitrary binaries, no
+raw TCP to a camera, no persistent SSE listener. That's a platform limit,
+not a config choice — so `go2rtc` (media) and `apps/relay` (ONVIF PTZ +
+motion-event forwarding) are the only things that have to run on real,
+persistent compute near the camera. Everything else moved to Pages.
 
-**Motion-gated, not continuous.** The camera's own ONVIF motion event is the
-trigger for everything downstream (snapshot → AI check → alert). Nothing
-analyzes every frame of continuous video. This is the single biggest lever
-for keeping the system light — it cuts CPU, GPU, and bandwidth costs by
-orders of magnitude compared to always-on frame analysis.
+**Motion-gated, not continuous.** The camera's own ONVIF motion event
+triggers everything downstream (snapshot → AI check → alert). Nothing
+analyzes every frame of continuous video, and go2rtc only needs to pull
+RTSP when a browser actually opens the live view. This is the biggest
+lever for keeping bandwidth/CPU low across N sites.
 
-**On-demand streaming.** go2rtc only needs to pull RTSP from the camera when
-a browser actually opens the live view. Configure it so idle time (nobody
-watching) costs ~nothing on the home upload link.
+**Multi-tenant from the start.** Every `site`, `camera`, `event`, and `job`
+row belongs to an `account`. A relay only ever talks about *its own* site
+(authenticated with that site's `relay_secret`); the Pages API only ever
+returns rows scoped to the caller's account API key. Adding a second
+customer, or a second site for the same customer, is a DB insert — no code
+change. See `schema.sql`.
 
 ## Language choices
 
-- **Node.js (`apps/web`)** — the orchestration/web layer: Express API, PTZ
-  control, motion listener, Telegram alerts, static dashboard. Kept as
-  plain JS (matching the original `server.js`) rather than converting to
-  TypeScript now — the codebase is small enough that the migration wouldn't
-  pay for itself yet. Worth reconsidering once this grows past a handful of
-  files.
-- **Python (`ai/worker`, `runpod/heavy-worker`)** — anything AI/ML. This
-  isn't a stylistic choice: RunPod's SDK is Python-first, and essentially
-  every relevant model ecosystem (ultralytics/YOLO, ONNX, face
-  recognition libraries) ships Python APIs first and best. Fighting that by
-  doing ML in Node would mean worse library support for no benefit.
-- **Go (`go2rtc`)** — not code you write, a prebuilt binary you configure.
-  Downloaded by `infra/setup.sh`, never committed (platform-specific,
-  18MB+, and versioned upstream).
+- **Node.js (`apps/relay`)** — kept intentionally tiny: ONVIF PTZ +
+  forwarding motion events by webhook. No web UI, no DB, no Telegram
+  anymore — those moved to Pages.
+- **JavaScript, Cloudflare Workers runtime (`apps/pages/functions`)** — the
+  entire API surface, using `@libsql/client/web` for Turso (same pattern
+  already proven in the `hdtam` project). API-first: the dashboard is just
+  another API client, so a future AI agent or external app can drive
+  cameras/read events/dispatch jobs through the same endpoints — see
+  `docs/API.md`.
+- **Python (`ai/worker`, `runpod/heavy-worker`)** — all AI/ML. RunPod's SDK
+  is Python-first, and so is essentially every relevant model ecosystem
+  (YOLO, ONNX, face recognition).
+- **Go (`go2rtc`)** — prebuilt binary, configured not coded.
 
-## Two-tier AI: local vs. RunPod
+## Two-tier AI
 
 | | `ai/worker` | `runpod/heavy-worker` |
 |---|---|---|
-| Runs | Continuously available, called on every motion trigger | On-demand, only when explicitly invoked |
-| Cost model | Free (uses hardware you already have) | Pay-per-second GPU |
-| Latency budget | Must be fast (blocks the alert path) | Can take seconds–minutes |
-| Example tasks | "Is there a person in this frame?" | Face search across history, highlight reel generation, clip upscaling, re-running a bigger model over old footage |
+| Runs | On-site, called on every motion trigger | On-demand via `/api/jobs`, only when explicitly dispatched |
+| Cost | Free (existing hardware) | Pay-per-second GPU |
+| Latency budget | Must be fast (blocks the alert path) | Seconds–minutes is fine |
+| Example tasks | "Is there a person in this frame?" | Face search across history, highlight reels, upscaling, batch re-analysis |
 
-The Node backend calls `ai/worker` synchronously (with a timeout and a safe
-fallback — see `apps/web/src/services/detection.js`), and calls
-`runpod/heavy-worker` asynchronously as a fire-and-forget job (see
-`apps/web/src/services/runpod.js`). Don't blur this line — pushing a
-continuous/low-latency task onto RunPod means paying GPU-per-second for
-something that should be nearly free, and pushing a heavy batch task onto
-the local worker means blocking alerts on a slow job.
+## Multi-tenant / SaaS readiness
 
-## Stability checklist
+- `accounts` + `api_keys` (key stored as a SHA-256 hash, never plaintext)
+  give each customer isolated data and their own credential.
+- Every query in `apps/pages/functions` is scoped by `data.accountId`,
+  resolved once in `functions/_middleware.js` and never trusted from the
+  client.
+- `sites.id` / `cameras.id` must be globally unique (prefixed with the
+  account id) because `/api/motion` looks a site up without an account
+  filter — the relay authenticates with a site secret, not a customer key.
+- What's deliberately **not** built yet, because they're product decisions
+  rather than technical ones: a signup/login flow (magic link? OAuth?
+  Clerk/Auth0?), billing (Stripe? usage-based?), and plan/usage limits.
+  The schema and API don't block any of these — bolt them on when the
+  product direction is decided rather than guessing now.
 
-- `go2rtc` and `apps/web` both run under a process supervisor that
-  auto-restarts on crash and on reboot (`infra/launchd/*.plist` for macOS;
-  swap for systemd unit files if the box is Linux instead).
-- `cloudflared` (or Tailscale) handles the home ↔ VPS link with automatic
-  reconnect — no manual port forwarding to maintain.
-- Caddy in front of the Node app for automatic HTTPS.
-- Gate the public hostname with Cloudflare Access (free email-OTP) before
-  anything else — this is a home camera, not something to leave open on
-  the internet unauthenticated.
+## Production-hardening choices
 
-## Known issues carried over from the original code (see repo history)
+- **Consistent error handling**: every Pages Function route is wrapped in
+  `withErrorHandling` (`functions/_lib/http.js`) so thrown errors become
+  `{ "error": ... }` JSON with a real status code instead of leaking a
+  stack trace or Cloudflare's generic error page.
+- **CORS + auth in one place**: `functions/_middleware.js` handles both,
+  so no individual route can accidentally skip either.
+- **`/api/health`**: unauthenticated, checks Turso connectivity, for
+  uptime monitors.
+- **Tenant isolation for jobs**: `jobs` table tracks `account_id` per
+  dispatched RunPod job so `GET /api/jobs/:id` can't leak another
+  account's job status — this was a gap in an earlier pass, closed before
+  calling it production-ready.
+- **Process supervision**: `infra/launchd` (macOS) and `infra/systemd`
+  (Linux) — a site's on-prem machine won't always be a Mac.
+- **Secrets**: nothing in git. `.env` files, `cameras.json`, `.dev.vars`
+  are all gitignored; production secrets live in Cloudflare Pages'
+  encrypted environment variables and in Turso rows, not in the repo.
+- **Deploy path**: use Cloudflare Pages' native git integration (build
+  output `apps/pages/public`) rather than a bespoke CI pipeline — it
+  already gives preview deployments per branch/PR and instant rollback,
+  which is more than a custom GitHub Actions workflow would add here.
+- **Abuse prevention**: use Cloudflare's built-in rate limiting rules on
+  the Pages domain rather than hand-rolling a limiter in a Worker — the
+  platform already does this well.
 
-- The original `go2rtc.yaml` and `server.js` disagreed on the camera's LAN
-  IP (`192.168.2.23` vs `192.168.1.32`). Fixed here by making it a single
-  `CAMERA_IP` env var — but double check it's actually correct for your
-  network before deploying.
-- Motion detection matched on raw substrings in the SSE payload
-  (`data.includes('motion')`). Fine as a first pass; consider parsing the
-  JSON properly if false positives show up.
+## Stability checklist (per site)
+
+- `go2rtc` and `apps/relay` both run under a process supervisor
+  (launchd/systemd) that restarts on crash and reboot.
+- `cloudflared` (or Tailscale) handles the on-site ↔ Cloudflare link with
+  automatic reconnect — no manual port forwarding.
+- Gate `go2rtc`'s own public tunnel hostname (the one the browser's
+  `<iframe>` hits directly for the live view) with Cloudflare Access if you
+  want it fully private; it's not covered by the API's bearer-token auth
+  since the browser loads it directly, not through a Pages Function.
+
+## Known issues carried over from the original single-camera code
+
+- The very first version of `go2rtc.yaml` and `server.js` disagreed on the
+  camera's LAN IP. Fixed by generating `go2rtc.yaml` from a single source
+  of truth (`apps/relay/cameras.json`) instead of hand-editing two files.
+- Motion detection matches on raw substrings in the SSE payload
+  (`data.includes('motion')`) in `apps/relay`. Works, but fragile — worth
+  switching to a proper JSON parse of go2rtc's event schema if false
+  positives show up in practice.

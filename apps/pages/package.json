@@ -1,0 +1,15 @@
+{
+  "name": "@cameraaiwork/pages",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Pages: static dashboard + Pages Functions (API, DB, AI orchestration, RunPod dispatch). Deploy via git integration in the Cloudflare dashboard, or `wrangler pages deploy public`.",
+  "scripts": {
+    "dev": "wrangler pages dev public --compatibility-date=2026-08-01"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@cameraaiwork/relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal always-on process for a site's on-premise machine: ONVIF PTZ relay + motion webhook forwarder for that site's cameras. No web UI, no DB, no Telegram, no accounts — those live in apps/pages.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "onvif": "^0.8.1"
+  }
+}

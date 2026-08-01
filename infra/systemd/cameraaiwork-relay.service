@@ -1,0 +1,15 @@
+[Unit]
+Description=cameraaiwork relay (PTZ + motion webhook)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=REPLACE_WITH_REPO_ROOT/apps/relay
+ExecStart=/usr/bin/env node REPLACE_WITH_REPO_ROOT/apps/relay/src/index.js
+Restart=always
+RestartSec=5
+User=REPLACE_WITH_USER
+
+[Install]
+WantedBy=multi-user.target

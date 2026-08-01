@@ -1,8 +1,10 @@
 # ai/worker
 
-Local, lightweight "does this frame have a person" service. Triggered by
-motion events from go2rtc, not run continuously — see
-`apps/web/src/services/detection.js` for the caller.
+Local, lightweight "does this frame have a person" service. Runs on-site
+(same machine as go2rtc/apps/relay), reachable via that site's Cloudflare
+Tunnel. Triggered by motion events, not run continuously — see
+`apps/pages/functions/api/motion.js` and `apps/pages/functions/_lib/detection.js`
+for the caller.
 
 ## Run
 
@@ -12,8 +14,9 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
-Then set `AI_WORKER_URL=http://localhost:8001/detect` in the web app's `.env`.
-If unset, the web app treats every motion event as an alert (safe default).
+Then set `AI_WORKER_URL` in the Cloudflare Pages project's env vars to this
+service's tunneled URL. If unset, every motion event is treated as an alert
+(safe default).
 
 ## Status
 

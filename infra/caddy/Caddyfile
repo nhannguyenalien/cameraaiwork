@@ -1,7 +1,0 @@
-# Run on the VPS Mac mini. Terminates TLS (auto Let's Encrypt) and proxies
-# to the Node web app. Put the actual go2rtc stream behind Cloudflare Tunnel
-# + Cloudflare Access instead of exposing it directly — see docs/ARCHITECTURE.md.
-
-camera.yourdomain.com {
-    reverse_proxy localhost:3021
-}

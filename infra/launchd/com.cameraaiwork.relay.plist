@@ -1,29 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Keeps the Node web app (apps/web) running and restarts it on crash/reboot.
+  Keeps apps/relay (the on-site PTZ + motion-webhook process) running and
+  restarts it on crash/reboot. macOS only — see infra/systemd for Linux.
 
   Install:
-    cp com.cameraaiwork.web.plist ~/Library/LaunchAgents/
+    cp com.cameraaiwork.relay.plist ~/Library/LaunchAgents/
     # edit the REPLACE_WITH_REPO_ROOT / REPLACE_WITH_NODE_PATH paths first
     # (find node's path with: which node)
-    launchctl load ~/Library/LaunchAgents/com.cameraaiwork.web.plist
+    launchctl load ~/Library/LaunchAgents/com.cameraaiwork.relay.plist
 
-  Logs: /tmp/cameraaiwork-web.log
+  Logs: /tmp/cameraaiwork-relay.log
 -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.cameraaiwork.web</string>
+  <string>com.cameraaiwork.relay</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>REPLACE_WITH_NODE_PATH</string>
-    <string>REPLACE_WITH_REPO_ROOT/apps/web/src/server.js</string>
+    <string>REPLACE_WITH_REPO_ROOT/apps/relay/src/index.js</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>REPLACE_WITH_REPO_ROOT/apps/web</string>
+  <string>REPLACE_WITH_REPO_ROOT/apps/relay</string>
 
   <key>RunAtLoad</key>
   <true/>
@@ -31,8 +32,8 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/tmp/cameraaiwork-web.log</string>
+  <string>/tmp/cameraaiwork-relay.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/cameraaiwork-web.log</string>
+  <string>/tmp/cameraaiwork-relay.log</string>
 </dict>
 </plist>

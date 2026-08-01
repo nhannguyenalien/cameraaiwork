@@ -1,9 +1,9 @@
 """
 Local lightweight AI worker.
 
-Runs on the same box as go2rtc (VPS Mac mini or wherever go2rtc lives). Only
-called when go2rtc reports motion (see apps/web/src/services/detection.js) —
-NOT on every frame — so it can stay a small/cheap model.
+Runs on the same on-site box as go2rtc. Only called when go2rtc reports
+motion (see apps/pages/functions/api/motion.js) — NOT on every frame — so
+it can stay a small/cheap model.
 
 Currently a stub: `detect_person()` always returns False. Wire in a real
 model before relying on it:

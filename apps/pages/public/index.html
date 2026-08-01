@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CameraAIWork Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
+</head>
+<body class="border-top-wide border-primary d-flex flex-column">
+  <header class="navbar navbar-expand-md navbar-light d-print-none">
+    <div class="container-xl">
+      <h1 class="navbar-brand navbar-brand-autodark">CameraAIWork</h1>
+      <div class="navbar-nav flex-row order-md-last">
+        <button id="logout-btn" class="btn btn-outline-secondary btn-sm d-none">Đăng xuất</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-wrapper">
+    <div class="page-body">
+      <div class="container-xl">
+
+        <!-- Login: paste account API key, stored in localStorage only -->
+        <div id="login-card" class="row justify-content-center">
+          <div class="col-md-5">
+            <form id="login-form" class="card card-md">
+              <div class="card-body">
+                <h2 class="card-title">Đăng nhập</h2>
+                <p class="text-secondary">Dán API key của account (tạo bằng <code>scripts/generate-api-key.js</code>).</p>
+                <div class="mb-3">
+                  <label class="form-label">API key</label>
+                  <input id="api-key-input" type="password" class="form-control" placeholder="API key" required />
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Vào dashboard</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="d-none">
+          <div class="row row-deck row-cards">
+
+            <div class="col-lg-8">
+              <div class="card">
+                <div class="card-header">
+                  <select id="camera-select" class="form-select w-auto"></select>
+                </div>
+                <div class="ratio ratio-16x9 bg-dark">
+                  <iframe id="player" frameborder="0"></iframe>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-4">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title">Điều khiển PTZ</h3></div>
+                <div class="card-body text-center">
+                  <div class="btn-group-vertical">
+                    <button class="btn" onclick="move('up')">▲</button>
+                    <div class="btn-group">
+                      <button class="btn" onclick="move('left')">◀</button>
+                      <button class="btn btn-danger" onclick="move('stop')">■</button>
+                      <button class="btn" onclick="move('right')">▶</button>
+                    </div>
+                    <button class="btn" onclick="move('down')">▼</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12">
+              <div class="card">
+                <div class="card-header"><h3 class="card-title">Sự kiện gần đây</h3></div>
+                <div class="table-responsive">
+                  <table class="table card-table table-vcenter">
+                    <thead>
+                      <tr>
+                        <th>Thời gian</th>
+                        <th>Site</th>
+                        <th>Camera</th>
+                        <th>Loại</th>
+                        <th>Clip</th>
+                      </tr>
+                    </thead>
+                    <tbody id="events-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+  const API_KEY_STORAGE = 'cameraaiwork_api_key';
+  let selectedCamera = null;
+
+  const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
+  const setApiKey = (k) => localStorage.setItem(API_KEY_STORAGE, k);
+  const clearApiKey = () => localStorage.removeItem(API_KEY_STORAGE);
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, {
+      ...options,
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.headers || {}),
+        Authorization: `Bearer ${getApiKey()}`,
+      },
+    });
+    if (res.status === 401) {
+      clearApiKey();
+      render();
+      throw new Error('Unauthorized');
+    }
+    return res.json();
+  }
+
+  function cameraKey(c) { return `${c.siteId}|${c.cameraId}|${c.stream}|${c.go2rtcUrl}`; }
+
+  async function loadCameras() {
+    const cameras = await api('/api/cameras');
+    const select = document.getElementById('camera-select');
+    select.innerHTML = cameras
+      .map((c) => `<option value="${cameraKey(c)}">${c.siteName} — ${c.cameraName || c.cameraId}</option>`)
+      .join('');
+    if (cameras.length) {
+      select.value = cameraKey(cameras[0]);
+      updatePlayer();
+    }
+  }
+
+  function updatePlayer() {
+    const [siteId, cameraId, stream, go2rtcUrl] = document.getElementById('camera-select').value.split('|');
+    selectedCamera = { siteId, cameraId };
+    document.getElementById('player').src = `${go2rtcUrl}/stream.html?src=${stream}`;
+  }
+
+  async function move(dir) {
+    if (!selectedCamera) return;
+    await api(`/api/cameras/${selectedCamera.siteId}/${selectedCamera.cameraId}/ptz`, {
+      method: 'POST',
+      body: JSON.stringify({ direction: dir }),
+    });
+  }
+
+  async function loadEvents() {
+    const events = await api('/api/events?limit=20');
+    document.getElementById('events-body').innerHTML = events
+      .map(
+        (e) => `<tr>
+          <td>${e.timestamp}</td>
+          <td>${e.site_id || ''}</td>
+          <td>${e.camera || ''}</td>
+          <td>${e.type || ''}</td>
+          <td>${e.video_link ? `<a href="${e.video_link}" target="_blank">Xem</a>` : ''}</td>
+        </tr>`
+      )
+      .join('');
+  }
+
+  function render() {
+    const hasKey = !!getApiKey();
+    document.getElementById('login-card').classList.toggle('d-none', hasKey);
+    document.getElementById('dashboard').classList.toggle('d-none', !hasKey);
+    document.getElementById('logout-btn').classList.toggle('d-none', !hasKey);
+    if (hasKey) {
+      loadCameras().catch(() => {});
+      loadEvents().catch(() => {});
+    }
+  }
+
+  document.getElementById('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const key = document.getElementById('api-key-input').value.trim();
+    if (key) { setApiKey(key); render(); }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', () => { clearApiKey(); render(); });
+  document.getElementById('camera-select').addEventListener('change', updatePlayer);
+
+  render();
+  setInterval(() => { if (getApiKey()) loadEvents().catch(() => {}); }, 5000);
+</script>
+</body>
+</html>

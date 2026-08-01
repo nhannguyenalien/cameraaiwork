@@ -1,0 +1,25 @@
+# For local `wrangler pages dev` only. Copy to .dev.vars (gitignored).
+# In production, set these in the Cloudflare dashboard:
+#   Pages project -> Settings -> Environment variables (mark secrets as "Encrypted")
+#
+# Note: there is no global GO2RTC_URL / RELAY_URL / RELAY_SECRET / API_KEY
+# here anymore — those are per-site (sites table) and per-account (api_keys
+# table) rows in Turso now, not env vars. See schema.sql.
+
+TURSO_DB_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=
+
+# CORS for the API — comma-separated origins, or "*" for any (fine even
+# wide open since auth is a bearer token, not a cookie).
+ALLOWED_ORIGINS=*
+
+# Local AI worker (ai/worker), reachable via a site's tunnel. If you run
+# more than one site each with its own AI worker, this becomes a per-site
+# column instead — not needed yet at one-account scale.
+AI_WORKER_URL=
+
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
+RUNPOD_API_KEY=
+RUNPOD_ENDPOINT_ID=
