@@ -13,25 +13,31 @@ os="$(uname -s)"
 arch="$(uname -m)"
 
 case "$os-$arch" in
-  Darwin-arm64) asset="go2rtc_mac_arm64" ;;
-  Darwin-x86_64) asset="go2rtc_mac_amd64" ;;
-  Linux-x86_64) asset="go2rtc_linux_amd64" ;;
-  Linux-aarch64) asset="go2rtc_linux_arm64" ;;
+  Darwin-arm64) asset="go2rtc_mac_arm64"; ext=".zip" ;;
+  Darwin-x86_64) asset="go2rtc_mac_amd64"; ext=".zip" ;;
+  Linux-x86_64) asset="go2rtc_linux_amd64"; ext="" ;;
+  Linux-aarch64) asset="go2rtc_linux_arm64"; ext="" ;;
   *) echo "Unsupported platform: $os-$arch" >&2; exit 1 ;;
 esac
 
-echo "==> Downloading latest go2rtc ($asset)..."
+echo "==> Downloading latest go2rtc (${asset}${ext})..."
 url=$(curl -fsSL https://api.github.com/repos/AlexxIT/go2rtc/releases/latest \
-  | grep "browser_download_url.*$asset\"" \
+  | grep "browser_download_url.*/${asset}${ext}\"" \
   | head -1 \
   | cut -d '"' -f 4)
 
 if [ -z "$url" ]; then
-  echo "Could not resolve download URL for $asset. Check https://github.com/AlexxIT/go2rtc/releases manually." >&2
+  echo "Could not resolve download URL for ${asset}${ext}. Check https://github.com/AlexxIT/go2rtc/releases manually." >&2
   exit 1
 fi
 
-curl -fsSL "$url" -o "$BIN_DIR/go2rtc"
+if [ "$ext" = ".zip" ]; then
+  curl -fsSL "$url" -o "$BIN_DIR/go2rtc.zip"
+  unzip -o -q "$BIN_DIR/go2rtc.zip" -d "$BIN_DIR"
+  rm "$BIN_DIR/go2rtc.zip"
+else
+  curl -fsSL "$url" -o "$BIN_DIR/go2rtc"
+fi
 chmod +x "$BIN_DIR/go2rtc"
 echo "==> go2rtc installed at $BIN_DIR/go2rtc"
 
