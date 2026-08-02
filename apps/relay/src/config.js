@@ -29,5 +29,9 @@ module.exports = {
   motionWebhookUrl: process.env.MOTION_WEBHOOK_URL || (pagesApiUrl && `${pagesApiUrl}/api/motion`),
   siteUpdateUrl: pagesApiUrl && `${pagesApiUrl}/api/sites/${process.env.SITE_ID || ""}`,
 
+  // Set by the installer from POST /api/sites' response when the backend
+  // provisioned a real named tunnel. If empty, falls back to Quick Tunnels.
+  cloudflareTunnelToken: process.env.CLOUDFLARE_TUNNEL_TOKEN || "",
+
   cameras, // [{ id, stream, onvif: { ip, port, username, password } }, ...]
 };

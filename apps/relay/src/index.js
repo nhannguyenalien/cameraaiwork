@@ -30,7 +30,7 @@ const express = require("express");
 const axios = require("axios");
 const config = require("./config");
 const ptz = require("./ptz");
-const { startQuickTunnel } = require("./tunnel");
+const { startQuickTunnel, startNamedTunnel } = require("./tunnel");
 
 const app = express();
 app.use(express.json());
@@ -147,7 +147,12 @@ async function reportTunnelUrls() {
   }
 }
 
-if (config.pagesApiUrl) {
+if (config.cloudflareTunnelToken) {
+  // Named tunnel: hostnames are stable and already in the DB from
+  // POST /api/sites, so there's nothing to self-report.
+  console.log("🚇 Dùng named tunnel (hostname cố định, không cần tự đăng ký URL).");
+  startNamedTunnel(config.cloudflareTunnelToken);
+} else if (config.pagesApiUrl) {
   startQuickTunnel("go2rtc", config.go2rtc.port, (url) => {
     currentGo2rtcUrl = url;
     reportTunnelUrls();

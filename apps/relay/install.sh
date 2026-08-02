@@ -82,6 +82,7 @@ SITE_RESP=$(curl -fsS -X POST "$API_BASE/api/sites" \
   -d "{\"name\":\"$SITE_NAME\"}")
 SITE_ID=$(echo "$SITE_RESP" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).siteId')
 RELAY_SECRET=$(echo "$SITE_RESP" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).relaySecret')
+TUNNEL_TOKEN=$(echo "$SITE_RESP" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).tunnelToken || ""')
 echo "    siteId = $SITE_ID"
 
 echo "==> Đăng ký camera..."
@@ -112,6 +113,7 @@ RELAY_PORT=4000
 RELAY_SECRET=$RELAY_SECRET
 GO2RTC_URL=http://localhost:1984
 PAGES_API_URL=$API_BASE
+CLOUDFLARE_TUNNEL_TOKEN=$TUNNEL_TOKEN
 EOF
 
 echo "==> Đã ghi apps/relay/cameras.json và apps/relay/.env"

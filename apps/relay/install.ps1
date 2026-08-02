@@ -87,6 +87,7 @@ $siteResp = Invoke-RestMethod -Uri "$ApiBase/api/sites" -Method Post -Headers $a
     -ContentType "application/json" -Body (@{ name = $SiteName } | ConvertTo-Json)
 $SiteId = $siteResp.siteId
 $RelaySecret = $siteResp.relaySecret
+$TunnelToken = $siteResp.tunnelToken
 Write-Host "    siteId = $SiteId"
 
 Write-Host "==> Dang ky camera..."
@@ -123,6 +124,7 @@ RELAY_SECRET=$RelaySecret
 GO2RTC_URL=http://localhost:1984
 PAGES_API_URL=$ApiBase
 CLOUDFLARED_BIN=$cloudflaredPath
+CLOUDFLARE_TUNNEL_TOKEN=$TunnelToken
 "@
 [System.IO.File]::WriteAllText("$InstallDir\apps\relay\.env", $envContent, $Utf8NoBom)
 
