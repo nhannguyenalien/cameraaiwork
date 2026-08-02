@@ -78,21 +78,41 @@ exercised with an actual reboot yet).
 
 Goal: nothing about this should be safely ignorable once it's live 24/7.
 
-- [ ] Put Cloudflare Access in front of go2rtc's public tunnel hostname
-      (the browser's `<iframe>` hits it directly, bypassing the API's
-      bearer-token auth — see the note in `docs/ARCHITECTURE.md`)
-- [ ] Set `ALLOWED_ORIGINS` in Pages env vars to the actual dashboard
-      domain instead of `*`, once the domain is final
-- [ ] Turn on Cloudflare's rate limiting rules for the Pages domain
-- [ ] Confirm `.env`, `cameras.json`, `.dev.vars` never made it into git
-      (`git log --all --full-history -- '*.env' 'cameras.json' '.dev.vars'`
-      should be empty)
+- [x] Set `ALLOWED_ORIGINS` in Pages env vars to the real dashboard domain
+      (`https://cameraaiwork.pages.dev`) instead of `*` — verified with curl
+      using a fake `Origin` header (no CORS header back) vs. the real
+      dashboard origin (header present, correctly scoped)
+- [x] Confirm `.env`, `cameras.json`, `.dev.vars` never made it into git —
+      confirmed empty, plus a scan of full commit history for anything
+      matching a secret's shape (also empty)
+- [ ] ~~Put Cloudflare Access in front of go2rtc's public tunnel hostname~~
+      **Not achievable as currently architected.** Cloudflare Access
+      attaches to a hostname on a zone/domain *you* own — a Quick Tunnel's
+      `*.trycloudflare.com` hostname is on Cloudflare's own shared domain,
+      not something you can apply Access policies to. This is blocked on
+      the Quick Tunnel → named tunnel upgrade already tracked in the
+      backlog (which needs a real domain — a product/cost decision, not
+      something to default into silently). Until then, the tunnel
+      hostname's security is "unguessable random subdomain that changes
+      on every relay restart" — not nothing, but not real access control
+      either.
+- [ ] Turn on Cloudflare's rate limiting rules for the Pages domain — needs
+      checking whether custom rate-limit rules are available on a bare
+      `*.pages.dev` subdomain (on Cloudflare's shared zone) or whether that
+      also needs a custom domain on your own zone first; not yet resolved
 - [ ] Set up an uptime check (UptimeRobot, healthchecks.io, etc.) against
-      `GET /api/health`
+      `GET /api/health` — needs your own account on one of these; not
+      something to sign up for on your behalf
 
 **Definition of done:** an attacker who finds the tunnel hostname or the
-Pages URL can't see video or data without a key, and you'd get paged if
-either side goes down.
+Pages URL can't see video or data without a key (**met for the Pages API
+— CORS + bearer auth confirmed**; **not met for the tunnel hostname**,
+see above), and you'd get paged if either side goes down (not set up yet).
+
+**Learned while doing this:** Cloudflare Pages secrets set via `wrangler
+pages secret put` did NOT take effect on the already-live deployment —
+had to redeploy after setting the secret before it applied. Don't assume
+a secret update is live without a fresh deploy.
 
 ---
 
