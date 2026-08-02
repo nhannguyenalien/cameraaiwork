@@ -81,19 +81,41 @@ async function notifyMotion(cameraId) {
 // permissive behavior, ANY event from the camera counts as "check it".
 // The topic is logged so it can be tightened later once real topic names
 // are observed in practice (see docs/PLAN.md).
+//
+// Some cheap camera firmware (observed on a Tapo C200) advertises ONVIF
+// pull-point support but can't actually hold the long-poll HTTP connection
+// open for the spec's full timeout — pullMessages fails with "socket hang
+// up" every time. The `onvif` package's own retry loop has no backoff, so
+// left alone it hammers the camera continuously. This backs off for 15s
+// after 5 consecutive failures instead of retrying as fast as possible.
 function watchMotionOnvif(cameraId, cam) {
-  cam.on("event", (message) => {
+  let consecutiveErrors = 0;
+
+  function onEvent(message) {
+    consecutiveErrors = 0;
     const topic = message?.topic?._ || "(unknown topic)";
     console.log(`📡 ONVIF event (${cameraId}): ${topic}`);
     if (cooldowns.get(cameraId)) return;
     cooldowns.set(cameraId, true);
     notifyMotion(cameraId);
     setTimeout(() => cooldowns.set(cameraId, false), 30000); // nghỉ 30s tránh spam webhook
-  });
+  }
 
-  cam.on("eventsError", (err) => {
-    console.error(`❌ ONVIF events lỗi (${cameraId}):`, err.message || err);
-  });
+  function onError(err) {
+    consecutiveErrors++;
+    if (consecutiveErrors === 1 || consecutiveErrors % 10 === 0) {
+      console.error(`❌ ONVIF events lỗi (${cameraId}, lần ${consecutiveErrors}):`, err.message || err);
+    }
+    if (consecutiveErrors >= 5) {
+      console.warn(`⏸️  Tạm dừng ONVIF events (${cameraId}) 15s do lỗi liên tục (camera có thể không giữ được long-poll)...`);
+      cam.removeListener("event", onEvent);
+      cam.removeListener("eventsError", onError);
+      setTimeout(() => watchMotionOnvif(cameraId, cam), 15000);
+    }
+  }
+
+  cam.on("event", onEvent);
+  cam.on("eventsError", onError);
 }
 
 if (!config.siteId) {
