@@ -24,7 +24,7 @@ Authorization: Bearer {RUNPOD_API_KEY}
 ```
 
 RunPod returns a job id immediately (async); the Pages Function stores it
-(prefixed `runpod:`, tagged with the caller's account) in the `jobs` table
+(prefixed `runpod-`, tagged with the caller's account) in the `jobs` table
 and returns `202` right away. Poll `GET /api/jobs/:id` for status — see
 `docs/API.md`. Never block a request on a GPU job finishing.
 

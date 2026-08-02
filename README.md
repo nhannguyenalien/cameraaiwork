@@ -23,43 +23,43 @@ infra/                 go2rtc config/setup, launchd (macOS) + systemd (Linux)
 docs/                  architecture + API docs.
 ```
 
-## Bootstrap (one account, one site, one camera)
+## Bootstrap
+
+### Backend (once)
 
 1. **Turso**: create a DB, run `apps/pages/schema.sql` against it.
-2. Seed one account/site/camera (see the commented example at the bottom of
-   `schema.sql`), then generate its API key:
+2. Insert one row into `accounts`, then generate its API key:
    ```bash
    cd apps/pages && node scripts/generate-api-key.js acct_owner
    ```
-3. **On-site machine** (next to the camera):
-   ```bash
-   cd apps/relay
-   cp cameras.json.example cameras.json   # fill in ONVIF ip/user/pass
-   cp .env.example .env                   # SITE_ID must match the sites.id you inserted
-   npm install
-   bash ../../infra/setup.sh              # downloads go2rtc, renders go2rtc.yaml from cameras.json
-   infra/go2rtc/bin/go2rtc -config infra/go2rtc/go2rtc.yaml &
-   npm start
-   ```
-   Then install `infra/launchd/*.plist` (macOS) or `infra/systemd/*.service`
-   (Linux) so both survive reboots, and put `go2rtc` + the relay behind a
-   Cloudflare Tunnel so Cloudflare Pages can reach them.
-4. **Cloudflare Pages**: connect this repo via the dashboard (build output
-   directory: `apps/pages/public`), or run locally:
-   ```bash
-   cd apps/pages
-   cp .dev.vars.example .dev.vars   # fill in TURSO_*, TELEGRAM_*, etc.
-   npm install
-   npm run dev
-   ```
-5. Open the dashboard, paste the API key from step 2.
+3. **Cloudflare Pages**: connect this repo via the dashboard (build output
+   directory: `apps/pages/public`), env vars from `.dev.vars.example`. Or
+   run locally for testing: `cp .dev.vars.example .dev.vars`, `npm install && npm run dev`.
+
+### On-site machine (per site — this is the part meant to be handed to a
+### customer, not something you do for them)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | bash
+```
+
+Prompts for the account API key (from step 2) and the camera's ONVIF
+ip/user/password, then does everything else on its own: clones the repo,
+installs `cloudflared` + go2rtc, registers the site + camera with the
+backend (`POST /api/sites`, no manual Turso access), starts two Cloudflare
+Quick Tunnels (no Cloudflare account needed — a public HTTPS URL in a few
+seconds), reports those URLs to the backend automatically, and installs
+itself as an always-on service (launchd on macOS, systemd on Linux). No
+Cloudflare dashboard, no hand-edited config files, no manual DB inserts.
+
+Open the dashboard, paste the same API key — the camera shows up on its
+own within ~15 seconds.
 
 ## Adding a second site or a second customer
 
-No code changes — insert rows. A new site: one row in `sites`, one row per
-camera in `cameras`, run `apps/relay` there pointed at the new `SITE_ID`. A
-new customer: one row in `accounts`, a new API key, then their own
-sites/cameras rows.
+A second site: run `install.sh` again (there, with the same account API
+key). A second customer: insert one row into `accounts`, generate their own
+API key, hand them the same one-line install command with their key.
 
 ## Adding AI
 

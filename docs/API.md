@@ -16,6 +16,28 @@ events, or jobs.
 CORS is open by default (`ALLOWED_ORIGINS=*`); restrict it in the Pages
 project's env vars if you want to lock the API to specific origins.
 
+## `POST /api/sites`
+
+Register a new site under the caller's account. Body: `{ "name": "Nhà chính" }`.
+Response (`201`): `{ "siteId": "st-...", "relaySecret": "..." }` — the
+installer writes `relaySecret` into the relay's local `.env`; it's never
+shown again. `go2rtc_url`/`relay_url` start empty and are filled in
+automatically by the relay itself (see `PATCH /api/sites/:id` below). Used
+by `apps/relay/install.sh` — you normally don't call this directly.
+
+## `POST /api/sites/:id/cameras`
+
+Register a camera under a site. Body: `{ "stream": "cam1", "name": "Sân vườn" }`
+(`stream` must match the go2rtc stream name / the camera's `id` in that
+site's `cameras.json`). Response (`201`): `{ "cameraId": "cam-..." }`.
+
+## `PATCH /api/sites/:id` (internal — not for UI/API clients)
+
+Called by a site's relay on every startup to report its current Cloudflare
+Quick Tunnel URLs (they change every restart). Authenticated with that
+site's `relay_secret` (header `x-relay-secret`), not an account API key.
+Body: `{ "go2rtcUrl": "...", "relayUrl": "..." }`.
+
 ## `GET /api/cameras`
 
 List every camera the account can see, across all its sites.
@@ -53,7 +75,7 @@ Dispatch a heavy async task (currently RunPod only).
 
 Body: `{ "type": "runpod", "task": "face_search", ...anything else the handler needs }`
 
-Response (`202`): `{ "id": "runpod:abc123", "status": "queued" }`
+Response (`202`): `{ "id": "runpod-abc123", "status": "queued" }`
 
 ## `GET /api/jobs/:id`
 

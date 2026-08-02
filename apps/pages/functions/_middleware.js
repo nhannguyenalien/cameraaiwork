@@ -8,9 +8,16 @@
 //   /api/motion — machine-to-machine webhook from a site's relay,
 //   authenticated with that site's own relay_secret (see functions/api/motion.js).
 //   /api/health — unauthenticated so uptime monitors can hit it.
+//   PATCH /api/sites/:id — same as /api/motion, the relay self-reports its
+//   current Quick Tunnel URLs using its site's relay_secret, not an
+//   account API key (see functions/api/sites/[id].js).
 import { getDb } from "./_lib/db.js";
 
 const PUBLIC_PATHS = ["/api/motion", "/api/health"];
+
+function isSiteSelfUpdate(request, url) {
+  return request.method === "PATCH" && /^\/api\/sites\/[^/]+$/.test(url.pathname);
+}
 
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -23,7 +30,7 @@ function corsHeaders(env, request) {
   const allowOrigin = allowList.includes("*") ? "*" : allowList.includes(origin) ? origin : "";
 
   const headers = {
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, x-relay-secret",
   };
   if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin;
@@ -51,7 +58,11 @@ export async function onRequest({ request, next, env, data }) {
     return new Response(null, { status: 204, headers: cors });
   }
 
-  if (!url.pathname.startsWith("/api/") || PUBLIC_PATHS.includes(url.pathname)) {
+  if (
+    !url.pathname.startsWith("/api/") ||
+    PUBLIC_PATHS.includes(url.pathname) ||
+    isSiteSelfUpdate(request, url)
+  ) {
     return withCors(await next(), cors);
   }
 

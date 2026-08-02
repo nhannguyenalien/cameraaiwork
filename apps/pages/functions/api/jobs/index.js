@@ -1,8 +1,10 @@
 // POST /api/jobs  { "type": "runpod", "task": "face_search", ...extra }
 // Fire-and-forget dispatch of a heavy GPU job. Job id is namespaced by
-// provider ("runpod:<id>") so a second provider can be added later without
-// changing the response shape. Tracked per-account in the `jobs` table so
-// GET /api/jobs/:id can't leak another tenant's job.
+// provider ("runpod-<id>", "-" not ":" — see the note in schema.sql about
+// colons breaking Cloudflare Pages Functions' router) so a second provider
+// can be added later without changing the response shape. Tracked
+// per-account in the `jobs` table so GET /api/jobs/:id can't leak another
+// tenant's job.
 import { getDb } from "../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 
@@ -33,7 +35,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
 
   if (!res.ok) return errorJson("RunPod submit thất bại", 502);
   const runpodData = await res.json();
-  const jobId = `runpod:${runpodData.id}`;
+  const jobId = `runpod-${runpodData.id}`;
 
   const db = getDb(env);
   await db.execute({

@@ -4,10 +4,14 @@ Working checklist for taking this from "code exists" to "running system".
 Check items off as they're done. Each phase has a clear definition of done
 so it's obvious when to move to the next one.
 
-Status as of this writing: **Turso DB is live and seeded, the API is
-verified working end to end against it locally, and go2rtc/relay run
-correctly on the on-site Mac. Blocked on: the physical camera being
-powered on, and standing up the Cloudflare Tunnel + Pages deployment.**
+Status as of this writing: **Turso DB is live and seeded. On-site setup is
+now a single command (`apps/relay/install.sh`) — it self-registers the
+site/camera with the backend and self-exposes go2rtc+relay via Cloudflare
+Quick Tunnels, no manual Cloudflare or Turso steps. Every piece has been
+verified working locally (real Turso DB, real Quick Tunnels, real ONVIF
+connection) except the actual Cloudflare Pages deployment, which hasn't
+been done yet — everything so far has been tested against `wrangler pages
+dev` standing in for it.**
 
 ---
 
@@ -25,6 +29,12 @@ Known debt carried in from the original code, not yet fixed:
 - [ ] Revoke the leaked GitHub PAT found in the original `test/` folder (unrelated `hdtam` project) if not already done — `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`
 - [ ] Motion detection in `apps/relay` matches raw substrings in the SSE payload (`data.includes('motion')`) instead of parsing JSON — fine for now, revisit if false positives show up
 
+Bugs found and fixed during Phase 1 testing (noted here so the reasoning
+isn't lost — see `schema.sql`'s comment for the rule going forward):
+- [x] `infra/setup.sh` only handled Linux's raw-binary go2rtc release, not macOS/Windows' `.zip` — fixed
+- [x] Generated `sites.id`/`cameras.id`/`jobs.id` used `:` as a separator (e.g. `acct_owner:nha_chinh`). Cloudflare Pages Functions' router mis-routes any path segment containing a colon (confirmed via direct `curl -X PATCH` testing — consistently 405, worked once switched to `-`). Fixed the generators to use `-`; **never reintroduce a colon in an id that can end up in a URL path**.
+- [x] The PTZ route (`/api/cameras/:site/:camera/ptz`) was forwarding the DB's opaque `cameras.id` to the relay, but the relay only knows cameras by their go2rtc `stream` key — fixed to look up `cameras.stream` first
+
 ---
 
 ## Phase 1 — get one camera working end to end
@@ -34,32 +44,19 @@ motion event show up. This is the phase that proves the architecture
 actually works, before investing in anything else.
 
 - [x] Create a Turso DB, run `apps/pages/schema.sql` against it — DB `camera` (`libsql://camera-toidayhoc.aws-ap-northeast-1.turso.io`), all 6 tables created
-- [x] Seed one row each in `accounts`, `sites`, `cameras` — `acct_owner`, `acct_owner:nha_chinh`, `acct_owner:nha_chinh:tapo`
-- [x] `node apps/pages/scripts/generate-api-key.js acct_owner` → inserted, raw key saved by the user (not in this repo/plan)
-- [x] Fixed a bug in `infra/setup.sh`: macOS/Windows go2rtc releases are
-      `.zip`, Linux is a raw binary — script only handled the Linux case
-- [ ] On the machine next to the camera (this Mac, confirmed same LAN as
-      the camera — `192.168.2.25` vs camera `192.168.2.23`):
-  - [x] `apps/relay/cameras.json` filled in with real ONVIF creds (from
-        the original `go2rtc.yaml`/`server.js`: `toidayhoc`/`toidayhoc`, port 2020)
-  - [x] `apps/relay/.env` set, `SITE_ID=acct_owner:nha_chinh`, generated `RELAY_SECRET` (matches the `sites` row)
-  - [x] `bash infra/setup.sh` ran clean after the zip fix
-  - [x] go2rtc starts, config loads correctly (`/api/streams` shows the `tapo` producers)
-  - [x] `apps/relay` starts, ONVIF connect attempt fails cleanly with
-        `EHOSTDOWN` and retries every 5s as designed — **the camera itself is
-        currently powered off/disconnected**, this isn't a code problem
-  - [ ] **Blocked: power the camera back on**, then re-verify ONVIF actually
-        connects (log line "✅ ONVIF PTZ sẵn sàng") and the RTSP stream is live
-- [ ] Install `cloudflared`, create a tunnel exposing go2rtc (port 1984) and the relay (port 4000) as two public hostnames
-- [ ] Update the `sites` row (currently `go2rtc_url`/`relay_url` = `PENDING_TUNNEL_URL` placeholders) with the real tunnel hostnames
-- [x] Deployed `apps/pages` locally via `wrangler pages dev` against the real Turso DB and verified end to end: `/api/health` OK, `/api/cameras` correctly 401s with no key and returns the seeded camera with a valid key, `/api/events` returns `[]`
-- [ ] Deploy `apps/pages` to actual Cloudflare Pages (connect the repo, build output `apps/pages/public`), set env vars from `.dev.vars` in the dashboard (same values already verified locally)
+- [x] Seed one row in `accounts` (`acct_owner`), generate its API key with `scripts/generate-api-key.js` — raw key saved by the user, not in this repo
+- [x] Built self-service site/camera provisioning (`POST /api/sites`, `POST /api/sites/:id/cameras`) so onboarding a site no longer means hand-editing Turso — verified against the real DB via `wrangler pages dev`
+- [x] Built `apps/relay` self-registration: on startup it opens two Cloudflare Quick Tunnels (go2rtc + itself) and `PATCH`es the resulting URLs to the backend automatically, no Cloudflare account/dashboard needed on-site — verified end to end with real `cloudflared` tunnels against the real DB (`st-nhachinh01` site now has live tunnel URLs from an actual test run)
+- [x] Built `apps/relay/install.sh` — one curl-pipeable command that does the entire on-site setup (clone repo, install cloudflared/go2rtc, prompt for API key + ONVIF creds, register site/camera via the API above, write local config, install the launchd/systemd service). Each individual step has been tested; **the script itself hasn't been run start-to-finish as one execution yet** — do that once, on a clean checkout, before calling this phase done
+- [x] Confirmed this Mac is on the camera's LAN (`192.168.2.25` vs camera `192.168.2.23`) and, during testing, ONVIF successfully connected (`✅ ONVIF PTZ sẵn sàng: tapo`) — the camera was briefly online; re-verify it's reachable when running the real install
+- [ ] Run `apps/relay/install.sh` for real (or re-point the existing `st-nhachinh01` site's config at it) once the camera is confirmed on, and let it install itself as a persistent service
+- [ ] Deploy `apps/pages` to actual Cloudflare Pages (connect the repo, build output `apps/pages/public`), set env vars from `.dev.vars` in the dashboard (same values already verified locally against `wrangler pages dev`)
+- [ ] Point `apps/relay/.env`'s `PAGES_API_URL` (or re-run the installer) at the real Pages URL instead of `localhost:8788`
 - [ ] Open the deployed dashboard, paste the API key, confirm:
   - [ ] Camera shows up in the dropdown and the live view loads
   - [ ] PTZ buttons actually move the camera
   - [ ] Walking in front of the camera produces a row in "Sự kiện gần đây" within ~30s (AI worker not deployed yet, so this should alert on every motion — that's expected at this phase)
-- [ ] Install `infra/launchd/*.plist` (macOS) or `infra/systemd/*.service`
-      (Linux) for go2rtc + relay, confirm they survive a reboot
+- [ ] Confirm the launchd services (installed by `install.sh`) survive a reboot
 
 **Definition of done:** dashboard shows live video, PTZ works, a real
 motion event produces a Telegram alert and a DB row, and killing/rebooting
@@ -132,9 +129,8 @@ polled through `/api/jobs`, without touching the on-site machine.
 Goal: prove "add a site = insert rows, no code change" is actually true.
 
 - [ ] Pick a second physical location (even a test setup is fine)
-- [ ] Insert a second `sites` row + `cameras` row(s) under the same account
-- [ ] Repeat the on-site setup from Phase 1 (own `cameras.json`, `.env`
-      with a different `SITE_ID`, own Cloudflare Tunnel hostnames)
+- [ ] Run `apps/relay/install.sh` there with the same account API key —
+      this is now the actual test of "no code change", not manual DB inserts
 - [ ] Confirm both cameras show up in the same dashboard, under the same
       account, with no code changes needed
 
@@ -159,3 +155,14 @@ than the account owner.
       fine at one-account scale, not once sites have different hardware)
 - [ ] Structured JSON parsing of go2rtc's motion event schema instead of
       the substring match in `apps/relay`
+- [ ] ONVIF auto-discovery in `install.sh` (scan the LAN and suggest
+      cameras) instead of asking for IP/user/password by hand
+- [ ] Native GUI installer (.pkg/.exe) for non-technical customers —
+      `install.sh` is the right MVP (same pattern as Homebrew/Tailscale/most
+      CLI tools), a packaged installer is worth the extra effort once
+      there's real non-technical customer volume to justify it
+- [ ] Upgrade Quick Tunnels to Cloudflare named tunnels (stable hostname,
+      provisioned server-side via the Cloudflare API) once this needs to be
+      rock-solid production infra rather than "customer just installed it" —
+      Quick Tunnels explicitly aren't meant for permanent production use
+      per Cloudflare's own disclaimer

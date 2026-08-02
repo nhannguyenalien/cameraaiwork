@@ -4,11 +4,18 @@
 -- Multi-tenant model: every site/camera/event belongs to an account.
 -- Each account authenticates via its own API key (see scripts/generate-api-key.js).
 --
--- IMPORTANT: `sites.id` and `cameras.id` must be globally unique across ALL
--- accounts (they're looked up without an account filter on the /api/motion
--- webhook path, since the relay authenticates via its own per-site secret,
--- not a customer API key). Generate them prefixed with the account id, e.g.
--- "acct_abc123:nha_chinh", not just "nha_chinh".
+-- IMPORTANT: `sites.id`, `cameras.id`, and `jobs.id` must be globally unique
+-- across ALL accounts (sites/cameras are looked up without an account
+-- filter on the /api/motion webhook path, since the relay authenticates
+-- via its own per-site secret, not a customer API key) — random opaque ids
+-- are enough for that, no need to embed the account id in the string.
+--
+-- IMPORTANT: never use ":" in these ids. They get used as URL path
+-- segments (PATCH /api/sites/:id, /api/cameras/:site/:camera/ptz,
+-- GET /api/jobs/:id) and Cloudflare Pages Functions' router mis-routes
+-- segments containing a colon. Use "-" instead (see functions/api/sites/index.js
+-- for the generator). This was a real bug caught during Phase 1 testing —
+-- don't reintroduce it.
 
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,               -- e.g. "acct_abc123"
@@ -25,7 +32,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 CREATE TABLE IF NOT EXISTS sites (
-    id TEXT PRIMARY KEY,               -- globally unique, see note above
+    id TEXT PRIMARY KEY,               -- e.g. "st-7789da83f1a2", see note above
     account_id TEXT NOT NULL REFERENCES accounts(id),
     name TEXT,
     go2rtc_url TEXT NOT NULL,          -- this site's go2rtc, via its Cloudflare Tunnel
@@ -34,7 +41,7 @@ CREATE TABLE IF NOT EXISTS sites (
 );
 
 CREATE TABLE IF NOT EXISTS cameras (
-    id TEXT PRIMARY KEY,               -- globally unique, e.g. "acct_abc123:nha_chinh:tapo"
+    id TEXT PRIMARY KEY,               -- e.g. "cam-4f2e9b1c0a3d"
     site_id TEXT NOT NULL REFERENCES sites(id),
     account_id TEXT NOT NULL REFERENCES accounts(id), -- denormalized for fast scoping
     stream TEXT NOT NULL,              -- go2rtc stream name at that site
@@ -52,7 +59,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
-    id TEXT PRIMARY KEY,               -- "runpod:<runpod_job_id>" — provider-prefixed
+    id TEXT PRIMARY KEY,               -- "runpod-<runpod_job_id>" — provider-prefixed, "-" not ":"
     account_id TEXT NOT NULL REFERENCES accounts(id),
     type TEXT,
     created_at DATETIME DEFAULT (datetime('now'))
@@ -62,12 +69,12 @@ CREATE INDEX IF NOT EXISTS idx_events_account_time ON events(account_id, timesta
 CREATE INDEX IF NOT EXISTS idx_cameras_account ON cameras(account_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
 
--- Example seed for the one camera running today (single-account bootstrap):
+-- Normally you don't hand-write these inserts at all — POST /api/sites and
+-- POST /api/sites/:id/cameras (called by apps/relay/install.sh) do this for
+-- you, with correctly-generated ids. Manual example, if ever needed:
 -- INSERT INTO accounts (id, name) VALUES ('acct_owner', 'Chủ hệ thống');
 -- INSERT INTO sites (id, account_id, name, go2rtc_url, relay_url, relay_secret)
---   VALUES ('acct_owner:nha_chinh', 'acct_owner', 'Nhà chính',
---           'https://go2rtc-nhachinh.yourdomain.com',
---           'https://relay-nhachinh.yourdomain.com', 'a-long-random-string');
+--   VALUES ('st-nhachinh01', 'acct_owner', 'Nhà chính', '', '', 'a-long-random-string');
 -- INSERT INTO cameras (id, site_id, account_id, stream, name)
---   VALUES ('acct_owner:nha_chinh:tapo', 'acct_owner:nha_chinh', 'acct_owner', 'tapo', 'Camera chính');
+--   VALUES ('cam-tapo01', 'st-nhachinh01', 'acct_owner', 'tapo', 'Camera chính');
 -- Then run scripts/generate-api-key.js to create acct_owner's API key.

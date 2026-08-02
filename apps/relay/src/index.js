@@ -13,11 +13,17 @@
  *      Function by webhook, tagged with siteId + camera, when motion
  *      happens. No AI, no DB, no Telegram here — apps/pages/functions/api/motion.js
  *      owns all of that now.
+ *
+ * Also starts a Cloudflare Quick Tunnel for go2rtc and one for itself, and
+ * self-reports the resulting URLs to the backend (PATCH /api/sites/:id) —
+ * no manual Cloudflare setup needed on-site. Quick Tunnel hostnames change
+ * on every restart, so this re-registers every time, not just once.
  */
 const express = require("express");
 const axios = require("axios");
 const config = require("./config");
 const ptz = require("./ptz");
+const { startQuickTunnel } = require("./tunnel");
 
 const app = express();
 app.use(express.json());
@@ -96,3 +102,38 @@ if (!config.siteId) {
 ptz.connectAll();
 config.cameras.forEach(watchMotion);
 app.listen(config.port, () => console.log(`🚀 Relay (${config.siteId}) chạy ở http://localhost:${config.port}`));
+
+// --- Tunnels + self-registration ---
+let currentGo2rtcUrl = null;
+let currentRelayUrl = null;
+
+async function reportTunnelUrls() {
+  if (!currentGo2rtcUrl || !currentRelayUrl) return;
+  if (!config.siteUpdateUrl) {
+    console.warn("⚠️ PAGES_API_URL chưa cấu hình, không thể tự đăng ký tunnel URL.");
+    return;
+  }
+  try {
+    await axios.patch(
+      config.siteUpdateUrl,
+      { go2rtcUrl: currentGo2rtcUrl, relayUrl: currentRelayUrl },
+      { headers: { "x-relay-secret": config.relaySecret }, timeout: 5000 }
+    );
+    console.log("✅ Đã cập nhật tunnel URL lên backend.");
+  } catch (e) {
+    console.error("❌ Cập nhật tunnel URL lên backend thất bại:", e.message);
+  }
+}
+
+if (config.pagesApiUrl) {
+  startQuickTunnel("go2rtc", config.go2rtc.port, (url) => {
+    currentGo2rtcUrl = url;
+    reportTunnelUrls();
+  });
+  startQuickTunnel("relay", config.port, (url) => {
+    currentRelayUrl = url;
+    reportTunnelUrls();
+  });
+} else {
+  console.warn("⚠️ PAGES_API_URL chưa cấu hình — bỏ qua tunnel, chỉ chạy local.");
+}
