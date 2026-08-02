@@ -1,7 +1,7 @@
 // POST /api/cameras/:site/:camera/ptz  { "direction": "up"|"down"|"left"|"right"|"stop" }
 // Forwards to that site's relay — Pages Functions have no route into a
 // camera's LAN themselves, ONVIF has to happen from a machine on-site.
-import { getSite } from "../../../../_lib/sites.js";
+import { getSite, getCamera } from "../../../../_lib/sites.js";
 import { json, errorJson, withErrorHandling } from "../../../../_lib/http.js";
 
 const ALLOWED = ["up", "down", "left", "right", "stop"];
@@ -22,7 +22,10 @@ export const onRequestPost = withErrorHandling(async ({ request, params, env, da
   const site = await getSite(env, data.accountId, params.site);
   if (!site) return errorJson("Site not found", 404);
 
-  const res = await fetch(`${site.relay_url}/ptz/${params.camera}/${direction}`, {
+  const camera = await getCamera(env, data.accountId, params.site, params.camera);
+  if (!camera) return errorJson("Camera not found", 404);
+
+  const res = await fetch(`${site.relay_url}/ptz/${camera.stream}/${direction}`, {
     method: "POST",
     headers: { "x-relay-secret": site.relay_secret },
   });

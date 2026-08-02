@@ -21,6 +21,17 @@ export async function getSite(env, accountId, siteId) {
   return result.rows[0] || null;
 }
 
+// The relay only knows cameras by their go2rtc "stream" key (e.g. "tapo"),
+// not the DB's opaque cameraId — this resolves one to the other.
+export async function getCamera(env, accountId, siteId, cameraId) {
+  const db = getDb(env);
+  const result = await db.execute({
+    sql: "SELECT * FROM cameras WHERE id = ? AND site_id = ? AND account_id = ?",
+    args: [cameraId, siteId, accountId],
+  });
+  return result.rows[0] || null;
+}
+
 export async function listCameras(env, accountId) {
   const db = getDb(env);
   const result = await db.execute({

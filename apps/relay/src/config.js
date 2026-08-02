@@ -10,18 +10,24 @@ if (!fs.existsSync(camerasPath)) {
 }
 const cameras = JSON.parse(fs.readFileSync(camerasPath, "utf8"));
 
+const go2rtcUrl = process.env.GO2RTC_URL || "http://localhost:1984";
+const pagesApiUrl = (process.env.PAGES_API_URL || "").replace(/\/$/, "");
+
 module.exports = {
   port: Number(process.env.RELAY_PORT || 4000),
   relaySecret: process.env.RELAY_SECRET || "",
   siteId: process.env.SITE_ID || "",
 
   go2rtc: {
-    url: process.env.GO2RTC_URL || "http://localhost:1984",
+    url: go2rtcUrl,
+    port: Number(new URL(go2rtcUrl).port || 1984),
   },
 
-  // Cloudflare Pages Function that receives motion webhooks, e.g.
-  // https://cameraaiwork.pages.dev/api/motion
-  motionWebhookUrl: process.env.MOTION_WEBHOOK_URL || "",
+  pagesApiUrl,
+  // Both derived from PAGES_API_URL — override individually only if the
+  // installer's defaults don't fit (e.g. testing against a preview deploy).
+  motionWebhookUrl: process.env.MOTION_WEBHOOK_URL || (pagesApiUrl && `${pagesApiUrl}/api/motion`),
+  siteUpdateUrl: pagesApiUrl && `${pagesApiUrl}/api/sites/${process.env.SITE_ID || ""}`,
 
   cameras, // [{ id, stream, onvif: { ip, port, username, password } }, ...]
 };
