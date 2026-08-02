@@ -9,8 +9,14 @@ const { spawn } = require("child_process");
 
 const URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/;
 
+// On macOS/Linux the installer puts cloudflared on PATH (brew, or
+// /usr/local/bin), so "cloudflared" resolves on its own. Windows has no
+// such convention, so install.ps1 downloads it into infra/ and points this
+// at the full path via CLOUDFLARED_BIN in .env.
+const CLOUDFLARED_BIN = process.env.CLOUDFLARED_BIN || "cloudflared";
+
 function startQuickTunnel(label, port, onUrl) {
-  const proc = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${port}`]);
+  const proc = spawn(CLOUDFLARED_BIN, ["tunnel", "--url", `http://localhost:${port}`]);
   let matched = false;
 
   const handleChunk = (chunk) => {
