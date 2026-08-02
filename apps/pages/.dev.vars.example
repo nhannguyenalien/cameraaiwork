@@ -9,6 +9,18 @@
 TURSO_DB_URL=libsql://your-db.turso.io
 TURSO_AUTH_TOKEN=
 
+# Used by POST /api/sites to provision a real Cloudflare Named Tunnel per
+# site server-side (our domain, customer needs neither their own Cloudflare
+# account nor their own domain) — see functions/_lib/cloudflareTunnel.js.
+# API Token needs Zone:DNS:Edit (scoped to the zone below) + Account:Cloudflare
+# Tunnel:Edit. Create at https://dash.cloudflare.com/profile/api-tokens.
+CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_ZONE_ID=
+# Base domain new site hostnames are minted under, e.g. a site "st-abc123"
+# gets "st-abc123-go2rtc.<this>" and "st-abc123-relay.<this>".
+TUNNEL_BASE_DOMAIN=camera.yourdomain.com
+
 # CORS for the API — comma-separated origins, or "*" for any (fine even
 # wide open since auth is a bearer token, not a cookie).
 ALLOWED_ORIGINS=*

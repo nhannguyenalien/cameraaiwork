@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS sites (
     name TEXT,
     go2rtc_url TEXT NOT NULL,          -- this site's go2rtc, via its Cloudflare Tunnel
     relay_url TEXT NOT NULL,           -- this site's relay, via its Cloudflare Tunnel
-    relay_secret TEXT NOT NULL         -- shared secret this site's relay authenticates with
+    relay_secret TEXT NOT NULL,        -- shared secret this site's relay authenticates with
+    cloudflare_tunnel_id TEXT          -- lets us re-fetch the tunnel token later without storing it
 );
 
 CREATE TABLE IF NOT EXISTS cameras (
@@ -77,6 +78,8 @@ CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
 -- Migrating an existing DB that predates the `email` column:
 --   ALTER TABLE accounts ADD COLUMN email TEXT;
 --   CREATE UNIQUE INDEX idx_accounts_email ON accounts(email);
+-- Migrating an existing DB that predates the `cloudflare_tunnel_id` column:
+--   ALTER TABLE sites ADD COLUMN cloudflare_tunnel_id TEXT;
 
 -- Normally you don't hand-write these inserts at all — POST /api/sites and
 -- POST /api/sites/:id/cameras (called by apps/relay/install.sh) do this for

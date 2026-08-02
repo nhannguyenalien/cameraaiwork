@@ -1,10 +1,13 @@
-// Cloudflare Quick Tunnels — no Cloudflare account needed on the customer's
-// side, no port forwarding, a public HTTPS URL within a few seconds. The
-// tradeoff: the hostname changes every time cloudflared (re)starts, so the
-// caller must re-report it (see registerTunnels in index.js). Good enough
-// for onboarding; a named tunnel (stable hostname, provisioned centrally
-// via the Cloudflare API) is the natural upgrade once this needs to be
-// rock-solid production infra rather than "customer just installed it".
+// Two ways to expose go2rtc + the relay publicly:
+//
+// - Named tunnel (preferred): the backend provisions this server-side via
+//   the Cloudflare API (see apps/pages/functions/_lib/cloudflareTunnel.js)
+//   on our own domain, with a stable hostname known before the relay even
+//   starts. Just needs `cloudflared tunnel run --token <token>`.
+// - Quick Tunnel (fallback, e.g. no CLOUDFLARE_TUNNEL_TOKEN configured):
+//   no Cloudflare account needed, a public HTTPS URL in a few seconds, but
+//   the hostname changes every restart so the relay has to self-report it
+//   (see reportTunnelUrls in index.js).
 const { spawn } = require("child_process");
 
 const URL_RE = /https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/;
@@ -40,4 +43,23 @@ function startQuickTunnel(label, port, onUrl) {
   return proc;
 }
 
-module.exports = { startQuickTunnel };
+function startNamedTunnel(tunnelToken) {
+  const proc = spawn(CLOUDFLARED_BIN, ["tunnel", "run", "--token", tunnelToken]);
+
+  const logChunk = (chunk) => {
+    // cloudflared is fairly chatty; only surface actual problems.
+    const text = chunk.toString();
+    if (/error|fail/i.test(text)) console.error(`⚠️ cloudflared: ${text.trim()}`);
+  };
+  proc.stdout.on("data", logChunk);
+  proc.stderr.on("data", logChunk);
+
+  proc.on("exit", (code) => {
+    console.error(`⚠️ Named tunnel thoát (code ${code}), khởi động lại sau 5s`);
+    setTimeout(() => startNamedTunnel(tunnelToken), 5000);
+  });
+
+  return proc;
+}
+
+module.exports = { startQuickTunnel, startNamedTunnel };
