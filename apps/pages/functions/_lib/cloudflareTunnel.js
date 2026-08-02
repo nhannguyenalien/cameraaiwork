@@ -75,3 +75,21 @@ export async function createSiteTunnel(env, siteId) {
     relayUrl: `https://${relayHost}`,
   };
 }
+
+// Tears down everything createSiteTunnel made: the DNS records (looked up
+// by name since we don't store their ids), then the tunnel itself.
+export async function deleteSiteTunnel(env, siteId, tunnelId) {
+  const baseDomain = env.TUNNEL_BASE_DOMAIN;
+  const hostnames = [`${siteId}-go2rtc.${baseDomain}`, `${siteId}-relay.${baseDomain}`];
+
+  for (const hostname of hostnames) {
+    const records = await cf(env, `/zones/${env.CLOUDFLARE_ZONE_ID}/dns_records?name=${hostname}`);
+    for (const record of records) {
+      await cf(env, `/zones/${env.CLOUDFLARE_ZONE_ID}/dns_records/${record.id}`, { method: "DELETE" });
+    }
+  }
+
+  if (tunnelId) {
+    await cf(env, `/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel/${tunnelId}`, { method: "DELETE" });
+  }
+}

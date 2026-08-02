@@ -32,7 +32,7 @@ function corsHeaders(env, request) {
   const allowOrigin = allowList.includes("*") ? "*" : allowList.includes(origin) ? origin : "";
 
   const headers = {
-    "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, x-relay-secret",
   };
   if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin;
