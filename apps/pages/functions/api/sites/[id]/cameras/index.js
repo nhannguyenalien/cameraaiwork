@@ -3,6 +3,7 @@
 import { getSite } from "../../../../_lib/sites.js";
 import { getDb } from "../../../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../../../_lib/http.js";
+import { randomId } from "../../../../_lib/ids.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, params, env, data }) => {
   let body;
@@ -18,9 +19,7 @@ export const onRequestPost = withErrorHandling(async ({ request, params, env, da
   const stream = (body.stream || "").trim();
   if (!stream) return errorJson("stream là bắt buộc", 400);
   const name = body.name || stream;
-  // No ":" — see the note in functions/api/sites/index.js. account/site
-  // scoping already comes from the site_id/account_id columns.
-  const cameraId = `cam-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const cameraId = randomId("cam");
 
   const db = getDb(env);
   await db.execute({

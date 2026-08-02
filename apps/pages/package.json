@@ -10,6 +10,7 @@
     "wrangler": "^3.78.0"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.4"
+    "@libsql/client": "^0.17.4",
+    "jose": "^6.2.7"
   }
 }

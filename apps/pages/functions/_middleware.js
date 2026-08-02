@@ -11,7 +11,10 @@
 //   PATCH /api/sites/:id — same as /api/motion, the relay self-reports its
 //   current Quick Tunnel URLs using its site's relay_secret, not an
 //   account API key (see functions/api/sites/[id].js).
+//   /api/auth/* — obviously can't require an API key, since the whole
+//   point is exchanging a Google sign-in for one (see functions/api/auth/google/).
 import { getDb } from "./_lib/db.js";
+import { sha256Hex } from "./_lib/ids.js";
 
 const PUBLIC_PATHS = ["/api/motion", "/api/health"];
 
@@ -19,9 +22,8 @@ function isSiteSelfUpdate(request, url) {
   return request.method === "PATCH" && /^\/api\/sites\/[^/]+$/.test(url.pathname);
 }
 
-async function sha256Hex(text) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+function isPublic(request, url) {
+  return PUBLIC_PATHS.includes(url.pathname) || url.pathname.startsWith("/api/auth/") || isSiteSelfUpdate(request, url);
 }
 
 function corsHeaders(env, request) {
@@ -58,11 +60,7 @@ export async function onRequest({ request, next, env, data }) {
     return new Response(null, { status: 204, headers: cors });
   }
 
-  if (
-    !url.pathname.startsWith("/api/") ||
-    PUBLIC_PATHS.includes(url.pathname) ||
-    isSiteSelfUpdate(request, url)
-  ) {
+  if (!url.pathname.startsWith("/api/") || isPublic(request, url)) {
     return withCors(await next(), cors);
   }
 

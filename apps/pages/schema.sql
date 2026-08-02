@@ -20,8 +20,13 @@
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,               -- e.g. "acct_abc123"
     name TEXT,
+    email TEXT,                        -- set for accounts created via Google Sign-In
     created_at DATETIME DEFAULT (datetime('now'))
 );
+-- SQLite can't add a UNIQUE column via ALTER TABLE, so uniqueness is a
+-- separate index instead (NULLs don't collide, so accounts without an
+-- email — e.g. seeded manually — are unaffected).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,               -- SHA-256 hash of the key, never the raw key
@@ -68,6 +73,10 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_events_account_time ON events(account_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_cameras_account ON cameras(account_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
+
+-- Migrating an existing DB that predates the `email` column:
+--   ALTER TABLE accounts ADD COLUMN email TEXT;
+--   CREATE UNIQUE INDEX idx_accounts_email ON accounts(email);
 
 -- Normally you don't hand-write these inserts at all — POST /api/sites and
 -- POST /api/sites/:id/cameras (called by apps/relay/install.sh) do this for
