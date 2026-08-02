@@ -4,9 +4,9 @@
 // not a customer API key; see _middleware.js and getSiteUnscoped).
 import { getDb } from "../_lib/db.js";
 import { getSiteUnscoped } from "../_lib/sites.js";
-import { getFrame, getClip } from "../_lib/go2rtc.js";
+import { getFrame } from "../_lib/go2rtc.js";
 import { hasPerson } from "../_lib/detection.js";
-import { sendVideoAlert } from "../_lib/telegram.js";
+import { sendPhotoAlert } from "../_lib/telegram.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env }) => {
@@ -34,9 +34,8 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
     return json({ ok: true, alerted: false });
   }
 
-  const clip = await getClip(env, site, camera, 10);
   const caption = `🔔 Phát hiện người (${site.name || site.id})!\n⏰ ${new Date().toLocaleString("vi-VN")}`;
-  const link = await sendVideoAlert(env, clip, caption);
+  const link = await sendPhotoAlert(env, frame, caption);
 
   const db = getDb(env);
   await db.execute({
