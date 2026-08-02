@@ -8,11 +8,18 @@
  * listed in cameras.json:
  *   1. Forward PTZ commands from the Pages Function to the right camera
  *      (ONVIF needs LAN access, can't be done from Cloudflare's edge).
- *   2. Watch go2rtc's motion SSE stream per camera (long-lived connections,
- *      can't be done from a stateless edge function) and notify the Pages
- *      Function by webhook, tagged with siteId + camera, when motion
- *      happens. No AI, no DB, no Telegram here — apps/pages/functions/api/motion.js
- *      owns all of that now.
+ *   2. Listen for motion directly from the camera's own ONVIF event
+ *      service (long-lived pull-point subscription, can't be done from a
+ *      stateless edge function) and notify the Pages Function by webhook,
+ *      tagged with siteId + camera, when motion happens. No AI, no DB, no
+ *      Telegram here — apps/pages/functions/api/motion.js owns all of that.
+ *
+ *      NOTE: motion used to be watched via go2rtc's `/api/events` — that
+ *      endpoint doesn't exist (go2rtc has no motion/event API at all,
+ *      confirmed against its actual OpenAPI spec after it 404'd in live
+ *      testing). ONVIF event subscription is the architecturally correct
+ *      source for this anyway — motion detection is a camera capability,
+ *      not something go2rtc does.
  *
  * Also starts a Cloudflare Quick Tunnel for go2rtc and one for itself, and
  * self-reports the resulting URLs to the backend (PATCH /api/sites/:id) —
@@ -68,39 +75,32 @@ async function notifyMotion(cameraId) {
   }
 }
 
-async function watchMotion(camera) {
-  console.log(`👀 Đang theo dõi chuyển động: ${camera.id}`);
-  try {
-    const response = await axios({
-      method: "get",
-      url: `${config.go2rtc.url}/api/events`,
-      params: { src: camera.stream },
-      responseType: "stream",
-      timeout: 0,
-    });
+// ONVIF's event topic naming isn't standardized enough across camera
+// vendors to safely filter by an exact topic string without risking
+// silently missing real motion — so, matching the original code's
+// permissive behavior, ANY event from the camera counts as "check it".
+// The topic is logged so it can be tightened later once real topic names
+// are observed in practice (see docs/PLAN.md).
+function watchMotionOnvif(cameraId, cam) {
+  cam.on("event", (message) => {
+    const topic = message?.topic?._ || "(unknown topic)";
+    console.log(`📡 ONVIF event (${cameraId}): ${topic}`);
+    if (cooldowns.get(cameraId)) return;
+    cooldowns.set(cameraId, true);
+    notifyMotion(cameraId);
+    setTimeout(() => cooldowns.set(cameraId, false), 30000); // nghỉ 30s tránh spam webhook
+  });
 
-    response.data.on("data", (chunk) => {
-      const data = chunk.toString();
-      if ((data.includes('"on":true') || data.includes("motion")) && !cooldowns.get(camera.id)) {
-        cooldowns.set(camera.id, true);
-        notifyMotion(camera.id);
-        setTimeout(() => cooldowns.set(camera.id, false), 30000); // nghỉ 30s tránh spam webhook
-      }
-    });
-
-    response.data.on("end", () => setTimeout(() => watchMotion(camera), 5000));
-    response.data.on("error", () => setTimeout(() => watchMotion(camera), 5000));
-  } catch (e) {
-    setTimeout(() => watchMotion(camera), 5000);
-  }
+  cam.on("eventsError", (err) => {
+    console.error(`❌ ONVIF events lỗi (${cameraId}):`, err.message || err);
+  });
 }
 
 if (!config.siteId) {
   throw new Error("SITE_ID chưa cấu hình trong .env — phải khớp với sites.id trên Turso.");
 }
 
-ptz.connectAll();
-config.cameras.forEach(watchMotion);
+ptz.connectAll(watchMotionOnvif);
 app.listen(config.port, () => console.log(`🚀 Relay (${config.siteId}) chạy ở http://localhost:${config.port}`));
 
 // --- Tunnels + self-registration ---

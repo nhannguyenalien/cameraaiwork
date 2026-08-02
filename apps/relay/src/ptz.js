@@ -3,13 +3,16 @@ const config = require("./config");
 
 const connections = new Map(); // camera id -> Cam instance
 
-function connectAll() {
+// onReady(cameraId, camInstance) fires once ONVIF is connected — index.js
+// uses it to attach the motion event listener to this same connection
+// (see the note in index.js about why motion comes from ONVIF, not go2rtc).
+function connectAll(onReady) {
   for (const camera of config.cameras) {
-    connectOne(camera);
+    connectOne(camera, onReady);
   }
 }
 
-function connectOne(camera) {
+function connectOne(camera, onReady) {
   new Cam(
     {
       hostname: camera.onvif.ip,
@@ -20,11 +23,12 @@ function connectOne(camera) {
     function (err) {
       if (err) {
         console.error(`❌ ONVIF PTZ lỗi (${camera.id}):`, err.message);
-        setTimeout(() => connectOne(camera), 5000);
+        setTimeout(() => connectOne(camera, onReady), 5000);
         return;
       }
       connections.set(camera.id, this);
       console.log(`✅ ONVIF PTZ sẵn sàng: ${camera.id}`);
+      onReady?.(camera.id, this);
     }
   );
 }
