@@ -4,8 +4,10 @@ Working checklist for taking this from "code exists" to "running system".
 Check items off as they're done. Each phase has a clear definition of done
 so it's obvious when to move to the next one.
 
-Status as of this writing: **all code in Phase 0 is written but nothing has
-been deployed or run against a real camera/DB yet.**
+Status as of this writing: **Turso DB is live and seeded, the API is
+verified working end to end against it locally, and go2rtc/relay run
+correctly on the on-site Mac. Blocked on: the physical camera being
+powered on, and standing up the Cloudflare Tunnel + Pages deployment.**
 
 ---
 
@@ -31,20 +33,27 @@ Goal: open the dashboard, see the live stream, move the camera, see a
 motion event show up. This is the phase that proves the architecture
 actually works, before investing in anything else.
 
-- [ ] Create a Turso DB, run `apps/pages/schema.sql` against it
-- [ ] Seed one row each in `accounts`, `sites`, `cameras` (see the example
-      at the bottom of `schema.sql`)
-- [ ] `node apps/pages/scripts/generate-api-key.js acct_owner` → insert the
-      printed SQL, save the raw key somewhere safe (shown once)
-- [ ] On the machine next to the camera:
-  - [ ] `cp apps/relay/cameras.json.example cameras.json`, fill in real ONVIF ip/user/pass
-  - [ ] `cp apps/relay/.env.example .env`, set `SITE_ID` to match the `sites.id` seeded above
-  - [ ] `bash infra/setup.sh` — downloads go2rtc, renders `go2rtc.yaml` from `cameras.json`
-  - [ ] Run go2rtc manually first (`infra/go2rtc/bin/go2rtc -config infra/go2rtc/go2rtc.yaml`), confirm the RTSP stream connects (check its logs, or open `http://localhost:1984`)
-  - [ ] `cd apps/relay && npm install && npm start`, confirm ONVIF PTZ connects (log line "✅ ONVIF PTZ sẵn sàng")
+- [x] Create a Turso DB, run `apps/pages/schema.sql` against it — DB `camera` (`libsql://camera-toidayhoc.aws-ap-northeast-1.turso.io`), all 6 tables created
+- [x] Seed one row each in `accounts`, `sites`, `cameras` — `acct_owner`, `acct_owner:nha_chinh`, `acct_owner:nha_chinh:tapo`
+- [x] `node apps/pages/scripts/generate-api-key.js acct_owner` → inserted, raw key saved by the user (not in this repo/plan)
+- [x] Fixed a bug in `infra/setup.sh`: macOS/Windows go2rtc releases are
+      `.zip`, Linux is a raw binary — script only handled the Linux case
+- [ ] On the machine next to the camera (this Mac, confirmed same LAN as
+      the camera — `192.168.2.25` vs camera `192.168.2.23`):
+  - [x] `apps/relay/cameras.json` filled in with real ONVIF creds (from
+        the original `go2rtc.yaml`/`server.js`: `toidayhoc`/`toidayhoc`, port 2020)
+  - [x] `apps/relay/.env` set, `SITE_ID=acct_owner:nha_chinh`, generated `RELAY_SECRET` (matches the `sites` row)
+  - [x] `bash infra/setup.sh` ran clean after the zip fix
+  - [x] go2rtc starts, config loads correctly (`/api/streams` shows the `tapo` producers)
+  - [x] `apps/relay` starts, ONVIF connect attempt fails cleanly with
+        `EHOSTDOWN` and retries every 5s as designed — **the camera itself is
+        currently powered off/disconnected**, this isn't a code problem
+  - [ ] **Blocked: power the camera back on**, then re-verify ONVIF actually
+        connects (log line "✅ ONVIF PTZ sẵn sàng") and the RTSP stream is live
 - [ ] Install `cloudflared`, create a tunnel exposing go2rtc (port 1984) and the relay (port 4000) as two public hostnames
-- [ ] Update the seeded `sites` row with the real tunnel hostnames for `go2rtc_url` / `relay_url`, and `relay_secret` matching the relay's `.env`
-- [ ] Deploy `apps/pages` to Cloudflare Pages (connect the repo, build output `apps/pages/public`), set env vars from `.dev.vars.example` in the dashboard
+- [ ] Update the `sites` row (currently `go2rtc_url`/`relay_url` = `PENDING_TUNNEL_URL` placeholders) with the real tunnel hostnames
+- [x] Deployed `apps/pages` locally via `wrangler pages dev` against the real Turso DB and verified end to end: `/api/health` OK, `/api/cameras` correctly 401s with no key and returns the seeded camera with a valid key, `/api/events` returns `[]`
+- [ ] Deploy `apps/pages` to actual Cloudflare Pages (connect the repo, build output `apps/pages/public`), set env vars from `.dev.vars` in the dashboard (same values already verified locally)
 - [ ] Open the deployed dashboard, paste the API key, confirm:
   - [ ] Camera shows up in the dropdown and the live view loads
   - [ ] PTZ buttons actually move the camera
