@@ -5,20 +5,7 @@
 // PATCH /api/sites/:id once its Cloudflare Quick Tunnels are up.
 import { getDb } from "../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
-
-// IMPORTANT: no ":" (or anything else that isn't URL-path-safe) in
-// generated ids — they get used as path segments (PATCH /api/sites/:id,
-// /api/cameras/:site/:camera/ptz) and Cloudflare Pages Functions' router
-// mis-routes segments containing a colon. Account scoping comes from the
-// account_id column, not from parsing structure out of the id string, so
-// there's no need to embed it in the id anyway.
-function randomId(prefix, len = 12) {
-  return `${prefix}-${crypto.randomUUID().replace(/-/g, "").slice(0, len)}`;
-}
-
-function randomSecret() {
-  return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-}
+import { randomId, randomSecret } from "../../_lib/ids.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, data }) => {
   let body;
