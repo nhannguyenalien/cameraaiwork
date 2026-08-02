@@ -5,13 +5,16 @@ Check items off as they're done. Each phase has a clear definition of done
 so it's obvious when to move to the next one.
 
 Status as of this writing: **Turso DB is live and seeded. On-site setup is
-now a single command (`apps/relay/install.sh`) — it self-registers the
-site/camera with the backend and self-exposes go2rtc+relay via Cloudflare
-Quick Tunnels, no manual Cloudflare or Turso steps. Every piece has been
-verified working locally (real Turso DB, real Quick Tunnels, real ONVIF
-connection) except the actual Cloudflare Pages deployment, which hasn't
-been done yet — everything so far has been tested against `wrangler pages
-dev` standing in for it.**
+now a single command on any of macOS (`install.sh`), Linux (`install.sh`),
+or Windows (`install.ps1`) — self-registers the site/camera with the
+backend and self-exposes go2rtc+relay via Cloudflare Quick Tunnels, no
+manual Cloudflare or Turso steps. macOS has been verified end to end
+against a real camera and the real Turso DB. Linux and Windows follow the
+identical logic and every third-party download URL involved has been
+verified to actually resolve, but neither has been run start-to-finish on
+real hardware. The actual Cloudflare Pages deployment also hasn't been
+done yet — everything so far has been tested against `wrangler pages dev`
+standing in for it.**
 
 ---
 
@@ -23,6 +26,7 @@ dev` standing in for it.**
 - [x] `runpod/heavy-worker` — RunPod handler stub, no task implemented yet
 - [x] `schema.sql`, `docs/ARCHITECTURE.md`, `docs/API.md`, `README.md`
 - [x] `infra/` — setup.sh, launchd (macOS) + systemd (Linux) service templates
+- [x] `apps/relay/install.ps1` + `apps/relay/win/*` — Windows installer + Windows Service wrappers (via `node-windows`, since there's no launchd/systemd equivalent)
 - [x] Pushed to `github.com/nhannguyenalien/cameraaiwork`
 
 Known debt carried in from the original code, not yet fixed:
@@ -33,6 +37,7 @@ Bugs found and fixed during Phase 1 testing (noted here so the reasoning
 isn't lost — see `schema.sql`'s comment for the rule going forward):
 - [x] `infra/setup.sh` only handled Linux's raw-binary go2rtc release, not macOS/Windows' `.zip` — fixed
 - [x] Generated `sites.id`/`cameras.id`/`jobs.id` used `:` as a separator (e.g. `acct_owner:nha_chinh`). Cloudflare Pages Functions' router mis-routes any path segment containing a colon (confirmed via direct `curl -X PATCH` testing — consistently 405, worked once switched to `-`). Fixed the generators to use `-`; **never reintroduce a colon in an id that can end up in a URL path**.
+- [x] Caught while writing `install.ps1` (not yet hit in practice): PowerShell's `Set-Content -Encoding UTF8` writes a byte-order-mark on Windows PowerShell 5.1, which breaks Node's `JSON.parse` on `cameras.json` (a stray BOM byte before `[` isn't valid JSON). Fixed by writing via `[System.IO.File]::WriteAllText` with an explicit no-BOM UTF-8 encoding instead.
 - [x] The PTZ route (`/api/cameras/:site/:camera/ptz`) was forwarding the DB's opaque `cameras.id` to the relay, but the relay only knows cameras by their go2rtc `stream` key — fixed to look up `cameras.stream` first
 
 ---
@@ -47,7 +52,7 @@ actually works, before investing in anything else.
 - [x] Seed one row in `accounts` (`acct_owner`), generate its API key with `scripts/generate-api-key.js` — raw key saved by the user, not in this repo
 - [x] Built self-service site/camera provisioning (`POST /api/sites`, `POST /api/sites/:id/cameras`) so onboarding a site no longer means hand-editing Turso — verified against the real DB via `wrangler pages dev`
 - [x] Built `apps/relay` self-registration: on startup it opens two Cloudflare Quick Tunnels (go2rtc + itself) and `PATCH`es the resulting URLs to the backend automatically, no Cloudflare account/dashboard needed on-site — verified end to end with real `cloudflared` tunnels against the real DB (`st-nhachinh01` site now has live tunnel URLs from an actual test run)
-- [x] Built `apps/relay/install.sh` — one curl-pipeable command that does the entire on-site setup (clone repo, install cloudflared/go2rtc, prompt for API key + ONVIF creds, register site/camera via the API above, write local config, install the launchd/systemd service). Each individual step has been tested; **the script itself hasn't been run start-to-finish as one execution yet** — do that once, on a clean checkout, before calling this phase done
+- [x] Built `apps/relay/install.sh` (macOS/Linux) and `apps/relay/install.ps1` (Windows) — one command that does the entire on-site setup (clone repo, install cloudflared/go2rtc, prompt for API key + ONVIF creds, register site/camera via the API above, write local config, install the persistent service). Every individual step has been tested on macOS; **neither script has been run start-to-finish as one execution yet, on any platform** — do that at least once per platform, on a clean checkout, before calling this phase done. Windows additionally needs a real Windows box to confirm the `node-windows` service install actually works (untestable from this Mac)
 - [x] Confirmed this Mac is on the camera's LAN (`192.168.2.25` vs camera `192.168.2.23`) and, during testing, ONVIF successfully connected (`✅ ONVIF PTZ sẵn sàng: tapo`) — the camera was briefly online; re-verify it's reachable when running the real install
 - [ ] Run `apps/relay/install.sh` for real (or re-point the existing `st-nhachinh01` site's config at it) once the camera is confirmed on, and let it install itself as a persistent service
 - [ ] Deploy `apps/pages` to actual Cloudflare Pages (connect the repo, build output `apps/pages/public`), set env vars from `.dev.vars` in the dashboard (same values already verified locally against `wrangler pages dev`)
@@ -155,12 +160,13 @@ than the account owner.
       fine at one-account scale, not once sites have different hardware)
 - [ ] Structured JSON parsing of go2rtc's motion event schema instead of
       the substring match in `apps/relay`
-- [ ] ONVIF auto-discovery in `install.sh` (scan the LAN and suggest
+- [ ] ONVIF auto-discovery in the installers (scan the LAN and suggest
       cameras) instead of asking for IP/user/password by hand
-- [ ] Native GUI installer (.pkg/.exe) for non-technical customers —
-      `install.sh` is the right MVP (same pattern as Homebrew/Tailscale/most
-      CLI tools), a packaged installer is worth the extra effort once
-      there's real non-technical customer volume to justify it
+- [ ] Native GUI installer (.pkg/.exe/.msi) for non-technical customers —
+      the curl/irm one-liners are the right MVP (same pattern as
+      Homebrew/Tailscale/winget itself), a packaged installer is worth the
+      extra effort once there's real non-technical customer volume to
+      justify it
 - [ ] Upgrade Quick Tunnels to Cloudflare named tunnels (stable hostname,
       provisioned server-side via the Cloudflare API) once this needs to be
       rock-solid production infra rather than "customer just installed it" —
