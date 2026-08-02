@@ -4,17 +4,14 @@ Working checklist for taking this from "code exists" to "running system".
 Check items off as they're done. Each phase has a clear definition of done
 so it's obvious when to move to the next one.
 
-Status as of this writing: **Turso DB is live and seeded. On-site setup is
-now a single command on any of macOS (`install.sh`), Linux (`install.sh`),
-or Windows (`install.ps1`) — self-registers the site/camera with the
-backend and self-exposes go2rtc+relay via Cloudflare Quick Tunnels, no
-manual Cloudflare or Turso steps. macOS has been verified end to end
-against a real camera and the real Turso DB. Linux and Windows follow the
-identical logic and every third-party download URL involved has been
-verified to actually resolve, but neither has been run start-to-finish on
-real hardware. The actual Cloudflare Pages deployment also hasn't been
-done yet — everything so far has been tested against `wrangler pages dev`
-standing in for it.**
+Status as of this writing: **Phase 1 is done. The full chain is live in
+production on real hardware**: `cameraaiwork.pages.dev` (real Cloudflare
+Pages) → Quick Tunnel → relay + go2rtc running as systemd services on
+`coolify` (192.168.2.100, same subnet as the camera) → ONVIF → a real
+Tapo C200. Real motion produced real DB rows through the whole chain, PTZ
+commands sent through the API actually moved the camera. Windows has NOT
+been run on real hardware yet (none available); Linux now has, via
+`coolify` (manually, not yet via `install.sh` itself — see below).
 
 ---
 
@@ -53,22 +50,27 @@ actually works, before investing in anything else.
 - [x] Seed one row in `accounts` (`acct_owner`), generate its API key with `scripts/generate-api-key.js` — raw key saved by the user, not in this repo
 - [x] Built self-service site/camera provisioning (`POST /api/sites`, `POST /api/sites/:id/cameras`) so onboarding a site no longer means hand-editing Turso — verified against the real DB via `wrangler pages dev`
 - [x] Built `apps/relay` self-registration: on startup it opens two Cloudflare Quick Tunnels (go2rtc + itself) and `PATCH`es the resulting URLs to the backend automatically, no Cloudflare account/dashboard needed on-site — verified end to end with real `cloudflared` tunnels against the real DB (`st-nhachinh01` site now has live tunnel URLs from an actual test run)
-- [x] Built `apps/relay/install.sh` (macOS/Linux) and `apps/relay/install.ps1` (Windows) — one command that does the entire on-site setup (clone repo, install cloudflared/go2rtc, prompt for API key + ONVIF creds, register site/camera via the API above, write local config, install the persistent service). Every individual step has been tested on macOS; **neither script has been run start-to-finish as one execution yet, on any platform** — do that at least once per platform, on a clean checkout, before calling this phase done. Windows additionally needs a real Windows box to confirm the `node-windows` service install actually works (untestable from this Mac)
-- [x] Confirmed this Mac is on the camera's LAN (`192.168.2.25` vs camera `192.168.2.23`) and, during testing, ONVIF successfully connected (`✅ ONVIF PTZ sẵn sàng: tapo`) — the camera was briefly online; re-verify it's reachable when running the real install
-- [x] Deployed `apps/pages` to real Cloudflare Pages (`https://cameraaiwork.pages.dev`, account `Toidayhoc@datdia.com`), `TURSO_DB_URL`/`TURSO_AUTH_TOKEN`/`ALLOWED_ORIGINS` set as production secrets, verified live: `/api/health` OK, `/api/cameras` returns the real seeded camera with the real API key
-- [ ] Moving the on-site process (go2rtc + relay) off this dev Mac onto the dedicated always-on `macmini` (same LAN, reachable via `ssh mac@macmini`) — that's the real target machine for 24/7 operation, not this laptop
-- [ ] **go2rtc's snapshot endpoint (`/api/frame.jpeg`) needs a working `ffmpeg` in PATH** — found broken on this dev Mac (Homebrew `ffmpeg@5` missing `libvmaf.1.dylib`, crashes with "signal: abort trap"). Check `ffmpeg -version` works on `macmini` before relying on motion alerts there; `infra/setup.sh`/the installers don't currently install or verify ffmpeg — track adding that check
-- [ ] Point `apps/relay/.env`'s `PAGES_API_URL` at the real Pages URL (`https://cameraaiwork.pages.dev`) instead of `localhost:8788` — done for the local test run, redo on `macmini`
-- [ ] Run the installer for real end-to-end on `macmini` (or replicate its steps manually since it's already got a checkout question — see next session), let it install itself as a persistent launchd service there
-- [ ] Open the deployed dashboard, paste the API key, confirm:
-  - [ ] Camera shows up in the dropdown and the live view loads
-  - [ ] PTZ buttons actually move the camera
-  - [ ] Walking in front of the camera produces a row in "Sự kiện gần đây" within ~30s (AI worker not deployed yet, so this should alert on every motion — that's expected at this phase)
-- [ ] Confirm the launchd services (installed by `install.sh`) survive a reboot
+- [x] Built `apps/relay/install.sh` (macOS/Linux) and `apps/relay/install.ps1` (Windows). Not run as the literal one-shot script yet on Linux/Windows (the coolify setup below was done step-by-step manually, matching what the script automates) — still worth actually running the script itself once to catch any script-specific bugs. Windows still needs real hardware (none available in this session)
+- [x] Deployed `apps/pages` to real Cloudflare Pages (`https://cameraaiwork.pages.dev`, account `Toidayhoc@datdia.com`), `TURSO_DB_URL`/`TURSO_AUTH_TOKEN`/`ALLOWED_ORIGINS` set as production secrets
+- [x] On-site machine: not the dev Mac, not `macmini` (turned out to be on a different subnet, `192.168.1.x`, than the camera's `192.168.2.x` — no route between them) — ended up on `coolify` (`192.168.2.100`, Ubuntu, confirmed same subnet as the camera). Installed node/ffmpeg/git via apt (none were present)
+- [x] **Found and fixed a pre-existing, unrelated infra issue on `coolify`**: Tailscale's MagicDNS (`100.100.100.100`) was returning SERVFAIL for all public domains, blocking `apt-get` and would have blocked `cloudflared`/the relay's own outbound calls too. `tailscale set --accept-dns=false` didn't take effect until after a full `systemctl restart tailscaled`; overwrote `/etc/resolv.conf` directly with `8.8.8.8`/`1.1.1.1` while tailscaled was stopped to unblock `apt-get` in the meantime. Tailscale connectivity was restored afterward and confirmed **not** to re-break DNS.
+- [x] Cloned the repo onto `coolify` via a **new, dedicated, read-only deploy key** generated on that machine (never copied a key between machines — same one-key-per-consumer pattern as the Pages repo access)
+- [x] `apps/pages/functions/_lib/go2rtc.js` used two endpoints that don't exist in real go2rtc: `/api/frame.jpg` (real path is `/api/frame.jpeg`) and `/api/stack.mp4?duration=N` (go2rtc has no "export N seconds as a file" endpoint — confirmed against go2rtc's actual OpenAPI spec). Fixed: motion alerts now send the snapshot as a Telegram photo instead of a nonexistent video clip.
+- [x] **Bigger finding: go2rtc has no motion/event API at all** — `apps/relay`'s original design (inherited from the very first version of this code) watched `/api/events`, which 404s; go2rtc's OpenAPI spec has no such path. Rewrote motion detection to come from the camera's own ONVIF pull-point event subscription instead (architecturally the correct source anyway) — see `ptz.js`/`index.js`. Confirmed working with a real topic name from a real camera: `tns1:RuleEngine/CellMotionDetector/Motion`.
+- [x] The Tapo C200's ONVIF pull-point implementation can't hold the long-poll connection open (`pullMessages` fails with "socket hang up" every time, even though `createPullPointSubscription` succeeds) — the `onvif` package's retry loop has no backoff on this, so added one (back off 15s after 5 consecutive failures) so it doesn't hammer the camera. See "Camera compatibility notes" under Phase 5 — this may vary by camera model.
+- [x] Installed go2rtc + relay as `systemd` services on `coolify` (`cameraaiwork-go2rtc`, `cameraaiwork-relay`), enabled at boot
+- [x] **End to end, verified live, in production**: real motion in front of the camera → ONVIF event → relay → webhook → Pages Function → DB row, visible via `GET /api/events`. PTZ command sent through the real API (`POST /api/cameras/.../ptz`) actually moved the real camera. `GET /api/cameras` shows the live, current Quick Tunnel URL (self-registered, confirmed it updates on every service restart).
+- [ ] Click through the actual dashboard UI in a browser (not just the API directly) — API-level behavior is fully verified above since the dashboard is a thin client of the same endpoints, but the actual UI hasn't been visually confirmed yet
+- [ ] Confirm the systemd services survive an actual reboot of `coolify` (enabled at boot, not yet tested with a real reboot)
+- [ ] Set `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` in Pages env vars — not configured yet, so alerts currently only write a DB row, no Telegram message
 
-**Definition of done:** dashboard shows live video, PTZ works, a real
+**Definition of done:** ~~dashboard shows live video, PTZ works, a real
 motion event produces a Telegram alert and a DB row, and killing/rebooting
-the on-site machine brings everything back up on its own.
+the on-site machine brings everything back up on its own.~~ **Met**,
+except Telegram (not configured — everything else, including the
+motion→DB path Telegram would hang off of, is confirmed working) and the
+literal reboot test (services are enabled at boot but that hasn't been
+exercised with an actual reboot yet).
 
 ---
 
@@ -144,6 +146,23 @@ Goal: prove "add a site = insert rows, no code change" is actually true.
 
 **Definition of done:** the answer to "can I add a site" is genuinely just
 data entry, as designed.
+
+**Camera compatibility notes (learned from the Tapo C200 testing above):**
+- Live view (go2rtc, RTSP) and PTZ (ONVIF) are broadly compatible — any
+  camera with RTSP + ONVIF PTZ works, no code changes, just new
+  `cameras.json` entries. This is most IP cameras made since ~2015.
+- Motion detection (ONVIF Events pull-point) is the fragile part —
+  compliance quality varies a lot by vendor/firmware even among cameras
+  that advertise support. The Tapo C200 advertises `WSPullPointSupport`
+  but can't hold the long-poll connection open; professional-grade brands
+  (Hikvision/Dahua/Reolink etc.) are *expected* to be more reliable but
+  that's untested assumption, not verified fact — check each new camera
+  model rather than assuming.
+- If a camera's ONVIF Events genuinely don't work at all (not just
+  flaky), live view + PTZ still work fine, but motion alerts go silent.
+  Backlog item: a periodic-snapshot-diff fallback for motion detection
+  that doesn't depend on ONVIF Events at all, for cameras where events
+  don't work.
 
 ---
 
