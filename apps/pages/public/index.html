@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CameraAIWork Dashboard</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
 </head>
 <body class="border-top-wide border-primary d-flex flex-column">
   <header class="navbar navbar-expand-md navbar-light d-print-none">
@@ -39,47 +40,45 @@
 
         <!-- Dashboard -->
         <div id="dashboard" class="d-none">
-          <div class="row row-deck row-cards">
 
-            <div class="col-lg-8">
-              <div class="card">
-                <div class="card-header">
-                  <select id="camera-select" class="form-select w-auto"></select>
-                </div>
-                <div class="ratio ratio-16x9 bg-dark">
-                  <iframe id="player" frameborder="0"></iframe>
-                </div>
+          <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item">
+              <a href="#tab-cameras" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-video me-1"></i>Camera</a>
+            </li>
+            <li class="nav-item">
+              <a href="#tab-people" class="nav-link" data-bs-toggle="tab"><i class="ti ti-users me-1"></i>Người</a>
+            </li>
+            <li class="nav-item">
+              <a href="#tab-events" class="nav-link" data-bs-toggle="tab"><i class="ti ti-bell me-1"></i>Sự kiện</a>
+            </li>
+          </ul>
+
+          <div class="tab-content">
+
+            <!-- Cameras: grid, one tile per camera -->
+            <div class="tab-pane active show" id="tab-cameras">
+              <div id="camera-grid" class="row row-cards"></div>
+              <div id="camera-empty" class="text-secondary text-center py-5 d-none">Chưa có camera nào.</div>
+            </div>
+
+            <!-- People: grid of clustered faces, rename inline -->
+            <div class="tab-pane" id="tab-people">
+              <div id="people-grid" class="row row-cards"></div>
+              <div id="people-empty" class="text-secondary text-center py-5 d-none">
+                Chưa có ai được ghi nhận — cần bật <code>AI_WORKER_URL</code> để nhận diện khuôn mặt.
               </div>
             </div>
 
-            <div class="col-lg-4">
+            <!-- Events: recent motion/person log -->
+            <div class="tab-pane" id="tab-events">
               <div class="card">
-                <div class="card-header"><h3 class="card-title">Điều khiển PTZ</h3></div>
-                <div class="card-body text-center">
-                  <div class="btn-group-vertical">
-                    <button class="btn" onclick="move('up')">▲</button>
-                    <div class="btn-group">
-                      <button class="btn" onclick="move('left')">◀</button>
-                      <button class="btn btn-danger" onclick="move('stop')">■</button>
-                      <button class="btn" onclick="move('right')">▶</button>
-                    </div>
-                    <button class="btn" onclick="move('down')">▼</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-12">
-              <div class="card">
-                <div class="card-header"><h3 class="card-title">Sự kiện gần đây</h3></div>
                 <div class="table-responsive">
                   <table class="table card-table table-vcenter">
                     <thead>
                       <tr>
                         <th>Thời gian</th>
-                        <th>Site</th>
                         <th>Camera</th>
-                        <th>Loại</th>
+                        <th>Người</th>
                         <th>Ảnh</th>
                       </tr>
                     </thead>
@@ -96,9 +95,62 @@
     </div>
   </div>
 
+  <!-- PTZ modal, opened from a camera tile -->
+  <div class="modal" id="ptz-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="ptz-modal-title">Camera</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="ratio ratio-16x9 bg-dark mb-3">
+            <iframe id="ptz-player" frameborder="0"></iframe>
+          </div>
+          <div class="text-center">
+            <div class="btn-group-vertical">
+              <button class="btn" onclick="move('up')"><i class="ti ti-chevron-up"></i></button>
+              <div class="btn-group">
+                <button class="btn" onclick="move('left')"><i class="ti ti-chevron-left"></i></button>
+                <button class="btn btn-danger" onclick="move('stop')"><i class="ti ti-player-stop"></i></button>
+                <button class="btn" onclick="move('right')"><i class="ti ti-chevron-right"></i></button>
+              </div>
+              <button class="btn" onclick="move('down')"><i class="ti ti-chevron-down"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename person modal -->
+  <div class="modal" id="rename-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form id="rename-form">
+          <div class="modal-header">
+            <h5 class="modal-title">Đặt tên</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label">Tên</label>
+            <input id="rename-input" type="text" class="form-control" placeholder="vd: Bố, Mẹ, Người giao hàng..." />
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn" data-bs-dismiss="modal">Huỷ</button>
+            <button type="submit" class="btn btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
 <script>
   const API_KEY_STORAGE = 'cameraaiwork_api_key';
+  let cameras = [];
   let selectedCamera = null;
+  let renamingPersonId = null;
 
   const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
   const setApiKey = (k) => localStorage.setItem(API_KEY_STORAGE, k);
@@ -121,24 +173,44 @@
     return res.json();
   }
 
-  function cameraKey(c) { return `${c.siteId}|${c.cameraId}|${c.stream}|${c.go2rtcUrl}`; }
-
-  async function loadCameras() {
-    const cameras = await api('/api/cameras');
-    const select = document.getElementById('camera-select');
-    select.innerHTML = cameras
-      .map((c) => `<option value="${cameraKey(c)}">${c.siteName} — ${c.cameraName || c.cameraId}</option>`)
-      .join('');
-    if (cameras.length) {
-      select.value = cameraKey(cameras[0]);
-      updatePlayer();
-    }
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  function updatePlayer() {
-    const [siteId, cameraId, stream, go2rtcUrl] = document.getElementById('camera-select').value.split('|');
-    selectedCamera = { siteId, cameraId };
-    document.getElementById('player').src = `${go2rtcUrl}/stream.html?src=${stream}`;
+  // --- Cameras grid ---
+  async function loadCameras() {
+    cameras = await api('/api/cameras');
+    const grid = document.getElementById('camera-grid');
+    document.getElementById('camera-empty').classList.toggle('d-none', cameras.length > 0);
+    grid.innerHTML = cameras
+      .map(
+        (c, i) => `
+        <div class="col-md-6 col-xl-4">
+          <div class="card">
+            <div class="ratio ratio-16x9 bg-dark">
+              <iframe src="${c.go2rtcUrl}/stream.html?src=${c.stream}" frameborder="0" loading="lazy"></iframe>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-between py-2">
+              <div>
+                <div class="fw-bold">${escapeHtml(c.cameraName || c.cameraId)}</div>
+                <div class="text-secondary small">${escapeHtml(c.siteName || c.siteId)}</div>
+              </div>
+              <button class="btn btn-sm btn-icon" onclick="openPtz(${i})" title="Điều khiển">
+                <i class="ti ti-arrows-move"></i>
+              </button>
+            </div>
+          </div>
+        </div>`
+      )
+      .join('');
+  }
+
+  function openPtz(index) {
+    const c = cameras[index];
+    selectedCamera = { siteId: c.siteId, cameraId: c.cameraId };
+    document.getElementById('ptz-modal-title').textContent = `${c.siteName} — ${c.cameraName || c.cameraId}`;
+    document.getElementById('ptz-player').src = `${c.go2rtcUrl}/stream.html?src=${c.stream}`;
+    new bootstrap.Modal(document.getElementById('ptz-modal')).show();
   }
 
   async function move(dir) {
@@ -149,15 +221,60 @@
     });
   }
 
+  // --- People grid ---
+  async function loadPeople() {
+    const people = await api('/api/people');
+    const grid = document.getElementById('people-grid');
+    document.getElementById('people-empty').classList.toggle('d-none', people.length > 0);
+    grid.innerHTML = people
+      .map(
+        (p) => `
+        <div class="col-md-6 col-xl-4">
+          <div class="card">
+            <div class="card-body d-flex align-items-center">
+              <span class="avatar avatar-lg me-3 bg-blue-lt"><i class="ti ti-user fs-1"></i></span>
+              <div class="flex-fill">
+                <div class="fw-bold">${p.label ? escapeHtml(p.label) : `<span class="text-secondary">Chưa đặt tên</span>`}</div>
+                <div class="text-secondary small">Thấy ${p.seen_count} lần · gần nhất ${escapeHtml(p.last_seen_at)}</div>
+              </div>
+              <button class="btn btn-sm btn-icon" onclick="openRename('${p.id}', ${JSON.stringify(p.label || '')})" title="Đặt tên">
+                <i class="ti ti-edit"></i>
+              </button>
+            </div>
+          </div>
+        </div>`
+      )
+      .join('');
+  }
+
+  function openRename(personId, currentLabel) {
+    renamingPersonId = personId;
+    document.getElementById('rename-input').value = currentLabel || '';
+    new bootstrap.Modal(document.getElementById('rename-modal')).show();
+  }
+
+  document.getElementById('rename-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const label = document.getElementById('rename-input').value.trim();
+    await api(`/api/people/${renamingPersonId}`, { method: 'PATCH', body: JSON.stringify({ label }) });
+    bootstrap.Modal.getInstance(document.getElementById('rename-modal')).hide();
+    loadPeople().catch(() => {});
+  });
+
+  // --- Events table ---
+  function cameraDisplayName(siteId, cameraStream) {
+    const c = cameras.find((c) => c.siteId === siteId && c.stream === cameraStream);
+    return c ? (c.cameraName || c.cameraId) : cameraStream;
+  }
+
   async function loadEvents() {
     const events = await api('/api/events?limit=20');
     document.getElementById('events-body').innerHTML = events
       .map(
         (e) => `<tr>
-          <td>${e.timestamp}</td>
-          <td>${e.site_id || ''}</td>
-          <td>${e.camera || ''}</td>
-          <td>${e.type || ''}</td>
+          <td>${escapeHtml(e.timestamp)}</td>
+          <td>${escapeHtml(cameraDisplayName(e.site_id, e.camera))}</td>
+          <td>${e.person_label ? escapeHtml(e.person_label) : '<span class="text-secondary">Chưa rõ</span>'}</td>
           <td>${e.video_link ? `<a href="${e.video_link}" target="_blank">Xem</a>` : ''}</td>
         </tr>`
       )
@@ -170,8 +287,8 @@
     document.getElementById('dashboard').classList.toggle('d-none', !hasKey);
     document.getElementById('logout-btn').classList.toggle('d-none', !hasKey);
     if (hasKey) {
-      loadCameras().catch(() => {});
-      loadEvents().catch(() => {});
+      loadCameras().then(loadEvents).catch(() => {});
+      loadPeople().catch(() => {});
     }
   }
 
@@ -182,10 +299,9 @@
   });
 
   document.getElementById('logout-btn').addEventListener('click', () => { clearApiKey(); render(); });
-  document.getElementById('camera-select').addEventListener('change', updatePlayer);
 
   render();
-  setInterval(() => { if (getApiKey()) loadEvents().catch(() => {}); }, 5000);
+  setInterval(() => { if (getApiKey()) { loadEvents().catch(() => {}); loadPeople().catch(() => {}); } }, 5000);
 </script>
 </body>
 </html>
