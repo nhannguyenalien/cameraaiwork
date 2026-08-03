@@ -153,16 +153,27 @@ a secret update is live without a fresh deploy.
 
 Goal: stop alerting on every leaf blowing in the wind.
 
-- [ ] Pick a model: YOLOv8n (nano) ONNX export is the default recommendation
-- [ ] Implement `detect_person()` in `ai/worker/main.py` — start with
-      `onnxruntime` CPUExecutionProvider (works everywhere), switch to
-      CoreMLExecutionProvider later if the on-site box is Apple Silicon
-      and CPU inference is too slow
-- [ ] Deploy `ai/worker` on-site (same machine as the relay), expose via
-      the same Cloudflare Tunnel
-- [ ] Set `AI_WORKER_URL` in Pages env vars
-- [ ] Test: motion with no person → no alert; motion with a person → alert,
-      within the same ~30s budget as before
+- [x] Picked YOLOv8n (nano), exported to ONNX via the official `ultralytics`
+      package (`YOLO('yolov8n.pt').export(format='onnx', imgsz=640, opset=12)`)
+      — 12MB, committed directly as `ai/worker/model.onnx` rather than
+      re-exported per machine (avoids every on-site box needing the full
+      ~1GB `ultralytics`/`torch` toolchain just to get a 12MB file)
+- [x] Implemented `detect_person()` in `ai/worker/main.py` with
+      `onnxruntime` CPUExecutionProvider — real YOLOv8 output parsing
+      (4 box coords + 80 COCO class scores per anchor, class 0 = person),
+      confidence threshold + manual NMS to de-dupe overlapping boxes
+- [x] **Actually tested, not just written**: ran it against `ultralytics`'
+      own `bus.jpg` sample (4 people at a bus stop) — correctly detected
+      all 4 — and a blank synthetic image — correctly detected 0. Caught a
+      real bug this way: box coordinates came out as `numpy.float32`,
+      which Pydantic can't JSON-serialize — `TestClient` hitting the actual
+      `/detect` HTTP route surfaced this (calling the function directly
+      wouldn't have), fixed by casting to native `float`.
+- [ ] Deploy `ai/worker` on-site (`coolify`, once it's back up after the
+      power outage), expose via that site's tunnel
+- [ ] Set `AI_WORKER_URL` in Pages env vars to the deployed worker's URL
+- [ ] Test against the real camera: motion with no person → no alert;
+      motion with a person → alert, within the same ~30s budget as before
 
 **Definition of done:** a week of normal household motion (pets, wind,
 shadows) doesn't spam Telegram, but an actual person still does.
