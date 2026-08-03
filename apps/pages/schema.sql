@@ -54,11 +54,29 @@ CREATE TABLE IF NOT EXISTS cameras (
     name TEXT
 );
 
+-- One row per distinct face the system has clustered together — not
+-- necessarily named yet ("Người lạ #3" until the account owner labels
+-- it). ai/worker extracts a 512-dim ArcFace-style embedding per detected
+-- face; functions/api/motion.js compares it (cosine similarity) against
+-- every existing person for that account and either attaches the event
+-- to the closest match above SIMILARITY_THRESHOLD, or creates a new row
+-- here. See functions/_lib/faceMatch.js.
+CREATE TABLE IF NOT EXISTS people (
+    id TEXT PRIMARY KEY,               -- e.g. "person-4f2e9b1c0a3d"
+    account_id TEXT NOT NULL REFERENCES accounts(id),
+    label TEXT,                        -- nullable until named, e.g. "Bố"
+    embedding TEXT NOT NULL,           -- JSON array of 512 floats
+    first_seen_at DATETIME DEFAULT (datetime('now','localtime')),
+    last_seen_at DATETIME DEFAULT (datetime('now','localtime')),
+    seen_count INTEGER DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id TEXT NOT NULL,
     site_id TEXT,
     camera TEXT,
+    person_id TEXT REFERENCES people(id),  -- NULL if no face was matched (e.g. AI worker not deployed yet)
     timestamp DATETIME DEFAULT (datetime('now','localtime')),
     type TEXT,
     video_link TEXT
@@ -74,12 +92,16 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_events_account_time ON events(account_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_cameras_account ON cameras(account_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
+CREATE INDEX IF NOT EXISTS idx_people_account ON people(account_id);
 
 -- Migrating an existing DB that predates the `email` column:
 --   ALTER TABLE accounts ADD COLUMN email TEXT;
 --   CREATE UNIQUE INDEX idx_accounts_email ON accounts(email);
 -- Migrating an existing DB that predates the `cloudflare_tunnel_id` column:
 --   ALTER TABLE sites ADD COLUMN cloudflare_tunnel_id TEXT;
+-- Migrating an existing DB that predates `people`/`events.person_id`:
+--   CREATE TABLE people (...); -- see above
+--   ALTER TABLE events ADD COLUMN person_id TEXT REFERENCES people(id);
 
 -- Normally you don't hand-write these inserts at all — POST /api/sites and
 -- POST /api/sites/:id/cameras (called by apps/relay/install.sh) do this for
