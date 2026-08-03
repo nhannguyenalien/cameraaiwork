@@ -75,13 +75,19 @@ async function notifyMotion(cameraId) {
   }
 }
 
-// ONVIF's event topic naming isn't standardized enough across camera
-// vendors to safely filter by an exact topic string without risking
-// silently missing real motion — so, matching the original code's
-// permissive behavior, ANY event from the camera counts as "check it".
-// The topic is logged so it can be tightened later once real topic names
-// are observed in practice (see docs/PLAN.md).
-//
+// Originally this treated ANY ONVIF event as "check it" — topic naming
+// isn't standardized enough across vendors to guess a safe filter without
+// real data. Now there is real data, from two different cameras: a Tapo
+// C200 fires `tns1:RuleEngine/CellMotionDetector/Motion` for actual
+// motion (confirmed correct — matched real walking-in-frame tests), while
+// a second, unrelated camera fires `tns1:RuleEngine/TamperDetector/Tamper`
+// continuously and spuriously (not motion at all — a tamper/obstruction
+// sensor false-triggering). CellMotionDetector is also the standard ONVIF
+// Profile S motion topic, the most universally supported one — so this
+// filters to that specifically now instead of alerting on everything.
+// Non-motion topics are still logged, just not treated as motion.
+const MOTION_TOPIC = "CellMotionDetector";
+
 // Some cheap camera firmware (observed on a Tapo C200) advertises ONVIF
 // pull-point support but can't actually hold the long-poll HTTP connection
 // open for the spec's full timeout — pullMessages fails with "socket hang
@@ -94,7 +100,13 @@ function watchMotionOnvif(cameraId, cam) {
   function onEvent(message) {
     consecutiveErrors = 0;
     const topic = message?.topic?._ || "(unknown topic)";
-    console.log(`📡 ONVIF event (${cameraId}): ${topic}`);
+
+    if (!topic.includes(MOTION_TOPIC)) {
+      console.log(`📡 ONVIF event bỏ qua (${cameraId}, không phải motion): ${topic}`);
+      return;
+    }
+
+    console.log(`📡 ONVIF motion (${cameraId}): ${topic}`);
     if (cooldowns.get(cameraId)) return;
     cooldowns.set(cameraId, true);
     notifyMotion(cameraId);
