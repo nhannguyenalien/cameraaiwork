@@ -53,12 +53,14 @@ irm https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/rel
 Both prompt for the account API key (from step 2) and the camera's ONVIF
 ip/user/password, then do everything else on their own: clone the repo,
 install `cloudflared` + go2rtc, register the site + camera with the
-backend (`POST /api/sites`, no manual Turso access), start two Cloudflare
-Quick Tunnels (no Cloudflare account needed — a public HTTPS URL in a few
-seconds), report those URLs to the backend automatically, and install
+backend (`POST /api/sites`, no manual Turso access — this also
+provisions a real Cloudflare Tunnel server-side, on our own domain, with
+a stable hostname; falls back to an ephemeral Quick Tunnel only if the
+backend has no `CLOUDFLARE_API_TOKEN` configured), and install
 themselves as an always-on service (launchd on macOS, systemd on Linux,
 a Windows Service via `node-windows` on Windows). No Cloudflare dashboard,
-no hand-edited config files, no manual DB inserts, on any platform.
+no hand-edited config files, no manual DB inserts, on any platform — the
+customer needs neither their own Cloudflare account nor their own domain.
 
 Open the dashboard, paste the same API key — the camera shows up on its
 own within ~15 seconds.
