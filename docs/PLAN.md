@@ -4,14 +4,29 @@ Working checklist for taking this from "code exists" to "running system".
 Check items off as they're done. Each phase has a clear definition of done
 so it's obvious when to move to the next one.
 
-Status as of this writing: **Phase 1 is done. The full chain is live in
-production on real hardware**: `cameraaiwork.pages.dev` (real Cloudflare
-Pages) → Quick Tunnel → relay + go2rtc running as systemd services on
-`coolify` (192.168.2.100, same subnet as the camera) → ONVIF → a real
-Tapo C200. Real motion produced real DB rows through the whole chain, PTZ
-commands sent through the API actually moved the camera. Windows has NOT
-been run on real hardware yet (none available); Linux now has, via
-`coolify` (manually, not yet via `install.sh` itself — see below).
+Status as of this writing: **Phase 1 done. Phase 2 mostly done** — the
+user brought their own domain (`schoolsai.work`, already an active
+Cloudflare zone on the same account), which unblocked the two biggest
+Phase 2 gaps: the dashboard is now on `https://camera.schoolsai.work`
+(not the bare `.pages.dev`), and `st-nhachinh01` was migrated from a
+Quick Tunnel to a real Cloudflare Named Tunnel
+(`st-nhachinh01-go2rtc.camera.schoolsai.work` /
+`...-relay...`) — stable hostname, on our own zone, so Cloudflare Access
+can now actually be applied (next). Tunnel provisioning is now fully
+automated server-side (`POST /api/sites` calls Cloudflare's API directly
+— customer still needs neither their own Cloudflare account nor a
+domain), verified end to end with a real throwaway test site (created,
+confirmed DNS+tunnel live, torn down with the new `DELETE /api/sites/:id`).
+
+**Current outage (informational, not a bug):** as of 2026-08-03 the
+physical site running the camera lost power — `coolify`
+(192.168.2.100, the on-site relay machine) is unreachable (SSH times
+out), not just the camera. This means **`coolify` and the camera are
+likely on the same circuit/location** — worth deciding later whether the
+relay machine should be on a UPS if outages there are a real risk, since
+right now a power blip takes down the whole site's connectivity, not
+just the camera feed. Nothing to fix in code; noting it so it's not
+mistaken for a regression when the tunnel hostname doesn't respond.
 
 ---
 
@@ -79,27 +94,45 @@ exercised with an actual reboot yet).
 Goal: nothing about this should be safely ignorable once it's live 24/7.
 
 - [x] Set `ALLOWED_ORIGINS` in Pages env vars to the real dashboard domain
-      (`https://cameraaiwork.pages.dev`) instead of `*` — verified with curl
-      using a fake `Origin` header (no CORS header back) vs. the real
-      dashboard origin (header present, correctly scoped)
+      instead of `*` — verified with curl using a fake `Origin` header (no
+      CORS header back) vs. the real dashboard origin (header present,
+      correctly scoped). Updated again after the domain moved to
+      `camera.schoolsai.work`.
 - [x] Confirm `.env`, `cameras.json`, `.dev.vars` never made it into git —
       confirmed empty, plus a scan of full commit history for anything
       matching a secret's shape (also empty)
-- [ ] ~~Put Cloudflare Access in front of go2rtc's public tunnel hostname~~
-      **Not achievable as currently architected.** Cloudflare Access
-      attaches to a hostname on a zone/domain *you* own — a Quick Tunnel's
-      `*.trycloudflare.com` hostname is on Cloudflare's own shared domain,
-      not something you can apply Access policies to. This is blocked on
-      the Quick Tunnel → named tunnel upgrade already tracked in the
-      backlog (which needs a real domain — a product/cost decision, not
-      something to default into silently). Until then, the tunnel
-      hostname's security is "unguessable random subdomain that changes
-      on every relay restart" — not nothing, but not real access control
-      either.
-- [ ] Turn on Cloudflare's rate limiting rules for the Pages domain — needs
-      checking whether custom rate-limit rules are available on a bare
-      `*.pages.dev` subdomain (on Cloudflare's shared zone) or whether that
-      also needs a custom domain on your own zone first; not yet resolved
+- [x] **Domain**: dashboard moved from `cameraaiwork.pages.dev` to
+      `https://camera.schoolsai.work` (user's own domain, already an
+      active Cloudflare zone). Custom domain DNS took ~15-20 min to get a
+      Google-issued cert after the CNAME verified — normal, not a fault.
+- [x] **Named Tunnel migration**: built `functions/_lib/cloudflareTunnel.js`
+      (creates a tunnel, configures ingress for go2rtc+relay ports, creates
+      the DNS CNAMEs, all server-side via `CLOUDFLARE_API_TOKEN`/
+      `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_ZONE_ID`/`TUNNEL_BASE_DOMAIN` —
+      the customer still needs neither their own Cloudflare account nor a
+      domain). `POST /api/sites` now provisions this automatically for new
+      sites; `POST /api/sites/:id/tunnel` does the same for an existing
+      one (used to migrate `st-nhachinh01` without losing its
+      cameras/events/relay_secret). `apps/relay` runs
+      `cloudflared tunnel run --token` when `CLOUDFLARE_TUNNEL_TOKEN` is
+      set, falls back to Quick Tunnel otherwise.
+- [x] **Verified end to end with a real throwaway site**: created via
+      `POST /api/sites`, confirmed the tunnel+DNS actually existed
+      (`dig`), then tore it down with the new `DELETE /api/sites/:id`
+      (which also deletes the Cloudflare tunnel + DNS records, not just
+      the DB rows) and confirmed the DNS records were actually gone
+      afterward, not just the local cache.
+- [x] Learned handling the Cloudflare API token: the user pasted it
+      directly in chat once — declined to use it (same rule as the Turso
+      token earlier in this project), had them revoke/regenerate it and
+      run `wrangler pages secret put CLOUDFLARE_API_TOKEN` themselves in
+      their own terminal instead, so the raw token never passes through
+      this session at all.
+- [ ] Put Cloudflare Access in front of the go2rtc tunnel hostname — now
+      *possible* (stable hostname on our own zone), not done yet. Next up.
+- [ ] Turn on Cloudflare's rate limiting rules — now on our own zone
+      (`camera.schoolsai.work`), so this should be available; not
+      attempted yet
 - [ ] Set up an uptime check (UptimeRobot, healthchecks.io, etc.) against
       `GET /api/health` — needs your own account on one of these; not
       something to sign up for on your behalf
