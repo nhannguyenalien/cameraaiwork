@@ -149,34 +149,74 @@ a secret update is live without a fresh deploy.
 
 ---
 
-## Phase 3 — real AI person detection
+## Phase 3 — real AI person detection + face clustering
 
-Goal: stop alerting on every leaf blowing in the wind.
+Goal: stop alerting on every leaf blowing in the wind, and — expanded
+mid-phase, per the account owner — recognize *who* the person is by
+clustering their face across events, not just that a person exists.
 
 - [x] Picked YOLOv8n (nano), exported to ONNX via the official `ultralytics`
-      package (`YOLO('yolov8n.pt').export(format='onnx', imgsz=640, opset=12)`)
-      — 12MB, committed directly as `ai/worker/model.onnx` rather than
-      re-exported per machine (avoids every on-site box needing the full
-      ~1GB `ultralytics`/`torch` toolchain just to get a 12MB file)
-- [x] Implemented `detect_person()` in `ai/worker/main.py` with
-      `onnxruntime` CPUExecutionProvider — real YOLOv8 output parsing
+      package. Committed directly as `ai/worker/models/person_detection.onnx`
+      (12MB) rather than re-exported per machine (avoids every on-site box
+      needing the full ~1GB `ultralytics`/`torch` toolchain).
+- [x] Implemented `detect_person()`/person detection in `ai/worker/main.py`
+      with `onnxruntime` CPUExecutionProvider — real YOLOv8 output parsing
       (4 box coords + 80 COCO class scores per anchor, class 0 = person),
-      confidence threshold + manual NMS to de-dupe overlapping boxes
-- [x] **Actually tested, not just written**: ran it against `ultralytics`'
-      own `bus.jpg` sample (4 people at a bus stop) — correctly detected
-      all 4 — and a blank synthetic image — correctly detected 0. Caught a
-      real bug this way: box coordinates came out as `numpy.float32`,
-      which Pydantic can't JSON-serialize — `TestClient` hitting the actual
-      `/detect` HTTP route surfaced this (calling the function directly
-      wouldn't have), fixed by casting to native `float`.
-- [ ] Deploy `ai/worker` on-site (`coolify`, once it's back up after the
-      power outage), expose via that site's tunnel
-- [ ] Set `AI_WORKER_URL` in Pages env vars to the deployed worker's URL
-- [ ] Test against the real camera: motion with no person → no alert;
-      motion with a person → alert, within the same ~30s budget as before
+      confidence threshold + manual NMS.
+- [x] **Face clustering added**: `insightface`'s `buffalo_s` pack, only the
+      2 models actually needed (`det_500m` face detector 2.5MB,
+      `w600k_mbf` ArcFace-style recognizer 13.6MB, 512-dim embeddings) —
+      skips the pack's 143MB 3D-landmark model and gender/age model
+      entirely via `allowed_modules`. New `people` table + `events.person_id`
+      (schema.sql); `functions/_lib/faceMatch.js` does cosine-similarity
+      clustering against every existing person for the account
+      (`SIMILARITY_THRESHOLD = 0.5`, chosen from real model testing — see
+      ai/worker/README.md); `POST /api/motion` now calls
+      `findOrCreatePerson`; new `GET /api/people` + `PATCH /api/people/:id`
+      to view/name clusters.
+- [x] **Tested end to end against a real live camera** (not the original
+      camera — `coolify`/the camera at the first site were still down from
+      the power outage — a *second*, unrelated Tapo camera the account
+      owner has on a different network, reusing the same ONVIF
+      credentials, set up as a throwaway site and torn down after):
+  - Real snapshot capture worked once a **second, unrelated bug** was
+    fixed: this dev Mac's own `ffmpeg@5` was *also* broken (two parallel
+    Homebrew installs, `/opt/homebrew` and `/usr/local`, with a stale
+    cross-linked `libvmaf` symlink) — go2rtc's snapshot endpoint shells
+    out to ffmpeg internally. Fixed by running go2rtc with
+    `/usr/local/bin` (the working ffmpeg install) prepended to `PATH` for
+    that process only, rather than touching the user's global shell
+    config or system Homebrew state.
+  - A real frame where the camera's overhead angle cropped the visible
+    person's face out entirely correctly produced
+    `hasPerson: true, faceEmbedding: null` — event recorded with
+    `person_id: null`, not a crash or a wrong guess.
+  - A real frame with a clear face correctly extracted a 512-dim
+    embedding.
+  - Clustering verified against the real DB via a temporary debug route
+    (deleted after use): the *same* real embedding submitted twice
+    returned the *same* `person_id`; a *deliberately different*
+    embedding (the same vector negated) returned a *different* one.
+  - The full webhook path (`POST /api/motion` → go2rtc frame fetch → AI
+    worker → `findOrCreatePerson` → DB) was exercised with real,
+    changing live-camera data, not fixtures.
+- [ ] Deploy `ai/worker` on the *original* site (`coolify`), once it's
+      back up after the power outage — the throwaway second-camera test
+      proved the code path works, but the original site itself doesn't
+      have `ai/worker` running yet
+- [ ] Set `AI_WORKER_URL` in Pages env vars for the original site
+- [ ] Build a minimal "People" view in the dashboard (currently API-only —
+      `GET /api/people` / `PATCH /api/people/:id` exist, nothing in
+      `apps/pages/public/index.html` surfaces them yet)
+- [ ] Watch real day-to-day variation (different days/lighting/angles) to
+      see whether `SIMILARITY_THRESHOLD = 0.5` needs tuning — only tested
+      against same-session captures + a synthetic perturbation so far, not
+      the same real person on two different days
 
 **Definition of done:** a week of normal household motion (pets, wind,
-shadows) doesn't spam Telegram, but an actual person still does.
+shadows) doesn't spam Telegram, an actual person still does, and repeat
+visitors get recognized as the same person across events instead of
+logged as anonymous each time.
 
 ---
 

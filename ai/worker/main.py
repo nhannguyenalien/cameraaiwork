@@ -3,15 +3,28 @@ Local lightweight AI worker.
 
 Runs on the same on-site box as go2rtc. Only called when go2rtc reports
 motion (see apps/pages/functions/api/motion.js) — NOT on every frame — so
-it can stay a small/cheap model: YOLOv8n (nano), ONNX, CPU inference. At
-"a few times a minute" trigger rates, CPU is fine; no GPU needed.
+it can stay small/cheap models, CPU inference, no GPU needed:
 
-model.onnx was exported once via the official ultralytics package:
-    pip install ultralytics
-    python3 -c "from ultralytics import YOLO; YOLO('yolov8n.pt').export(format='onnx', imgsz=640, opset=12)"
-Committed directly (12MB, platform-independent) rather than re-exported
-per machine — re-exporting needs the full ultralytics/torch toolchain
-(~1GB), which the deployed worker itself does NOT need, only onnxruntime.
+  1. YOLOv8n (nano) — "is there a person in this frame at all". Exported
+     once via the official ultralytics package:
+       pip install ultralytics
+       python3 -c "from ultralytics import YOLO; YOLO('yolov8n.pt').export(format='onnx', imgsz=640, opset=12)"
+
+  2. If yes, insightface's buffalo_s face detector + recognizer — "which
+     person is this" as a 512-dim embedding, so the backend
+     (apps/pages/functions/api/motion.js) can cluster it against known
+     people instead of just logging an anonymous "Person" event. Only the
+     two models actually needed (detection + recognition, ~16MB) are
+     kept — buffalo_s also ships a 3D landmark model (143MB!) and a
+     gender/age model neither of which this needs; both are skipped via
+     allowed_modules.
+
+All models are committed directly (platform-independent ONNX) rather
+than re-exported per machine — re-exporting needs the full
+ultralytics/torch or insightface toolchains (~1GB+), which the deployed
+worker itself does NOT need, only onnxruntime (+ opencv for insightface's
+own pre/postprocessing, which is more battle-tested than reimplementing
+SCRFD's anchor decoding by hand would be).
 
 Run: uvicorn main:app --host 0.0.0.0 --port 8001
 """
@@ -19,30 +32,45 @@ Run: uvicorn main:app --host 0.0.0.0 --port 8001
 import io
 import os
 
+import cv2
 import numpy as np
 import onnxruntime
 from fastapi import FastAPI, Request
+from insightface.app import FaceAnalysis
 from PIL import Image
 from pydantic import BaseModel
 
 app = FastAPI(title="camera-ai-worker")
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.onnx")
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+PERSON_MODEL_PATH = os.path.join(MODELS_DIR, "person_detection.onnx")
 INPUT_SIZE = 640
 PERSON_CLASS_ID = 0  # COCO class 0 = "person"
 CONFIDENCE_THRESHOLD = 0.5
 IOU_THRESHOLD = 0.45  # for de-duplicating overlapping boxes of the same person
 
-_session = onnxruntime.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
-_input_name = _session.get_inputs()[0].name
+_person_session = onnxruntime.InferenceSession(PERSON_MODEL_PATH, providers=["CPUExecutionProvider"])
+_person_input_name = _person_session.get_inputs()[0].name
+
+# insightface looks for <root>/models/<name>/*.onnx — MODELS_DIR here
+# plays double duty as that root, with "cameraaiwork" standing in for
+# what would normally be a downloaded pack name like "buffalo_s".
+_face_app = FaceAnalysis(
+    name="cameraaiwork",
+    root=os.path.dirname(__file__),
+    providers=["CPUExecutionProvider"],
+    allowed_modules=["detection", "recognition"],
+)
+_face_app.prepare(ctx_id=0, det_size=(320, 320))  # motion snapshots are small crops, not full portraits
 
 
 class DetectResult(BaseModel):
     hasPerson: bool
-    boxes: list = []  # [{x1,y1,x2,y2,confidence}, ...] in original image pixels
+    boxes: list = []  # [{x1,y1,x2,y2,confidence}, ...] in original image pixels, from YOLO
+    faceEmbedding: list | None = None  # 512-dim, largest face found — for clustering "who is this"
 
 
-def _preprocess(image: Image.Image):
+def _preprocess_person(image: Image.Image):
     orig_w, orig_h = image.size
     resized = image.convert("RGB").resize((INPUT_SIZE, INPUT_SIZE))
     arr = np.asarray(resized, dtype=np.float32) / 255.0
@@ -74,12 +102,11 @@ def _nms(boxes):
     return kept
 
 
-def detect_person(image_bytes: bytes) -> DetectResult:
-    image = Image.open(io.BytesIO(image_bytes))
-    input_tensor, scale_x, scale_y = _preprocess(image)
+def _detect_persons(image: Image.Image):
+    input_tensor, scale_x, scale_y = _preprocess_person(image)
 
     # Output shape (1, 84, 8400): 4 box coords + 80 COCO class scores, per anchor.
-    (output,) = _session.run(None, {_input_name: input_tensor})
+    (output,) = _person_session.run(None, {_person_input_name: input_tensor})
     predictions = output[0].T  # (8400, 84)
 
     boxes = []
@@ -102,8 +129,26 @@ def detect_person(image_bytes: bytes) -> DetectResult:
             }
         )
 
-    boxes = _nms(boxes)
-    return DetectResult(hasPerson=len(boxes) > 0, boxes=boxes)
+    return _nms(boxes)
+
+
+def _largest_face_embedding(image: Image.Image):
+    # insightface/opencv work in BGR numpy arrays, not PIL images.
+    bgr = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+    faces = _face_app.get(bgr)
+    if not faces:
+        return None
+    largest = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+    return largest.embedding.astype(float).tolist()
+
+
+def detect_person(image_bytes: bytes) -> DetectResult:
+    image = Image.open(io.BytesIO(image_bytes))
+    boxes = _detect_persons(image)
+    has_person = len(boxes) > 0
+
+    face_embedding = _largest_face_embedding(image) if has_person else None
+    return DetectResult(hasPerson=has_person, boxes=boxes, faceEmbedding=face_embedding)
 
 
 @app.post("/detect", response_model=DetectResult)
