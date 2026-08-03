@@ -10,9 +10,12 @@ Cloudflare zone on the same account), which unblocked the two biggest
 Phase 2 gaps: the dashboard is now on `https://camera.schoolsai.work`
 (not the bare `.pages.dev`), and `st-nhachinh01` was migrated from a
 Quick Tunnel to a real Cloudflare Named Tunnel
-(`st-nhachinh01-go2rtc.camera.schoolsai.work` /
-`...-relay...`) — stable hostname, on our own zone, so Cloudflare Access
-can now actually be applied (next). Tunnel provisioning is now fully
+(`st-nhachinh01-go2rtc.schoolsai.work` /
+`...-relay...` — one level under the zone root, not nested under the
+dashboard's own subdomain; see the "TUNNEL_BASE_DOMAIN" entry in "Bugs
+found and fixed" below for why that distinction turned out to matter a
+lot) — stable hostname, on our own zone, so Cloudflare Access can now
+actually be applied (next). Tunnel provisioning is now fully
 automated server-side (`POST /api/sites` calls Cloudflare's API directly
 — customer still needs neither their own Cloudflare account nor a
 domain), verified end to end with a real throwaway test site (created,
@@ -52,6 +55,7 @@ isn't lost — see `schema.sql`'s comment for the rule going forward):
 - [x] Caught while writing `install.ps1` (not yet hit in practice): PowerShell's `Set-Content -Encoding UTF8` writes a byte-order-mark on Windows PowerShell 5.1, which breaks Node's `JSON.parse` on `cameras.json` (a stray BOM byte before `[` isn't valid JSON). Fixed by writing via `[System.IO.File]::WriteAllText` with an explicit no-BOM UTF-8 encoding instead.
 - [x] The PTZ route (`/api/cameras/:site/:camera/ptz`) was forwarding the DB's opaque `cameras.id` to the relay, but the relay only knows cameras by their go2rtc `stream` key — fixed to look up `cameras.stream` first
 - [x] `_lib/go2rtc.js` used two endpoints that don't exist in real go2rtc: `/api/frame.jpg` (real path is `/api/frame.jpeg`) and `/api/stack.mp4?duration=N` (go2rtc has no "export N seconds as a file" endpoint at all — only a live progressive `/api/stream.mp4`, confirmed against go2rtc's own docs after live probing returned 404s). Caught by actually curling the real go2rtc instance instead of trusting the original design. Fixed by switching motion alerts to send the snapshot (`frame.jpeg`) as a Telegram photo instead of a video clip — `sendVideoAlert` → `sendPhotoAlert`. A real N-second clip would need buffering `/api/stream.mp4` for a bounded time server-side; not worth the complexity yet, tracked in the backlog.
+- [x] **`TUNNEL_BASE_DOMAIN` was set to `camera.schoolsai.work`** (the dashboard's own Pages custom domain) instead of the zone root `schoolsai.work` — every tunnel hostname (`st-...-go2rtc.camera.schoolsai.work`, two levels under the zone) fell outside Cloudflare's zone-level Universal SSL wildcard (`*.schoolsai.work`, one level only) and got **no certificate at all**. This failed at the TLS handshake, not with a clean HTTP error — looked identical to "server not responding" from the browser ("this site uses an unsupported protocol"), and easy to blame on the (real, simultaneous) power outage instead. Diagnosed by testing `camera.schoolsai.work` itself (worked) against the tunnel hostname (`curl -v` showed `SSL alert handshake failure`, not an HTTP error) to isolate it as hostname-depth-specific, not zone-wide. Fixed by changing `TUNNEL_BASE_DOMAIN` to the zone root and re-provisioning — the new one-level hostname (`st-nhachinh01-go2rtc.schoolsai.work`) got a working TLS handshake immediately (confirmed via `curl --resolve` to bypass local DNS cache lag), correctly returning Cloudflare's **error 1033** ("tunnel has no active connector") instead — the *expected* error given `coolify` is still powered off. **Rule going forward: `TUNNEL_BASE_DOMAIN` must be the zone's root domain, never a subdomain of it, even one you already own** — see the comment in `.dev.vars.example`.
 
 ---
 

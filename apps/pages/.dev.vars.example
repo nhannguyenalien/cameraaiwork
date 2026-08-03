@@ -19,7 +19,20 @@ CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_ZONE_ID=
 # Base domain new site hostnames are minted under, e.g. a site "st-abc123"
 # gets "st-abc123-go2rtc.<this>" and "st-abc123-relay.<this>".
-TUNNEL_BASE_DOMAIN=camera.yourdomain.com
+#
+# IMPORTANT: this must be your zone's root domain (e.g. "yourdomain.com"),
+# NOT a subdomain of it (e.g. NOT "camera.yourdomain.com") — even if that
+# subdomain is already yours (e.g. a Pages custom domain). Cloudflare's
+# zone-level Universal SSL wildcard only covers one level
+# (*.yourdomain.com), so a tunnel hostname minted under an *already*
+#-subdomained base (like "st-abc123-go2rtc.camera.yourdomain.com", two
+# levels deep) falls outside it and gets no automatic certificate — every
+# request fails at the TLS handshake, not with a clean HTTP error, which
+# made this genuinely confusing to diagnose the first time. Real incident:
+# this was set to "camera.schoolsai.work" initially (the dashboard's own
+# subdomain), every tunnel hostname failed TLS, fixed by using
+# "schoolsai.work" directly instead. See docs/PLAN.md.
+TUNNEL_BASE_DOMAIN=yourdomain.com
 
 # CORS for the API — comma-separated origins, or "*" for any (fine even
 # wide open since auth is a bearer token, not a cookie).

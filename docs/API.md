@@ -70,7 +70,7 @@ List every camera the account can see, across all its sites.
     "cameraName": "Camera chính",
     "siteId": "st-7789da83f1a2",
     "siteName": "Nhà chính",
-    "go2rtcUrl": "https://st-7789da83f1a2-go2rtc.camera.yourdomain.com"
+    "go2rtcUrl": "https://st-7789da83f1a2-go2rtc.yourdomain.com"
   }
 ]
 ```
