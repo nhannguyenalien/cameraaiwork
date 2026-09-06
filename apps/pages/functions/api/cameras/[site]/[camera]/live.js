@@ -23,7 +23,11 @@ export const onRequestPost = withErrorHandling(async ({ params, env, data }) => 
   const nonce = randomId("lv");
   const token = await signLiveToken(site.relay_secret, site.id, camera.stream, expiresAt, viewerLimit, nonce);
   const base = site.relay_url.replace(/\/$/, "");
-  const url = `${base}/live/${token}/stream.html?src=${encodeURIComponent(camera.stream)}&mode=webrtc`;
+  // WebRTC advertises the relay's LAN/UDP candidates (for example
+  // 192.168.x.x:8555), which are unreachable for viewers on another
+  // network. MSE carries the video over the already-authenticated WebSocket
+  // endpoint, so both signalling and media stay inside the HTTPS tunnel.
+  const url = `${base}/live/${token}/stream.html?src=${encodeURIComponent(camera.stream)}&mode=mse`;
 
   return json({ url, expiresAt, viewerLimit });
 });
