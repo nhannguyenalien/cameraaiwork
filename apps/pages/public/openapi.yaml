@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: Multi-tenant camera management, signed live streaming, PTZ, events, people, integrations, jobs and billing.
 servers:
-  - url: https://cameraaiwork.pages.dev
-    description: Production (replace with the deployed custom domain when available)
+  - url: https://camera.schoolsai.work
+    description: Production
   - url: http://localhost:8788
     description: Local Wrangler
 security:
@@ -15,6 +15,7 @@ tags:
   - { name: Account }
   - { name: Sites }
   - { name: Cameras }
+  - { name: Install }
   - { name: Events }
   - { name: People }
   - { name: Integrations }
@@ -132,6 +133,102 @@ paths:
       summary: List cameras visible to the account
       responses:
         '200': { description: Cameras, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Camera' } } } } }
+  /api/install-tokens:
+    post:
+      operationId: createInstallToken
+      tags: [Install]
+      summary: Mint a single-use 15-minute installer token for the authenticated account
+      x-agent-risk: ephemeral-write
+      responses:
+        '201': { description: Installer token, content: { application/json: { schema: { $ref: '#/components/schemas/InstallToken' } } } }
+  /api/install/claim:
+    post:
+      operationId: claimInstallToken
+      tags: [Install]
+      security: []
+      summary: Consume an installer token and create a site, camera and tunnel under its account
+      x-agent-risk: high-write
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [token, siteName, cameraName, stream], properties: { token: { type: string, writeOnly: true }, siteName: { type: string }, cameraName: { type: string }, stream: { type: string, examples: [cam1] } } } } } }
+      responses:
+        '201': { description: Relay bootstrap credentials, content: { application/json: { schema: { $ref: '#/components/schemas/InstallClaim' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}:
+    get:
+      operationId: getCamera
+      tags: [Cameras]
+      summary: Get one account-scoped camera
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: Camera, content: { application/json: { schema: { $ref: '#/components/schemas/Camera' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: renameCamera
+      tags: [Cameras]
+      summary: Rename a camera
+      x-agent-risk: write
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string, minLength: 1, maxLength: 100 } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      operationId: deleteCamera
+      tags: [Cameras]
+      summary: Delete the camera and its event media
+      x-agent-risk: destructive-human-confirmation-required
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}/settings:
+    patch:
+      operationId: updateCameraSettings
+      tags: [Cameras]
+      summary: Enable or disable recording when a person is detected
+      x-agent-risk: write
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [recordOnPerson], properties: { recordOnPerson: { type: boolean } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/cameras/{site}/{camera}/controls:
+    get:
+      operationId: getCameraControls
+      tags: [Cameras]
+      summary: Discover controls supported by the camera
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: Supported controls, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+    post:
+      operationId: setCameraLight
+      tags: [Cameras]
+      summary: Turn the camera light on or off when supported
+      x-agent-risk: physical-control
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [light], properties: { light: { type: boolean } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}/talk:
+    post:
+      operationId: talkToCamera
+      tags: [Cameras]
+      summary: Send up to 3 MB of audio to a camera that supports two-way audio
+      x-agent-risk: physical-control
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      requestBody: { required: true, content: { audio/wav: { schema: { type: string, contentEncoding: binary } }, audio/mpeg: { schema: { type: string, contentEncoding: binary } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '409': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}/export:
+    get:
+      operationId: exportCameraEvents
+      tags: [Events]
+      summary: Download all events for a camera as UTF-8 CSV
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: CSV export, content: { text/csv: { schema: { type: string } } } }
   /api/cameras/{site}/{camera}/live:
     post:
       operationId: createLiveCapability
@@ -174,6 +271,15 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses:
         '200': { description: Video bytes, content: { video/mp4: { schema: { type: string, contentEncoding: binary } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/events/{id}/image:
+    get:
+      operationId: getEventImage
+      tags: [Events]
+      summary: Fetch an authorized event snapshot
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { description: Image bytes, content: { image/jpeg: { schema: { type: string, contentEncoding: binary } } } }
         '404': { $ref: '#/components/responses/Error' }
   /api/people:
     get:
@@ -290,6 +396,8 @@ components:
     AuthResult: { type: object, additionalProperties: true, description: Contains account identity and a raw bearer key returned only at authentication time. }
     Site: { type: object, required: [id], properties: { id: { type: string }, name: { type: [string, 'null'] }, go2rtc_url: { type: string }, relay_url: { type: string }, ai_worker_url: { type: [string, 'null'] }, camera_count: { type: integer } } }
     SiteCreated: { type: object, required: [siteId, relaySecret, tunnelToken], properties: { siteId: { type: string }, relaySecret: { type: string, writeOnly: true }, tunnelToken: { type: string, writeOnly: true } } }
+    InstallToken: { type: object, required: [token, expiresInSeconds], properties: { token: { type: string, writeOnly: true }, expiresInSeconds: { type: integer, examples: [900] } } }
+    InstallClaim: { allOf: [{ $ref: '#/components/schemas/SiteCreated' }, { type: object, required: [cameraId], properties: { cameraId: { type: string } } }] }
     TunnelResult: { type: object, properties: { tunnelToken: { type: string, writeOnly: true }, go2rtcUrl: { type: string, format: uri }, relayUrl: { type: string, format: uri }, aiWorkerUrl: { type: string, format: uri } }, additionalProperties: true }
     Camera: { type: object, properties: { cameraId: { type: string }, stream: { type: string }, cameraName: { type: [string, 'null'] }, siteId: { type: string }, siteName: { type: [string, 'null'] } } }
     LiveResult: { type: object, required: [url, expiresAt, viewerLimit], properties: { url: { type: string, format: uri }, expiresAt: { type: integer, description: Unix epoch seconds }, viewerLimit: { type: integer, minimum: 1 } } }

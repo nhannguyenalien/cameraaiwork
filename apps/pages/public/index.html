@@ -114,6 +114,20 @@
               <div class="row row-cards">
                 <div class="col-12">
                   <div class="card">
+                    <div class="card-header"><h3 class="card-title"><i class="ti ti-terminal-2 me-2"></i>Cài relay lên VPS</h3></div>
+                    <div class="card-body">
+                      <p class="text-secondary">Tạo lệnh cài dùng một lần. Site và camera được gắn thẳng vào tài khoản/email đang đăng nhập; mã tự hết hạn sau 15 phút.</p>
+                      <div class="d-flex gap-2 mb-3">
+                        <button id="create-install-command" class="btn btn-primary" type="button"><i class="ti ti-key me-1"></i>Tạo lệnh cài</button>
+                        <button id="copy-install-command" class="btn btn-outline-secondary d-none" type="button"><i class="ti ti-copy me-1"></i>Sao chép</button>
+                      </div>
+                      <textarea id="install-command" class="form-control font-monospace d-none" rows="4" readonly spellcheck="false"></textarea>
+                      <div id="install-command-note" class="form-hint"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="card">
                     <div class="card-header d-flex justify-content-between">
                       <div><h3 class="card-title" data-i18n="connected_sites">Site đã kết nối</h3><div id="site-usage" class="text-secondary small"></div></div>
                       <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadSites()" data-i18n="refresh">Làm mới</button>
@@ -599,6 +613,28 @@
       <td class="text-end"><button class="btn btn-outline-danger btn-sm" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name)}" onclick="deleteSite(this.dataset.siteId, this.dataset.siteName)">${t('delete')}</button></td>
     </tr>`).join('');
   }
+
+  document.getElementById('create-install-command').addEventListener('click', async () => {
+    const button = document.getElementById('create-install-command');
+    button.disabled = true;
+    try {
+      const result = await api('/api/install-tokens', { method: 'POST' });
+      const origin = location.origin;
+      const command = `curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash`;
+      const output = document.getElementById('install-command');
+      output.value = command;
+      output.classList.remove('d-none');
+      document.getElementById('copy-install-command').classList.remove('d-none');
+      document.getElementById('install-command-note').textContent = `Lệnh này thuộc ${accountSummary?.email || 'tài khoản hiện tại'} và chỉ dùng được một lần trong 15 phút.`;
+    } catch (error) { showSettingsMessage(error.message, false); }
+    finally { button.disabled = false; }
+  });
+
+  document.getElementById('copy-install-command').addEventListener('click', async () => {
+    const command = document.getElementById('install-command').value;
+    await navigator.clipboard.writeText(command);
+    document.getElementById('install-command-note').textContent = 'Đã sao chép. Chạy lệnh này trên VPS cùng mạng LAN với camera.';
+  });
 
   async function deleteSite(siteId, name) {
     if (!confirm(t('delete_confirm', { name }))) return;

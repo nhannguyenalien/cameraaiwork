@@ -8,7 +8,7 @@ Mỗi địa điểm dùng một máy luôn bật, một Named Tunnel và một 
 - Node.js 20+, Git, Python 3.10+ có `venv`, `curl`; Linux cần `sudo`. Homebrew cần có trên macOS nếu chưa cài `cloudflared`.
 - Camera bật RTSP và ONVIF, có tài khoản camera riêng cho CameraAI. Xác nhận IP, ONVIF port, username/password. MVP hiện yêu cầu nhập IP; chưa tự quét camera trong LAN.
 - Mạng cho phép outbound HTTPS/WSS tới Cloudflare, GitHub, dashboard và dịch vụ package. Không mở port inbound/router.
-- Một account CameraAI và API key lấy sau khi đăng nhập dashboard.
+- Một account CameraAI đã đăng nhập. Trong **Cấu hình → Cài relay lên VPS**, bấm tạo lệnh cài; lệnh chứa token dùng một lần, hết hạn sau 15 phút và gắn với đúng account/email đang đăng nhập.
 
 Vì repository đang private, cấu hình deploy key chỉ-đọc trên máy site trước khi cài:
 
@@ -23,18 +23,17 @@ ssh -T git@github.com
 
 ## 2. Cài đặt
 
+Sao chép và chạy đúng lệnh do dashboard sinh. Dạng lệnh là:
+
 ```bash
-cd "$HOME"
-git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git
-cd cameraaiwork
-CAMERAAIWORK_REPO=git@github.com:nhannguyenalien/cameraaiwork.git \
-CAMERAAIWORK_API=https://cameraaiwork.pages.dev \
-./apps/relay/install.sh
+curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | \
+  sudo env CAMERAAIWORK_INSTALL_TOKEN='TOKEN_DUNG_MOT_LAN' \
+  CAMERAAIWORK_API='https://camera.schoolsai.work' bash
 ```
 
-Script hỏi API key, tên site, IP và thông tin ONVIF; sau đó đăng ký site/camera, nhận tunnel token, cài go2rtc/relay/AI và service tự khởi động. Không gửi Telegram, RunPod, Stripe hoặc Cloudflare token xuống máy site; khách cấu hình Telegram/RunPod trong dashboard.
+Script hỏi tên site, tên/IP camera và thông tin RTSP/ONVIF; sau đó đổi token dùng một lần lấy site ID, relay secret và tunnel token, rồi cài go2rtc/relay/AI cùng service tự khởi động. Site và camera được tạo với `account_id` của email đã sinh token nên tự xuất hiện trong dashboard của email đó. VPS không đăng nhập bằng email và không giữ session/API key của người dùng.
 
-Mật khẩu camera có dấu nháy/backslash cần kiểm tra lại `apps/relay/cameras.json` sau cài. Ưu tiên mật khẩu mạnh nhưng tương thích JSON; installer sẽ được harden thêm trước rollout không giám sát.
+RTSP/ONVIF username và mật khẩu camera chỉ được ghi cục bộ vào `apps/relay/cameras.json` với quyền đọc hạn chế; chúng không được gửi lên dashboard.
 
 ## 3. Kiểm tra tại site
 
