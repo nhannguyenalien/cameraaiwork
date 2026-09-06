@@ -405,16 +405,36 @@
           <td>${escapeHtml(e.timestamp)}</td>
           <td>${escapeHtml(cameraDisplayName(e.site_id, e.camera))}</td>
           <td>${e.person_label ? escapeHtml(e.person_label) : `<span class="text-secondary">${t('unknown')}</span>`}</td>
-          <td>${
-            e.video_key
-              ? `<a href="#" onclick="openClip(${e.id}); return false;">${t('view_clip')}</a>`
-              : e.video_link
-              ? `<a href="${e.video_link}" target="_blank">${t('view')}</a>`
-              : ''
-          }</td>
+          <td>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              ${e.image_key ? `<img data-event-image="${e.id}" alt="Event ${e.id}" width="96" height="54" class="rounded object-fit-cover bg-secondary-lt" />` : ''}
+              <div>${
+                e.video_key
+                  ? `<a href="#" onclick="openClip(${e.id}); return false;">${t('view_clip')}</a>`
+                  : e.video_status === 'recording'
+                  ? `<span class="text-secondary">${t('saving_clip')}</span>`
+                  : e.video_status === 'error'
+                  ? `<span class="text-danger" title="${escapeHtml(e.video_error || '')}">${t('clip_error')}: ${escapeHtml(e.video_error || '')}</span>`
+                  : e.video_link
+                  ? `<a href="${e.video_link}" target="_blank">${t('view')}</a>`
+                  : ''
+              }</div>
+            </div>
+          </td>
         </tr>`
       )
       .join('');
+    hydrateEventImages();
+  }
+
+  async function hydrateEventImages() {
+    await Promise.all([...document.querySelectorAll('[data-event-image]')].map(async (img) => {
+      const res = await fetch(`/api/events/${img.dataset.eventImage}/image`, {
+        headers: { Authorization: `Bearer ${getApiKey()}` },
+      });
+      if (!res.ok) return;
+      img.src = URL.createObjectURL(await res.blob());
+    }));
   }
 
   // video_key clips are private (per-account R2 object, served through the

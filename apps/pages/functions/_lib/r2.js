@@ -76,19 +76,22 @@ export async function captureClip(site, camera) {
 // before it knows the eventual DB event id / R2 key.
 export async function uploadClip(env, clipPromise, key) {
   if (!env.EVENTS_BUCKET) {
-    console.warn("EVENTS_BUCKET chưa bind, bỏ qua upload clip.");
-    return null;
+    throw new Error("Kho R2 chưa được cấu hình");
   }
 
-  try {
-    const clip = await clipPromise;
-    if (!clip?.byteLength) return null;
-    await env.EVENTS_BUCKET.put(key, clip, {
-      httpMetadata: { contentType: "video/mp4" },
-    });
-    return key;
-  } catch (err) {
-    console.error(`Upload clip thất bại (${key}):`, err.message || err);
-    return null;
-  }
+  const clip = await clipPromise;
+  if (!clip?.byteLength) throw new Error("Camera không trả về clip hợp lệ");
+  await env.EVENTS_BUCKET.put(key, clip, {
+    httpMetadata: { contentType: "video/mp4" },
+  });
+  return key;
+}
+
+export async function uploadSnapshot(env, frame, key) {
+  if (!env.EVENTS_BUCKET) throw new Error("Kho R2 chưa được cấu hình");
+  if (!frame?.byteLength) throw new Error("Ảnh camera rỗng");
+  await env.EVENTS_BUCKET.put(key, frame, {
+    httpMetadata: { contentType: "image/jpeg" },
+  });
+  return key;
 }
