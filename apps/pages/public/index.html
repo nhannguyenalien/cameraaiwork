@@ -6,6 +6,14 @@
 <title>CameraAIWork Dashboard</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+<style>
+  .camera-card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+  .camera-card:hover, .camera-card:focus-within { transform: translateY(-2px); box-shadow: var(--tblr-box-shadow-lg); }
+  .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
+  .ptz-pad .btn { height:3.25rem; }
+  .talk-button.is-recording { animation: talk-pulse 1s infinite; }
+  @keyframes talk-pulse { 50% { box-shadow:0 0 0 .4rem rgba(214,57,57,.18); } }
+</style>
 </head>
 <body class="border-top-wide border-primary d-flex flex-column">
   <header class="navbar navbar-expand-md navbar-light d-print-none">
@@ -180,30 +188,42 @@
     </div>
   </div>
 
-  <!-- PTZ modal, opened from a camera tile -->
+  <!-- Camera detail, opened from a camera tile -->
   <div class="modal" id="ptz-modal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="ptz-modal-title">Camera</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="ratio ratio-16x9 bg-dark mb-3">
-            <iframe id="ptz-player" frameborder="0"></iframe>
+        <div class="modal-body"><div class="row g-4">
+          <div class="col-lg-8">
+            <div class="ratio ratio-16x9 bg-dark rounded overflow-hidden"><iframe id="ptz-player" frameborder="0" allow="autoplay; fullscreen"></iframe></div>
+            <div id="camera-control-status" class="small text-secondary mt-2" role="status"></div>
           </div>
-          <div class="text-center">
-            <div class="btn-group-vertical">
-              <button class="btn" onclick="move('up')"><i class="ti ti-chevron-up"></i></button>
-              <div class="btn-group">
-                <button class="btn" onclick="move('left')"><i class="ti ti-chevron-left"></i></button>
-                <button class="btn btn-danger" onclick="move('stop')"><i class="ti ti-player-stop"></i></button>
-                <button class="btn" onclick="move('right')"><i class="ti ti-chevron-right"></i></button>
-              </div>
-              <button class="btn" onclick="move('down')"><i class="ti ti-chevron-down"></i></button>
+          <div class="col-lg-4">
+            <div id="ptz-controls" class="card mb-3 d-none">
+              <div class="card-header"><h3 class="card-title"><i class="ti ti-arrows-move me-2"></i><span data-i18n="rotate_camera">Xoay camera</span></h3></div>
+              <div class="card-body"><div class="ptz-pad">
+                <span></span><button class="btn" onclick="move('up')" aria-label="Up"><i class="ti ti-chevron-up"></i></button><span></span>
+                <button class="btn" onclick="move('left')" aria-label="Left"><i class="ti ti-chevron-left"></i></button>
+                <button class="btn btn-outline-danger" onclick="move('stop')" aria-label="Stop"><i class="ti ti-player-stop"></i></button>
+                <button class="btn" onclick="move('right')" aria-label="Right"><i class="ti ti-chevron-right"></i></button>
+                <span></span><button class="btn" onclick="move('down')" aria-label="Down"><i class="ti ti-chevron-down"></i></button><span></span>
+              </div></div>
             </div>
+            <div id="talk-controls" class="card mb-3 d-none"><div class="card-body text-center">
+              <button id="talk-button" class="btn btn-primary talk-button" type="button"><i class="ti ti-microphone me-2"></i><span data-i18n="hold_to_talk">Giữ để nói</span></button>
+              <div class="text-secondary small mt-2" data-i18n="talk_note">Giữ tối đa 10 giây, thả ra để phát qua loa camera.</div>
+            </div></div>
+            <div id="light-controls" class="card mb-3 d-none"><div class="card-body">
+              <label class="form-check form-switch m-0"><input id="camera-light" class="form-check-input" type="checkbox" onchange="setCameraLight(this.checked, this)" /><span class="form-check-label"><i class="ti ti-bulb me-1"></i><span data-i18n="camera_light">Đèn camera</span></span></label>
+            </div></div>
+            <div class="card"><div class="card-body">
+              <label class="form-check form-switch m-0"><input id="detail-record-person" class="form-check-input" type="checkbox" onchange="setDetailRecording(this.checked, this)" /><span class="form-check-label" data-i18n="record_when_person">Lưu video khi phát hiện người</span></label>
+            </div></div>
           </div>
-        </div>
+        </div></div>
       </div>
     </div>
   </div>
@@ -284,7 +304,7 @@
       .map(
         (c, i) => `
         <div class="col-md-6 col-xl-4">
-          <div class="card">
+          <div class="card camera-card" onclick="openPtz(${i})">
             <div class="ratio ratio-16x9 bg-dark">
               <iframe src="${escapeHtml(c.liveUrl)}" frameborder="0" loading="lazy" allow="autoplay; fullscreen"></iframe>
             </div>
@@ -293,8 +313,8 @@
                 <div class="fw-bold">${escapeHtml(c.cameraName || c.cameraId)}</div>
                 <div class="text-secondary small">${escapeHtml(c.siteName || c.siteId)}</div>
               </div>
-              <button class="btn btn-sm btn-icon" onclick="openPtz(${i})" title="${t('control')}">
-                <i class="ti ti-arrows-move"></i>
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openPtz(${i})" title="${t('control')}">
+                <i class="ti ti-adjustments-horizontal me-1"></i>${t('control')}
               </button>
             </div>
           </div>
@@ -336,11 +356,23 @@
 
   async function openPtz(index) {
     const c = cameras[index];
-    selectedCamera = { siteId: c.siteId, cameraId: c.cameraId };
+    selectedCamera = c;
     document.getElementById('ptz-modal-title').textContent = `${c.siteName} — ${c.cameraName || c.cameraId}`;
+    document.getElementById('camera-control-status').textContent = t('checking_controls');
+    ['ptz-controls', 'talk-controls', 'light-controls'].forEach((id) => document.getElementById(id).classList.add('d-none'));
+    document.getElementById('detail-record-person').checked = Number(c.recordOnPerson ?? 1) === 1;
     const live = await api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/live`, { method: 'POST' });
     document.getElementById('ptz-player').src = live.url;
     new bootstrap.Modal(document.getElementById('ptz-modal')).show();
+    try {
+      const controls = await api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/controls`);
+      document.getElementById('ptz-controls').classList.toggle('d-none', !controls.ptz);
+      document.getElementById('talk-controls').classList.toggle('d-none', !controls.talk);
+      document.getElementById('light-controls').classList.toggle('d-none', !controls.light);
+      document.getElementById('camera-control-status').textContent = controls.online ? t('camera_online') : t('camera_offline');
+    } catch (error) {
+      document.getElementById('camera-control-status').textContent = `${t('controls_unavailable')}: ${error.message}`;
+    }
   }
 
   async function move(dir) {
@@ -350,6 +382,84 @@
       body: JSON.stringify({ direction: dir }),
     });
   }
+
+  async function setDetailRecording(enabled, checkbox) {
+    if (!selectedCamera) return;
+    await setRecordOnPerson(selectedCamera.siteId, selectedCamera.cameraId, enabled, checkbox);
+    renderRecordingOptions();
+  }
+
+  async function setCameraLight(enabled, checkbox) {
+    if (!selectedCamera) return;
+    checkbox.disabled = true;
+    try {
+      await api(`/api/cameras/${encodeURIComponent(selectedCamera.siteId)}/${encodeURIComponent(selectedCamera.cameraId)}/controls`, {
+        method: 'POST', body: JSON.stringify({ light: enabled })
+      });
+    } catch (error) {
+      checkbox.checked = !enabled;
+      document.getElementById('camera-control-status').textContent = error.message;
+    } finally { checkbox.disabled = false; }
+  }
+
+  let mediaRecorder = null;
+  let talkChunks = [];
+  let talkTimer = null;
+
+  async function startTalking(event) {
+    event.preventDefault();
+    if (!selectedCamera || mediaRecorder?.state === 'recording') return;
+    const button = document.getElementById('talk-button');
+    const targetCamera = selectedCamera;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      talkChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => e.data.size && talkChunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        button.classList.remove('is-recording', 'btn-danger');
+        button.classList.add('btn-primary');
+        button.innerHTML = `<i class="ti ti-loader-2 ti-spin me-2"></i>${t('sending_audio')}`;
+        try {
+          const blob = new Blob(talkChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          await api(`/api/cameras/${encodeURIComponent(targetCamera.siteId)}/${encodeURIComponent(targetCamera.cameraId)}/talk`, {
+            method: 'POST', headers: { 'Content-Type': blob.type }, body: blob
+          });
+          document.getElementById('camera-control-status').textContent = t('audio_played');
+        } catch (error) {
+          document.getElementById('camera-control-status').textContent = error.message;
+        } finally {
+          button.innerHTML = `<i class="ti ti-microphone me-2"></i>${t('hold_to_talk')}`;
+          mediaRecorder = null;
+        }
+      };
+      mediaRecorder.start();
+      button.classList.add('is-recording', 'btn-danger');
+      button.classList.remove('btn-primary');
+      button.innerHTML = `<i class="ti ti-microphone me-2"></i>${t('recording_audio')}`;
+      talkTimer = setTimeout(stopTalking, 10000);
+    } catch {
+      document.getElementById('camera-control-status').textContent = t('microphone_denied');
+    }
+  }
+
+  function stopTalking(event) {
+    event?.preventDefault();
+    clearTimeout(talkTimer);
+    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+  }
+
+  const talkButton = document.getElementById('talk-button');
+  talkButton.addEventListener('pointerdown', startTalking);
+  talkButton.addEventListener('pointerup', stopTalking);
+  talkButton.addEventListener('pointercancel', stopTalking);
+  talkButton.addEventListener('pointerleave', stopTalking);
+  document.getElementById('ptz-modal').addEventListener('hidden.bs.modal', () => {
+    stopTalking();
+    document.getElementById('ptz-player').src = 'about:blank';
+    selectedCamera = null;
+  });
 
   // --- People grid ---
   async function loadPeople() {
