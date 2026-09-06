@@ -57,10 +57,8 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   });
   const eventId = Number(inserted.lastInsertRowid);
 
-  // Capture + upload happens after the response below (via waitUntil) —
-  // it takes several seconds (see _lib/r2.js), and the relay that called
-  // this webhook times its own request out at 5s (apps/relay/src/index.js),
-  // so it must never block the reply.
+  // Capture + upload happens after the response below (via waitUntil) because
+  // recording and uploading the finite clip takes several seconds.
   if (shouldRecord) {
     waitUntil(
       uploadClip(env, clipPromise, `${site.account_id}/${eventId}.mp4`).then((key) => {

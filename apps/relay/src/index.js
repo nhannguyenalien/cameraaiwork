@@ -174,10 +174,17 @@ async function notifyMotion(cameraId) {
     return;
   }
   try {
-    await axios.post(
+    const response = await axios.post(
       config.motionWebhookUrl,
       { siteId: config.siteId, camera: cameraId },
-      { headers: { "x-relay-secret": config.relaySecret }, timeout: 5000 }
+      // Pages fetches a fresh frame and asks the on-site AI to confirm the
+      // person before inserting the event. On a tunnel this can exceed 5s.
+      { headers: { "x-relay-secret": config.relaySecret }, timeout: 30000 }
+    );
+    console.log(
+      response.data?.alerted
+        ? `✅ Đã tạo person event (${cameraId})`
+        : `ℹ️ Backend không xác nhận có người (${cameraId})`
     );
   } catch (e) {
     console.error(`❌ Gửi motion webhook thất bại (${cameraId}):`, e.message);
