@@ -37,13 +37,13 @@ docs/                  architecture + API docs.
 ### On-site machine (per site — this is the part meant to be handed to a
 ### customer, not something you do for them)
 
-The repository is private, so configure a read-only GitHub deploy key on each
-site machine, clone over SSH, then run the installer. Full prerequisites and
+The repository can stay private: the dashboard hosts a secret-free relay bundle
+for first install. A read-only GitHub deploy key is optional for `git pull` updates. Full prerequisites and
 verification commands are in [docs/INSTALL-SITE.md](docs/INSTALL-SITE.md).
 
 **macOS / Linux:** đăng nhập dashboard, mở **Cấu hình → Cài relay lên VPS** và chạy lệnh được sinh tại đó. Lệnh dùng token một lần gắn với account hiện tại, không dùng API key dài hạn.
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='...' CAMERAAIWORK_API='https://camera.schoolsai.work' bash
+curl -fsSL https://camera.schoolsai.work/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='...' CAMERAAIWORK_API='https://camera.schoolsai.work' bash
 ```
 
 **Windows** (PowerShell, as Administrator — required to install a service):

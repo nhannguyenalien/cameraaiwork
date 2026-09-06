@@ -620,7 +620,7 @@
     try {
       const result = await api('/api/install-tokens', { method: 'POST' });
       const origin = location.origin;
-      const command = `curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash`;
+      const command = `curl -fsSL '${origin}/install.sh' | sudo env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash`;
       const output = document.getElementById('install-command');
       output.value = command;
       output.classList.remove('d-none');
