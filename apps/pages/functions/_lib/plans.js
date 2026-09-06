@@ -1,8 +1,8 @@
 import { getDb } from "./db.js";
 
 export const PLAN_LIMITS = Object.freeze({
-  free: Object.freeze({ sites: 1, cameras: 2, viewersPerCamera: 1 }),
-  pro: Object.freeze({ sites: 10, cameras: 32, viewersPerCamera: 5 }),
+  free: Object.freeze({ sites: 3, cameras: 10, viewersPerCamera: 1 }),
+  pro: Object.freeze({ sites: 10, cameras: null, viewersPerCamera: 5 }),
 });
 
 export function limitsFor(plan) {
@@ -28,7 +28,8 @@ export async function accountUsage(env, accountId) {
 
 export async function assertCapacity(env, accountId, resource) {
   const summary = await accountUsage(env, accountId);
-  if (summary.usage[resource] >= summary.limits[resource]) {
+  const limit = summary.limits[resource];
+  if (limit !== null && summary.usage[resource] >= limit) {
     const error = new Error(`Đã đạt giới hạn ${summary.limits[resource]} ${resource} của gói ${summary.plan}`);
     error.status = 402;
     throw error;
