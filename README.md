@@ -41,11 +41,9 @@ The repository is private, so configure a read-only GitHub deploy key on each
 site machine, clone over SSH, then run the installer. Full prerequisites and
 verification commands are in [docs/INSTALL-SITE.md](docs/INSTALL-SITE.md).
 
-**macOS / Linux:**
+**macOS / Linux:** đăng nhập dashboard, mở **Cấu hình → Cài relay lên VPS** và chạy lệnh được sinh tại đó. Lệnh dùng token một lần gắn với account hiện tại, không dùng API key dài hạn.
 ```bash
-git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git
-cd cameraaiwork
-CAMERAAIWORK_REPO=git@github.com:nhannguyenalien/cameraaiwork.git ./apps/relay/install.sh
+curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='...' CAMERAAIWORK_API='https://camera.schoolsai.work' bash
 ```
 
 **Windows** (PowerShell, as Administrator — required to install a service):
@@ -56,7 +54,7 @@ $env:CAMERAAIWORK_REPO='git@github.com:nhannguyenalien/cameraaiwork.git'
 .\apps\relay\install.ps1
 ```
 
-Both prompt for the account session key (issued after dashboard login) and the camera's ONVIF
+The Linux/macOS installer consumes the dashboard's one-time account-bound token and prompts for the camera's RTSP/ONVIF
 ip/user/password, then do everything else on their own: clone the repo,
 install `cloudflared` + go2rtc, register the site + camera with the
 backend (`POST /api/sites`, no manual Turso access — this also
@@ -88,8 +86,9 @@ own within ~15 seconds.
 
 ## Adding a second site or a second customer
 
-A second site: run the installer again there with the same customer's
-session key. A second customer signs up independently on the dashboard.
+A second site: generate a new one-time install command while logged into the
+same customer's dashboard. A second customer signs up independently and
+generates a command from their own dashboard.
 
 ## Adding AI
 

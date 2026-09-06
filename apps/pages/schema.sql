@@ -47,6 +47,18 @@ CREATE TABLE IF NOT EXISTS api_keys (
     revoked_at DATETIME
 );
 
+-- Short-lived, single-use credentials generated from the authenticated
+-- dashboard. They let a VPS join the correct account without copying the
+-- user's long-lived login session key into shell history.
+CREATE TABLE IF NOT EXISTS install_tokens (
+    id TEXT PRIMARY KEY,               -- SHA-256 of the raw token
+    account_id TEXT NOT NULL REFERENCES accounts(id),
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME,
+    created_at DATETIME DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_install_tokens_account ON install_tokens(account_id);
+
 CREATE TABLE IF NOT EXISTS account_integrations (
     account_id TEXT NOT NULL REFERENCES accounts(id),
     provider TEXT NOT NULL,

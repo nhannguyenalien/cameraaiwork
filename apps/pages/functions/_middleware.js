@@ -13,7 +13,7 @@
 import { getDb } from "./_lib/db.js";
 import { sha256Hex } from "./_lib/ids.js";
 
-const PUBLIC_PATHS = ["/api/motion", "/api/health", "/api/internal/maintenance"];
+const PUBLIC_PATHS = ["/api/motion", "/api/health", "/api/internal/maintenance", "/api/install/claim"];
 const PUBLIC_AUTH_PATHS = ["/api/auth/signup", "/api/auth/login", "/api/auth/stripe-webhook"];
 
 function isPublic(request, url) {

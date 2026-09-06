@@ -64,6 +64,17 @@ await db.execute(`
   )
 `);
 
+await db.execute(`
+  CREATE TABLE IF NOT EXISTS install_tokens (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id),
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+await db.execute("CREATE INDEX IF NOT EXISTS idx_install_tokens_account ON install_tokens(account_id)");
+
 if (tunnelBaseDomain) {
   await db.execute({
     sql: `UPDATE sites

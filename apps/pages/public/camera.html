@@ -73,11 +73,23 @@
 
       <div class="row align-items-center mt-4 mb-3">
         <div class="col"><h2 class="mb-0">Nhật ký sự kiện</h2><div class="text-secondary">Người, hình ảnh và video của riêng camera này</div></div>
-        <div class="col-auto"><button class="btn btn-outline-secondary btn-sm" onclick="loadEvents()"><i class="ti ti-refresh me-1"></i>Làm mới</button></div>
+        <div class="col-auto d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" onclick="exportEvents()"><i class="ti ti-download me-1"></i>Xuất CSV</button><button class="btn btn-outline-secondary btn-sm" onclick="loadEvents()"><i class="ti ti-refresh me-1"></i>Làm mới</button></div>
       </div>
       <div id="event-summary" class="row row-cards mb-3"></div>
       <div id="events-list"></div>
       <div id="events-empty" class="card card-body text-center text-secondary py-5 d-none"><i class="ti ti-bell-off fs-1 mb-2"></i>Camera này chưa có sự kiện.</div>
+
+      <div class="card mt-4">
+        <div class="card-header"><h3 class="card-title"><i class="ti ti-settings me-2"></i>Quản lý camera</h3></div>
+        <div class="card-body">
+          <form id="camera-name-form" class="row g-2 align-items-end">
+            <div class="col-md"><label class="form-label">Tên hiển thị</label><input id="camera-name-input" class="form-control" maxlength="120" required></div>
+            <div class="col-md-auto"><button class="btn btn-primary" type="submit">Lưu tên</button></div>
+          </form>
+          <div class="alert alert-info mt-3 mb-0"><strong>RTSP/ONVIF được giữ tại VPS.</strong> Mật khẩu camera không tải lên cloud. Muốn đổi IP hoặc tài khoản camera, sửa <code>apps/relay/cameras.json</code> trên VPS rồi chạy lại <code>infra/setup.sh</code> và khởi động lại dịch vụ relay/go2rtc.</div>
+        </div>
+        <div class="card-footer"><button id="delete-camera" class="btn btn-outline-danger" type="button"><i class="ti ti-trash me-1"></i>Xóa camera và toàn bộ sự kiện</button></div>
+      </div>
     </div>
   </div></div>
 </main>
@@ -128,6 +140,7 @@ async function init() {
   document.title = `${camera.cameraName || camera.cameraId} · CameraAIWork`;
   document.getElementById('site-name').textContent = camera.siteName || camera.siteId;
   document.getElementById('camera-name').textContent = camera.cameraName || camera.cameraId;
+  document.getElementById('camera-name-input').value = camera.cameraName || '';
   document.getElementById('record-person').checked = Number(camera.recordOnPerson ?? 1) === 1;
   document.getElementById('camera-page').classList.remove('d-none');
   await Promise.all([loadLive(), loadControls(), loadEvents()]);
@@ -240,6 +253,32 @@ async function loadVideo(eventId, button) {
     button.remove();
   } catch(error) { button.disabled=false; button.textContent=error.message; }
 }
+
+async function exportEvents() {
+  const response = await fetch(endpoint('export'), {headers:{Authorization:`Bearer ${getApiKey()}`}});
+  if (!response.ok) return showError(new Error('Không xuất được nhật ký'));
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a'); link.href=url; link.download=`${camera.cameraName || camera.cameraId}-events.csv`; link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+document.getElementById('camera-name-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const name=document.getElementById('camera-name-input').value.trim();
+    await api(`/api/cameras/${encodeURIComponent(siteId)}/${encodeURIComponent(cameraId)}`, {method:'PATCH',body:JSON.stringify({name})});
+    camera.cameraName=name; document.getElementById('camera-name').textContent=name; document.title=`${name} · CameraAIWork`;
+    document.getElementById('camera-status').textContent='Đã đổi tên camera.';
+  } catch(error) { document.getElementById('camera-status').textContent=error.message; }
+});
+
+document.getElementById('delete-camera').addEventListener('click', async () => {
+  if(!confirm('Xóa camera này và toàn bộ ảnh/video sự kiện? Thao tác này không thể hoàn tác.')) return;
+  try {
+    await api(`/api/cameras/${encodeURIComponent(siteId)}/${encodeURIComponent(cameraId)}`, {method:'DELETE'});
+    location.href='/';
+  } catch(error) { showError(error); }
+});
 
 document.getElementById('logout-btn').addEventListener('click',()=>{localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
 window.addEventListener('beforeunload',()=>objectUrls.forEach(URL.revokeObjectURL));
