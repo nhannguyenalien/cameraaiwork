@@ -606,8 +606,9 @@
   async function loadAccount() {
     accountSummary = await api('/api/settings/account');
     const { plan, usage, limits } = accountSummary;
-    document.getElementById('plan-badge').textContent = `${plan.toUpperCase()} · ${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${limits.cameras} camera · ${limits.viewersPerCamera} ${t('viewer')}`;
-    document.getElementById('site-usage').textContent = `${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${limits.cameras} camera`;
+    const cameraLimit = limits.cameras === null ? 'không giới hạn' : limits.cameras;
+    document.getElementById('plan-badge').textContent = `${plan.toUpperCase()} · ${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${cameraLimit} camera · ${limits.viewersPerCamera} ${t('viewer')}`;
+    document.getElementById('site-usage').textContent = `${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${cameraLimit} camera`;
     document.getElementById('account-email').value = accountSummary.email || '';
     document.getElementById('account-email').readOnly = !!accountSummary.email;
     document.getElementById('account-email').required = !accountSummary.email;
