@@ -10,7 +10,9 @@ if (!fs.existsSync(camerasPath)) {
 }
 const cameras = JSON.parse(fs.readFileSync(camerasPath, "utf8"));
 
-const go2rtcUrl = process.env.GO2RTC_URL || "http://localhost:1984";
+// Use an explicit IPv4 loopback. On Ubuntu, `localhost` commonly resolves to
+// ::1 first while go2rtc may only be listening on 127.0.0.1.
+const go2rtcUrl = process.env.GO2RTC_URL || "http://127.0.0.1:1984";
 const pagesApiUrl = (process.env.PAGES_API_URL || "").replace(/\/$/, "");
 
 module.exports = {
