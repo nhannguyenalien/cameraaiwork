@@ -1,0 +1,25 @@
+name: Infrastructure maintenance
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-and-quota-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete orphan tunnels and check operational thresholds
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          MAINTENANCE_SECRET: ${{ secrets.MAINTENANCE_SECRET }}
+        run: |
+          test -n "$DASHBOARD_URL"
+          test -n "$MAINTENANCE_SECRET"
+          curl --fail-with-body --retry 3 --retry-all-errors \
+            -X POST "${DASHBOARD_URL%/}/api/internal/maintenance" \
+            -H "Authorization: Bearer $MAINTENANCE_SECRET"

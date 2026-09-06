@@ -32,12 +32,22 @@ export async function getCamera(env, accountId, siteId, cameraId) {
   return result.rows[0] || null;
 }
 
+export async function getCameraByStreamUnscoped(env, siteId, stream) {
+  const db = getDb(env);
+  const result = await db.execute({
+    sql: "SELECT * FROM cameras WHERE site_id = ? AND stream = ?",
+    args: [siteId, stream],
+  });
+  return result.rows[0] || null;
+}
+
 export async function listCameras(env, accountId) {
   const db = getDb(env);
   const result = await db.execute({
     sql: `
       SELECT cameras.id as cameraId, cameras.stream, cameras.name as cameraName,
-             sites.id as siteId, sites.name as siteName, sites.go2rtc_url as go2rtcUrl
+             cameras.record_on_person as recordOnPerson,
+             sites.id as siteId, sites.name as siteName
       FROM cameras
       JOIN sites ON sites.id = cameras.site_id
       WHERE cameras.account_id = ?

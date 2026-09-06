@@ -8,22 +8,16 @@
 //   /api/motion — machine-to-machine webhook from a site's relay,
 //   authenticated with that site's own relay_secret (see functions/api/motion.js).
 //   /api/health — unauthenticated so uptime monitors can hit it.
-//   PATCH /api/sites/:id — same as /api/motion, the relay self-reports its
-//   current Quick Tunnel URLs using its site's relay_secret, not an
-//   account API key (see functions/api/sites/[id].js).
 //   /api/auth/* — obviously can't require an API key, since the whole
 //   point is exchanging a Google sign-in for one (see functions/api/auth/google/).
 import { getDb } from "./_lib/db.js";
 import { sha256Hex } from "./_lib/ids.js";
 
-const PUBLIC_PATHS = ["/api/motion", "/api/health"];
-
-function isSiteSelfUpdate(request, url) {
-  return request.method === "PATCH" && /^\/api\/sites\/[^/]+$/.test(url.pathname);
-}
+const PUBLIC_PATHS = ["/api/motion", "/api/health", "/api/internal/maintenance"];
+const PUBLIC_AUTH_PATHS = ["/api/auth/signup", "/api/auth/login", "/api/auth/stripe-webhook"];
 
 function isPublic(request, url) {
-  return PUBLIC_PATHS.includes(url.pathname) || url.pathname.startsWith("/api/auth/") || isSiteSelfUpdate(request, url);
+  return PUBLIC_PATHS.includes(url.pathname) || PUBLIC_AUTH_PATHS.includes(url.pathname);
 }
 
 function corsHeaders(env, request) {

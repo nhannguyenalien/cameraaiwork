@@ -9,6 +9,18 @@ import { getDb } from "../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 import { randomId, randomSecret } from "../../_lib/ids.js";
 import { createSiteTunnel } from "../../_lib/cloudflareTunnel.js";
+import { assertCapacity } from "../../_lib/plans.js";
+
+export const onRequestGet = withErrorHandling(async ({ env, data }) => {
+  const result = await getDb(env).execute({
+    sql: `SELECT s.id, s.name, s.go2rtc_url, s.relay_url, s.ai_worker_url,
+                 COUNT(c.id) AS camera_count
+          FROM sites s LEFT JOIN cameras c ON c.site_id = s.id
+          WHERE s.account_id = ? GROUP BY s.id ORDER BY s.name, s.id`,
+    args: [data.accountId],
+  });
+  return json(result.rows);
+});
 
 export const onRequestPost = withErrorHandling(async ({ request, env, data }) => {
   let body;
@@ -19,21 +31,21 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
   }
 
   const name = (body.name || "").trim() || "Site mới";
+  await assertCapacity(env, data.accountId, "sites");
   const siteId = randomId("st");
   const relaySecret = randomSecret();
 
-  const { tunnelId, tunnelToken, go2rtcUrl, relayUrl } = await createSiteTunnel(env, siteId);
+  const { tunnelId, tunnelToken, go2rtcUrl, relayUrl, aiWorkerUrl } = await createSiteTunnel(env, siteId);
 
   const db = getDb(env);
   await db.execute({
-    sql: "INSERT INTO sites (id, account_id, name, go2rtc_url, relay_url, relay_secret, cloudflare_tunnel_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    args: [siteId, data.accountId, name, go2rtcUrl, relayUrl, relaySecret, tunnelId],
+    sql: "INSERT INTO sites (id, account_id, name, go2rtc_url, relay_url, ai_worker_url, relay_secret, cloudflare_tunnel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    args: [siteId, data.accountId, name, go2rtcUrl, relayUrl, aiWorkerUrl, relaySecret, tunnelId],
   });
 
-  // relaySecret and tunnelToken are only ever returned here — the
-  // installer writes them into the relay's local .env and neither is
-  // stored anywhere in plaintext (tunnelToken can be re-fetched from
-  // Cloudflare by tunnelId later; relaySecret genuinely isn't kept at all
-  // beyond this response, matching the original design).
+  // Both secrets are returned only to the installer. relaySecret is also
+  // retained server-side because Pages must sign live URLs and authenticate
+  // internal capture/AI requests; it is never returned by list/read APIs.
+  // The tunnel token can be re-fetched from Cloudflare using tunnelId.
   return json({ siteId, relaySecret, tunnelToken }, { status: 201 });
 });

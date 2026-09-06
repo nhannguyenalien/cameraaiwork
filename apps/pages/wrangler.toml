@@ -1,3 +1,13 @@
 name = "cameraaiwork"
 pages_build_output_dir = "public"
 compatibility_date = "2026-08-01"
+
+# Event clips (motion-triggered, bounded-length MP4s) — see
+# functions/_lib/r2.js and functions/api/events/[id]/video.js.
+# NOTE: for the deployed Pages project (not `wrangler pages dev`), this
+# binding also needs to be added in the dashboard under
+# Settings -> Functions -> R2 bucket bindings — wrangler.toml alone only
+# wires it up for local dev.
+[[r2_buckets]]
+binding = "EVENTS_BUCKET"
+bucket_name = "cameraaiwork-events"

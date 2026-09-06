@@ -1,0 +1,300 @@
+openapi: 3.1.0
+info:
+  title: CameraAI SaaS API
+  version: 1.0.0
+  description: Multi-tenant camera management, signed live streaming, PTZ, events, people, integrations, jobs and billing.
+servers:
+  - url: https://cameraaiwork.pages.dev
+    description: Production (replace with the deployed custom domain when available)
+  - url: http://localhost:8788
+    description: Local Wrangler
+security:
+  - accountBearer: []
+tags:
+  - { name: Auth }
+  - { name: Account }
+  - { name: Sites }
+  - { name: Cameras }
+  - { name: Events }
+  - { name: People }
+  - { name: Integrations }
+  - { name: Jobs }
+  - { name: Billing }
+  - { name: Internal }
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      tags: [Account]
+      security: []
+      summary: Check API and database health
+      responses:
+        '200': { description: Healthy, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/auth/signup:
+    post:
+      operationId: signUp
+      tags: [Auth]
+      security: []
+      summary: Create an account and bearer session
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AuthInput' } } } }
+      responses:
+        '201': { description: Account and session created, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResult' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/auth/login:
+    post:
+      operationId: logIn
+      tags: [Auth]
+      security: []
+      summary: Create a revocable bearer session
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AuthInput' } } } }
+      responses:
+        '200': { description: Authenticated, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResult' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/auth/logout:
+    post:
+      operationId: logOut
+      tags: [Auth]
+      summary: Revoke the current bearer token
+      x-agent-risk: write
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/settings/account:
+    get:
+      operationId: getAccountUsage
+      tags: [Account]
+      summary: Get plan, usage and effective limits
+      responses:
+        '200': { description: Account usage, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+  /api/sites:
+    get:
+      operationId: listSites
+      tags: [Sites]
+      summary: List account sites
+      responses:
+        '200': { description: Sites, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Site' } } } } }
+    post:
+      operationId: createSite
+      tags: [Sites]
+      summary: Create a site and provision its Named Tunnel
+      x-agent-risk: high-write
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { name: { type: string, examples: ['Nhà chính'] } } } } } }
+      responses:
+        '201': { description: One-time installer credentials, content: { application/json: { schema: { $ref: '#/components/schemas/SiteCreated' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/sites/{id}:
+    delete:
+      operationId: deleteSite
+      tags: [Sites]
+      summary: Delete site, tunnel, DNS, cameras and event metadata
+      x-agent-risk: destructive-human-confirmation-required
+      parameters: [{ $ref: '#/components/parameters/SiteId' }]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/sites/{id}/cameras:
+    post:
+      operationId: createCamera
+      tags: [Cameras]
+      summary: Register a relay stream as a camera
+      x-agent-risk: write
+      parameters: [{ $ref: '#/components/parameters/SiteId' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [stream], properties: { stream: { type: string, examples: [cam1] }, name: { type: string } } } } } }
+      responses:
+        '201': { description: Camera created, content: { application/json: { schema: { type: object, required: [cameraId], properties: { cameraId: { type: string } } } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/sites/{id}/tunnel:
+    post:
+      operationId: reconcileSiteTunnel
+      tags: [Sites]
+      summary: Provision or converge the site's one-host Named Tunnel
+      x-agent-risk: high-write
+      parameters: [{ $ref: '#/components/parameters/SiteId' }]
+      responses:
+        '200': { description: Tunnel connector token and URLs, content: { application/json: { schema: { $ref: '#/components/schemas/TunnelResult' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/sites/{id}/tunnel/upgrade:
+    post:
+      operationId: upgradeSiteTunnel
+      tags: [Sites]
+      summary: Upgrade a legacy site tunnel to the one-host layout
+      x-agent-risk: high-write
+      parameters: [{ $ref: '#/components/parameters/SiteId' }]
+      responses:
+        '200': { description: Upgraded tunnel, content: { application/json: { schema: { $ref: '#/components/schemas/TunnelResult' } } } }
+  /api/cameras:
+    get:
+      operationId: listCameras
+      tags: [Cameras]
+      summary: List cameras visible to the account
+      responses:
+        '200': { description: Cameras, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Camera' } } } } }
+  /api/cameras/{site}/{camera}/live:
+    post:
+      operationId: createLiveCapability
+      tags: [Cameras]
+      summary: Mint a short-lived signed WebRTC capability URL
+      x-agent-risk: ephemeral-write
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: Five-minute live capability, content: { application/json: { schema: { $ref: '#/components/schemas/LiveResult' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}/ptz:
+    post:
+      operationId: moveCamera
+      tags: [Cameras]
+      summary: Send an ONVIF PTZ movement or stop command
+      x-agent-risk: physical-control
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [direction], properties: { direction: { type: string, enum: [up, down, left, right, stop] } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+  /api/events:
+    get:
+      operationId: listEvents
+      tags: [Events]
+      summary: List newest motion/person events
+      parameters:
+        - { name: site, in: query, schema: { type: string } }
+        - { name: camera, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Events, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+  /api/events/{id}/video:
+    get:
+      operationId: getEventVideo
+      tags: [Events]
+      summary: Fetch or redirect to an authorized event clip
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { description: Video bytes, content: { video/mp4: { schema: { type: string, contentEncoding: binary } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/people:
+    get:
+      operationId: listPeople
+      tags: [People]
+      summary: List clustered people without biometric embeddings
+      responses:
+        '200': { description: People, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Person' } } } } }
+  /api/people/{id}:
+    patch:
+      operationId: labelPerson
+      tags: [People]
+      summary: Set or clear a person's display label
+      x-agent-risk: write-biometric-metadata
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { label: { type: [string, 'null'] } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/settings/integrations:
+    get:
+      operationId: getIntegrationStatus
+      tags: [Integrations]
+      summary: Get configured status; secret values are never returned
+      responses:
+        '200': { description: Integration status, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+    put:
+      operationId: setIntegration
+      tags: [Integrations]
+      summary: Encrypt and store Telegram or RunPod credentials
+      x-agent-risk: secret-write-human-confirmation-required
+      requestBody: { required: true, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/TelegramIntegration' }, { $ref: '#/components/schemas/RunPodIntegration' }] } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+    delete:
+      operationId: deleteIntegration
+      tags: [Integrations]
+      summary: Delete stored integration credentials
+      x-agent-risk: destructive-human-confirmation-required
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [provider], properties: { provider: { type: string, enum: [telegram, runpod] } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /api/jobs:
+    post:
+      operationId: createJob
+      tags: [Jobs]
+      summary: Dispatch a RunPod asynchronous job
+      x-agent-risk: billable-write
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [type, task], properties: { type: { const: runpod }, task: { type: string } }, additionalProperties: true } } } }
+      responses:
+        '202': { description: Job queued, content: { application/json: { schema: { $ref: '#/components/schemas/Job' } } } }
+  /api/jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [Jobs]
+      summary: Poll a job owned by the account
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Provider job state, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/billing/checkout:
+    post:
+      operationId: createCheckout
+      tags: [Billing]
+      summary: Create a Stripe Checkout session
+      x-agent-risk: financial-human-confirmation-required
+      responses:
+        '200': { description: Stripe redirect URL, content: { application/json: { schema: { type: object, properties: { url: { type: string, format: uri } } } } } }
+  /api/billing/portal:
+    post:
+      operationId: createBillingPortal
+      tags: [Billing]
+      summary: Create a Stripe customer portal session
+      x-agent-risk: financial-human-confirmation-required
+      responses:
+        '200': { description: Stripe redirect URL, content: { application/json: { schema: { type: object, properties: { url: { type: string, format: uri } } } } } }
+  /api/motion:
+    post:
+      operationId: ingestMotion
+      tags: [Internal]
+      summary: Ingest a relay motion event
+      x-internal: true
+      security: [{ relaySecret: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [siteId, camera], properties: { siteId: { type: string }, camera: { type: string } } } } } }
+      responses:
+        '202': { description: Event accepted, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/internal/maintenance:
+    post:
+      operationId: runMaintenance
+      tags: [Internal]
+      summary: Clean orphan tunnels and inspect managed quota
+      x-internal: true
+      x-agent-risk: platform-destructive
+      security: [{ maintenanceBearer: [] }]
+      responses:
+        '200': { description: Maintenance report, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    accountBearer: { type: http, scheme: bearer, bearerFormat: opaque, description: Revocable account session/API key with full account privileges. }
+    maintenanceBearer: { type: http, scheme: bearer, bearerFormat: opaque }
+    relaySecret: { type: apiKey, in: header, name: x-relay-secret }
+  parameters:
+    SiteId: { name: id, in: path, required: true, schema: { type: string, pattern: '^st-[A-Za-z0-9_-]+$' } }
+    Site: { name: site, in: path, required: true, schema: { type: string } }
+    Camera: { name: camera, in: path, required: true, schema: { type: string } }
+  responses:
+    Ok: { description: Successful operation, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean } }, additionalProperties: true } } } }
+    Error: { description: Error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error: { type: object, required: [error], properties: { error: { type: string } } }
+    AuthInput: { type: object, required: [email, password], properties: { email: { type: string, format: email }, password: { type: string, minLength: 10 }, name: { type: string } } }
+    AuthResult: { type: object, additionalProperties: true, description: Contains account identity and a raw bearer key returned only at authentication time. }
+    Site: { type: object, required: [id], properties: { id: { type: string }, name: { type: [string, 'null'] }, go2rtc_url: { type: string }, relay_url: { type: string }, ai_worker_url: { type: [string, 'null'] }, camera_count: { type: integer } } }
+    SiteCreated: { type: object, required: [siteId, relaySecret, tunnelToken], properties: { siteId: { type: string }, relaySecret: { type: string, writeOnly: true }, tunnelToken: { type: string, writeOnly: true } } }
+    TunnelResult: { type: object, properties: { tunnelToken: { type: string, writeOnly: true }, go2rtcUrl: { type: string, format: uri }, relayUrl: { type: string, format: uri }, aiWorkerUrl: { type: string, format: uri } }, additionalProperties: true }
+    Camera: { type: object, properties: { cameraId: { type: string }, stream: { type: string }, cameraName: { type: [string, 'null'] }, siteId: { type: string }, siteName: { type: [string, 'null'] } } }
+    LiveResult: { type: object, required: [url, expiresAt, viewerLimit], properties: { url: { type: string, format: uri }, expiresAt: { type: integer, description: Unix epoch seconds }, viewerLimit: { type: integer, minimum: 1 } } }
+    Event: { type: object, additionalProperties: true, properties: { id: { type: integer }, site_id: { type: string }, camera: { type: string }, timestamp: { type: string }, type: { type: string }, person_id: { type: [string, 'null'] }, person_label: { type: [string, 'null'] }, video_key: { type: [string, 'null'] } } }
+    Person: { type: object, properties: { id: { type: string }, label: { type: [string, 'null'] }, first_seen_at: { type: string }, last_seen_at: { type: string }, seen_count: { type: integer } } }
+    TelegramIntegration: { type: object, required: [provider, botToken, chatId], properties: { provider: { const: telegram }, botToken: { type: string, writeOnly: true }, chatId: { type: string, writeOnly: true } } }
+    RunPodIntegration: { type: object, required: [provider, apiKey, endpointId], properties: { provider: { const: runpod }, apiKey: { type: string, writeOnly: true }, endpointId: { type: string } } }
+    Job: { type: object, properties: { id: { type: string }, status: { type: string } }, additionalProperties: true }

@@ -2,9 +2,11 @@
   "name": "@cameraaiwork/pages",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Cloudflare Pages: static dashboard + Pages Functions (API, DB, AI orchestration, RunPod dispatch). Deploy via git integration in the Cloudflare dashboard, or `wrangler pages deploy public`.",
   "scripts": {
-    "dev": "wrangler pages dev public --compatibility-date=2026-08-01"
+    "dev": "wrangler pages dev public --compatibility-date=2026-08-01",
+    "build:functions": "wrangler pages functions build"
   },
   "devDependencies": {
     "wrangler": "^3.78.0"

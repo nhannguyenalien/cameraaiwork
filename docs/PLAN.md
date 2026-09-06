@@ -1,10 +1,34 @@
 # Plan
 
+## Trạng thái MVP hiện tại (2026-08-23)
+
+Kiến trúc mục tiêu đã đổi sang **một Named Tunnel + một hostname cho mỗi
+site**. Khách hàng đăng nhập bằng tài khoản SaaS; Cloudflare Access không nằm
+trong luồng xem camera của khách. go2rtc và AI chỉ bind loopback, live view đi
+qua relay bằng token v2 sống 5 phút. Giới hạn đồng thời hiện là Free: 1 và Pro:
+5 viewer/camera. Cleanup tunnel mồ côi và cảnh báo quota chạy qua maintenance
+endpoint theo lịch.
+
+Code, build và test tự động đã hoàn tất. Những việc còn lại đều cần môi trường
+thật hoặc credential production:
+
+- [ ] Thu hồi API token Cloudflare từng được dán vào chat, tạo token mới và cập
+      nhật Pages secret. Repo private không làm token đã lộ trở lại an toàn.
+- [ ] Deploy Pages, chạy migration đổi URL AI cũ sang `/internal/ai`, cấu hình
+      R2 binding và GitHub secrets cho maintenance job.
+- [ ] Khi site có điện: cập nhật relay, reboot máy site, rồi chạy E2E một lần để
+      xác nhận signed live, PTZ, motion, clip R2, AI và Telegram.
+- [ ] Cấu hình Stripe test/live và chạy một checkout + webhook thật. RunPod vẫn
+      là BYOK của khách và chỉ cần test khi bật tính năng đó.
+
+Checklist và lệnh triển khai chuẩn nằm trong `docs/DEPLOY.md`. Các phần bên dưới
+giữ lại lịch sử triển khai và phát hiện kỹ thuật trước đây.
+
 Working checklist for taking this from "code exists" to "running system".
 Check items off as they're done. Each phase has a clear definition of done
 so it's obvious when to move to the next one.
 
-Status as of this writing: **Phase 1 done. Phase 2 mostly done** — the
+Status 2026-08-22: **phần mềm SaaS lõi đã hoàn tất và test tự động đang xanh** — the
 user brought their own domain (`schoolsai.work`, already an active
 Cloudflare zone on the same account), which unblocked the two biggest
 Phase 2 gaps: the dashboard is now on `https://camera.schoolsai.work`
@@ -45,8 +69,8 @@ mistaken for a regression when the tunnel hostname doesn't respond.
 - [x] Pushed to `github.com/nhannguyenalien/cameraaiwork`
 
 Known debt carried in from the original code, not yet fixed:
-- [ ] Revoke the leaked GitHub PAT found in the original `test/` folder (unrelated `hdtam` project) if not already done — `***REMOVED-GITHUB-PAT***`
-- [ ] Motion detection in `apps/relay` matches raw substrings in the SSE payload (`data.includes('motion')`) instead of parsing JSON — fine for now, revisit if false positives show up
+- [ ] Confirm the leaked GitHub PAT from the original unrelated `test/` folder has been revoked. The credential value is intentionally not retained in this repository.
+- [x] Motion detection lọc topic ONVIF có cấu trúc (`message.topic`); không còn dò substring trong SSE thô
 
 Bugs found and fixed during Phase 1 testing (noted here so the reasoning
 isn't lost — see `schema.sql`'s comment for the rule going forward):
@@ -81,7 +105,7 @@ actually works, before investing in anything else.
 - [x] **End to end, verified live, in production**: real motion in front of the camera → ONVIF event → relay → webhook → Pages Function → DB row, visible via `GET /api/events`. PTZ command sent through the real API (`POST /api/cameras/.../ptz`) actually moved the real camera. `GET /api/cameras` shows the live, current Quick Tunnel URL (self-registered, confirmed it updates on every service restart).
 - [ ] Click through the actual dashboard UI in a browser (not just the API directly) — API-level behavior is fully verified above since the dashboard is a thin client of the same endpoints, but the actual UI hasn't been visually confirmed yet
 - [ ] Confirm the systemd services survive an actual reboot of `coolify` (enabled at boot, not yet tested with a real reboot)
-- [ ] Set `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` in Pages env vars — not configured yet, so alerts currently only write a DB row, no Telegram message
+- [x] Telegram is BYOK per account: customers enter bot token/chat ID in Dashboard Settings; values are encrypted at rest
 
 **Definition of done:** ~~dashboard shows live video, PTZ works, a real
 motion event produces a Telegram alert and a DB row, and killing/rebooting
@@ -132,8 +156,7 @@ Goal: nothing about this should be safely ignorable once it's live 24/7.
       run `wrangler pages secret put CLOUDFLARE_API_TOKEN` themselves in
       their own terminal instead, so the raw token never passes through
       this session at all.
-- [ ] Put Cloudflare Access in front of the go2rtc tunnel hostname — now
-      *possible* (stable hostname on our own zone), not done yet. Next up.
+- [x] Put Cloudflare Access in front of the go2rtc tunnel hostname — Access app và allow-policy cho owner đã tạo; trang đăng nhập hoạt động
 - [ ] Turn on Cloudflare's rate limiting rules — now on our own zone
       (`camera.schoolsai.work`), so this should be available; not
       attempted yet
@@ -209,9 +232,7 @@ clustering their face across events, not just that a person exists.
       proved the code path works, but the original site itself doesn't
       have `ai/worker` running yet
 - [ ] Set `AI_WORKER_URL` in Pages env vars for the original site
-- [ ] Build a minimal "People" view in the dashboard (currently API-only —
-      `GET /api/people` / `PATCH /api/people/:id` exist, nothing in
-      `apps/pages/public/index.html` surfaces them yet)
+- [x] Build a minimal "People" view in the dashboard — danh sách cluster và đổi tên trực tiếp
 - [ ] Watch real day-to-day variation (different days/lighting/angles) to
       see whether `SIMILARITY_THRESHOLD = 0.5` needs tuning — only tested
       against same-session captures + a synthetic perturbation so far, not
@@ -229,12 +250,10 @@ logged as anonymous each time.
 Goal: prove the heavy-GPU path end to end with one real, useful task,
 rather than building all of them speculatively.
 
-- [ ] Pick the first task (recommend: highlight-reel generation from a
-      day's stored clips, since it's the most directly useful and doesn't
-      require a face embedding model/dataset like face search would)
-- [ ] Implement it in `runpod/heavy-worker/handler.py`
+- [x] Pick the first task: face search over supplied embeddings
+- [x] Implement it in `runpod/heavy-worker/handler.py` with ranking, threshold and unit tests
 - [ ] Build + push the Docker image, create the RunPod Serverless endpoint
-- [ ] Set `RUNPOD_API_KEY` / `RUNPOD_ENDPOINT_ID` in Pages env vars
+- [x] RunPod is BYOK per account: customers enter API key/endpoint in Dashboard Settings; values are encrypted at rest
 - [ ] Test via `POST /api/jobs` → poll `GET /api/jobs/:id` → confirm result
 
 **Definition of done:** one real task runs on RunPod, dispatched and
@@ -281,15 +300,11 @@ These are real SaaS-productization work but depend on product decisions
 guessed. Revisit once there's an actual reason to onboard someone other
 than the account owner.
 
-- [ ] Customer signup/login flow (replace "paste an API key" with real
-      auth — magic link, OAuth, or a provider like Clerk/Auth0)
-- [ ] Billing integration (Stripe or similar) + plan/usage limits
-- [ ] Admin UI for managing sites/cameras/API keys (currently: raw SQL
-      against Turso)
-- [ ] Per-site AI worker URLs (currently one global `AI_WORKER_URL` —
-      fine at one-account scale, not once sites have different hardware)
-- [ ] Structured JSON parsing of go2rtc's motion event schema instead of
-      the substring match in `apps/relay`
+- [x] Customer signup/login bằng email/password với session có thể thu hồi
+- [x] Stripe checkout/portal/webhook + giới hạn Free/Pro (production cần owner nhập Stripe secrets)
+- [x] Customer UI quản lý sites, billing, people và Telegram/RunPod BYOK mã hóa
+- [x] Per-site AI worker URLs qua named tunnel
+- [x] Structured ONVIF topic filtering thay substring matching
 - [ ] ONVIF auto-discovery in the installers (scan the LAN and suggest
       cameras) instead of asking for IP/user/password by hand
 - [ ] Native GUI installer (.pkg/.exe/.msi) for non-technical customers —
@@ -297,7 +312,7 @@ than the account owner.
       Homebrew/Tailscale/winget itself), a packaged installer is worth the
       extra effort once there's real non-technical customer volume to
       justify it
-- [ ] Upgrade Quick Tunnels to Cloudflare named tunnels (stable hostname,
+- [x] Upgrade Quick Tunnels to Cloudflare named tunnels (stable hostname,
       provisioned server-side via the Cloudflare API) once this needs to be
       rock-solid production infra rather than "customer just installed it" —
       Quick Tunnels explicitly aren't meant for permanent production use

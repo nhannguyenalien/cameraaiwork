@@ -4,14 +4,18 @@ Scaffold for offloading occasional GPU-heavy tasks to
 [RunPod Serverless](https://docs.runpod.io/serverless/overview), kept
 separate from the low-latency alert path (`ai/worker`).
 
-## Deploy (once a task is actually implemented in `handler.py`)
+The first implemented task is `face_search`: it ranks a query face
+embedding against up to 10,000 candidates and returns compact JSON.
+
+## Deploy
 
 1. Build & push the image: `docker build -t <registry>/cameraaiwork-heavy .`
 2. Create a RunPod Serverless endpoint pointing at that image, pick a GPU
    tier sized for the task (cheapest that fits — this only runs on demand,
    RunPod bills per second while a job runs).
 3. Copy the endpoint ID + your RunPod API key into the Cloudflare Pages
-   project's env vars (`RUNPOD_ENDPOINT_ID`, `RUNPOD_API_KEY`).
+   account's Settings page (`Endpoint ID`, `API key`). Values are encrypted
+   at rest and are not returned to the browser after saving.
 
 ## How it's called
 

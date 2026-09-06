@@ -5,8 +5,8 @@ motion-triggered alerts with AI person detection, and an API-first design
 so a dashboard, an AI agent, or a customer's own app can all drive it the
 same way.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design and
-[docs/API.md](docs/API.md) for the API contract.
+Start at [docs/README.md](docs/README.md). The machine-readable API contract is
+[docs/openapi.yaml](docs/openapi.yaml) and is also published as `/openapi.yaml`.
 
 ## Layout
 
@@ -29,10 +29,7 @@ docs/                  architecture + API docs.
 ### Backend (once)
 
 1. **Turso**: create a DB, run `apps/pages/schema.sql` against it.
-2. Insert one row into `accounts`, then generate its API key:
-   ```bash
-   cd apps/pages && node scripts/generate-api-key.js acct_owner
-   ```
+2. Run the DB migration; customers then create their own account from the dashboard.
 3. **Cloudflare Pages**: connect this repo via the dashboard (build output
    directory: `apps/pages/public`), env vars from `.dev.vars.example`. Or
    run locally for testing: `cp .dev.vars.example .dev.vars`, `npm install && npm run dev`.
@@ -40,29 +37,47 @@ docs/                  architecture + API docs.
 ### On-site machine (per site — this is the part meant to be handed to a
 ### customer, not something you do for them)
 
+The repository is private, so configure a read-only GitHub deploy key on each
+site machine, clone over SSH, then run the installer. Full prerequisites and
+verification commands are in [docs/INSTALL-SITE.md](docs/INSTALL-SITE.md).
+
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | bash
+git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git
+cd cameraaiwork
+CAMERAAIWORK_REPO=git@github.com:nhannguyenalien/cameraaiwork.git ./apps/relay/install.sh
 ```
 
 **Windows** (PowerShell, as Administrator — required to install a service):
 ```powershell
-irm https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.ps1 | iex
+git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git
+cd cameraaiwork
+$env:CAMERAAIWORK_REPO='git@github.com:nhannguyenalien/cameraaiwork.git'
+.\apps\relay\install.ps1
 ```
 
-Both prompt for the account API key (from step 2) and the camera's ONVIF
+Both prompt for the account session key (issued after dashboard login) and the camera's ONVIF
 ip/user/password, then do everything else on their own: clone the repo,
 install `cloudflared` + go2rtc, register the site + camera with the
 backend (`POST /api/sites`, no manual Turso access — this also
 provisions a real Cloudflare Tunnel server-side, on our own domain, with
-a stable hostname; falls back to an ephemeral Quick Tunnel only if the
-backend has no `CLOUDFLARE_API_TOKEN` configured), and install
+a stable hostname), and install
 themselves as an always-on service (launchd on macOS, systemd on Linux,
 a Windows Service via `node-windows` on Windows). No Cloudflare dashboard,
 no hand-edited config files, no manual DB inserts, on any platform — the
 customer needs neither their own Cloudflare account nor their own domain.
+Each site gets exactly one Named Tunnel and one hostname. The customer
+authenticates only with the SaaS; live view uses a short-lived signed URL,
+not Cloudflare Access. go2rtc listens on localhost and is reachable only
+through the validating relay.
 
-Open the dashboard, paste the same API key — the camera shows up on its
+Free accounts allow one concurrent live viewer per camera; Pro allows five.
+An hourly maintenance workflow removes product-owned orphan tunnels after a
+six-hour grace period and alerts by failing when configured Tunnel/DNS safety
+thresholds are reached. Configure `MAINTENANCE_SECRET` in Pages and add GitHub
+Actions secrets `DASHBOARD_URL` and `MAINTENANCE_SECRET`.
+
+Open the dashboard and sign in — the camera shows up on its
 own within ~15 seconds.
 
 > macOS has been run end to end against a real camera and a real Turso DB.
@@ -73,15 +88,14 @@ own within ~15 seconds.
 
 ## Adding a second site or a second customer
 
-A second site: run the installer again there, with the same account API
-key. A second customer: insert one row into `accounts`, generate their own
-API key, hand them the same one-line install command with their key.
+A second site: run the installer again there with the same customer's
+session key. A second customer signs up independently on the dashboard.
 
 ## Adding AI
 
-- **Person detection on the live alert path**: implement `detect_person()`
-  in `ai/worker/main.py` (currently a stub returning `False`), deploy it
-  on-site, set `AI_WORKER_URL` in the Pages env vars.
+- **Person detection on the live alert path**: deploy the implemented ONNX
+  worker on-site; the relay exposes it only on the authenticated
+  `/internal/ai` path of the site's single hostname.
 - **Heavier GPU tasks**: implement a `task` branch in
   `runpod/heavy-worker/handler.py`, deploy as a RunPod Serverless endpoint,
   dispatch via `POST /api/jobs`.
@@ -95,7 +109,6 @@ API key, hand them the same one-line install command with their key.
   plaintext (unrelated `test/` project, repo `hdtam`). If it hasn't been
   revoked yet: GitHub → Settings → Developer settings → Personal access
   tokens.
-- Signup/login UI, billing, and plan limits aren't built — the schema and
-  API are ready for them, but which auth/billing provider to use is a
-  product decision, not assumed here. See "Multi-tenant / SaaS readiness"
-  in `docs/ARCHITECTURE.md`.
+- Signup/login, Stripe billing hooks, enforced plan limits and encrypted
+  customer integrations are implemented. Stripe remains platform-owned;
+  Telegram and RunPod are customer BYOK settings in the dashboard.

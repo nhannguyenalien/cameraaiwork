@@ -1,146 +1,75 @@
-# API
+# CameraAI API
 
-Base URL: your Cloudflare Pages domain (e.g. `https://cameraaiwork.pages.dev`).
+Canonical machine-readable contract: [`openapi.yaml`](./openapi.yaml). Production publishes the same file at `https://<dashboard>/openapi.yaml`.
 
-All endpoints except `/api/motion` and `/api/health` require:
+## Quick start
 
-```
-Authorization: Bearer <account API key>
-```
+```bash
+export CAMERAAI_API='https://cameraaiwork.pages.dev'
+export CAMERAAI_TOKEN='paste-account-session-key'
 
-Get a key with `apps/pages/scripts/generate-api-key.js` (see
-[README](../README.md)). Every response is scoped to the account that key
-belongs to — there is no way to see another account's sites, cameras,
-events, or jobs.
-
-CORS is open by default (`ALLOWED_ORIGINS=*`); restrict it in the Pages
-project's env vars if you want to lock the API to specific origins.
-
-## `POST /api/sites`
-
-Register a new site under the caller's account. Body: `{ "name": "Nhà chính" }`.
-Provisions a real Cloudflare Named Tunnel server-side (our domain — the
-customer needs neither their own Cloudflare account nor a domain; requires
-`CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_ZONE_ID`/
-`TUNNEL_BASE_DOMAIN` set in the Pages project's env vars). Response
-(`201`): `{ "siteId": "st-...", "relaySecret": "...", "tunnelToken": "..." }`
-— the installer writes both into the relay's local `.env`; neither is
-shown again. Used by `apps/relay/install.sh` — you normally don't call
-this directly.
-
-## `POST /api/sites/:id/cameras`
-
-Register a camera under a site. Body: `{ "stream": "cam1", "name": "Sân vườn" }`
-(`stream` must match the go2rtc stream name / the camera's `id` in that
-site's `cameras.json`). Response (`201`): `{ "cameraId": "cam-..." }`.
-
-## `POST /api/sites/:id/tunnel`
-
-Provisions (or re-provisions) a named tunnel for a site that already
-exists — e.g. migrating one still on a Quick Tunnel fallback. Doesn't
-touch cameras/events/`relay_secret`. Response:
-`{ "tunnelToken": "...", "go2rtcUrl": "...", "relayUrl": "..." }` — write
-`tunnelToken` into that site's relay `.env` (`CLOUDFLARE_TUNNEL_TOKEN`)
-and restart it.
-
-## `PATCH /api/sites/:id` (internal — not for UI/API clients)
-
-Called by a site's relay on every startup to report its current Quick
-Tunnel URLs — only relevant for sites falling back to Quick Tunnel (no
-`CLOUDFLARE_API_TOKEN` configured on the backend); named-tunnel sites
-don't need this since the hostname is already stable. Authenticated with
-that site's `relay_secret` (header `x-relay-secret`), not an account API
-key. Body: `{ "go2rtcUrl": "...", "relayUrl": "..." }`.
-
-## `DELETE /api/sites/:id`
-
-Tears down the site's Cloudflare Tunnel + DNS records (if any) and
-deletes it, along with its cameras and events (no FK cascade, deleted
-explicitly).
-
-## `GET /api/cameras`
-
-List every camera the account can see, across all its sites.
-
-```json
-[
-  {
-    "cameraId": "cam-4f2e9b1c0a3d",
-    "stream": "tapo",
-    "cameraName": "Camera chính",
-    "siteId": "st-7789da83f1a2",
-    "siteName": "Nhà chính",
-    "go2rtcUrl": "https://st-7789da83f1a2-go2rtc.yourdomain.com"
-  }
-]
+curl -fsS "$CAMERAAI_API/api/settings/account" \
+  -H "Authorization: Bearer $CAMERAAI_TOKEN"
+curl -fsS "$CAMERAAI_API/api/cameras" \
+  -H "Authorization: Bearer $CAMERAAI_TOKEN"
 ```
 
-## `POST /api/cameras/:site/:camera/ptz`
+Signup and login return the bearer token:
 
-Body: `{ "direction": "up" | "down" | "left" | "right" | "stop" }`
-
-Forwards the command to that site's relay over its Cloudflare Tunnel.
-`404` if the site doesn't exist (or doesn't belong to your account), `502`
-if the relay is unreachable.
-
-## `GET /api/events`
-
-Query params (all optional): `site`, `camera`, `limit` (default 20, max 100).
-
-Returns the most recent motion/person events, newest first, each with
-`person_id`/`person_label` (both `null` if the AI worker isn't deployed,
-or no face was visible in the frame — e.g. the camera angle cropped it
-out).
-
-## `GET /api/people`
-
-List every clustered person for the account, most recently seen first.
-`label` is `null` until named (see `PATCH /api/people/:id`) — the UI
-shows those as unnamed until then. Never includes the raw embedding
-(biometric data, no reason to expose it to a client).
-
-```json
-[
-  {
-    "id": "person-4f2e9b1c0a3d",
-    "label": "Bố",
-    "first_seen_at": "2026-08-01 09:12:00",
-    "last_seen_at": "2026-08-03 09:58:04",
-    "seen_count": 7
-  }
-]
+```bash
+curl -fsS -X POST "$CAMERAAI_API/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  --data '{"email":"owner@example.com","password":"a-long-password"}'
 ```
 
-## `PATCH /api/people/:id`
+Send `Authorization: Bearer <token>` on all customer endpoints. Logout revokes that token. Never put it in URLs, logs, prompts, source control, or a camera machine shared by multiple customers.
 
-Name a clustered person. Body: `{ "label": "Bố" }` (empty/omitted clears
-it back to unnamed).
+## Endpoint map
 
-## `POST /api/jobs`
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /api/auth/signup`, `/login`, `/logout` |
+| Account | `GET /api/settings/account` |
+| Sites | `GET/POST /api/sites`, `DELETE /api/sites/{id}` |
+| Cameras | `GET /api/cameras`, `POST /api/sites/{id}/cameras` |
+| Control | `POST /api/cameras/{site}/{camera}/live`, `/ptz` |
+| Events/people | `GET /api/events`, `/events/{id}/video`, `/people`; `PATCH /api/people/{id}` |
+| Integrations/jobs | `GET/PUT/DELETE /api/settings/integrations`, `POST /api/jobs`, `GET /api/jobs/{id}` |
+| Billing | `POST /api/billing/checkout`, `/portal` |
+| Operations | `GET /api/health`; internal `/api/motion`, `/api/internal/maintenance` |
 
-Dispatch a heavy async task (currently RunPod only).
+See OpenAPI for bodies, response schemas, operation IDs and examples.
 
-Body: `{ "type": "runpod", "task": "face_search", ...anything else the handler needs }`
+## Streaming and PTZ
 
-Response (`202`): `{ "id": "runpod-abc123", "status": "queued" }`
+`POST /api/cameras/{site}/{camera}/live` returns a five-minute signed capability URL plus `expiresAt` and `viewerLimit`. Request a new URL shortly before expiry; do not persist or share it. Relay enforcement is currently Free: 1 and Pro: 5 concurrent viewers per camera.
 
-## `GET /api/jobs/:id`
+```bash
+curl -fsS -X POST "$CAMERAAI_API/api/cameras/st-example/cam1/live" \
+  -H "Authorization: Bearer $CAMERAAI_TOKEN"
 
-Poll job status. `404` if the job doesn't exist or belongs to a different
-account.
+curl -fsS -X POST "$CAMERAAI_API/api/cameras/st-example/cam1/ptz" \
+  -H "Authorization: Bearer $CAMERAAI_TOKEN" \
+  -H 'Content-Type: application/json' --data '{"direction":"left"}'
+```
 
-## `POST /api/motion` (internal — not for UI/API clients)
+PTZ accepts `up`, `down`, `left`, `right`, or `stop`. Always send `stop` after a movement command.
 
-Called by a site's relay when go2rtc reports motion. Authenticated with
-that site's `relay_secret` (header `x-relay-secret`), not an account API
-key. Body: `{ "siteId": "...", "camera": "..." }`.
+## Agent safety contract
 
-## `GET /api/health`
+The current bearer token has full account privileges; scoped agent keys/RBAC are not implemented yet. Until they are:
 
-Unauthenticated. Checks Turso connectivity. For uptime monitors.
+- default agents to GET operations;
+- require explicit human confirmation before `DELETE /api/sites/{id}`, billing, integration-secret changes, or creating tunnels/sites;
+- read the target first and echo its ID/name before a destructive request;
+- never retry a non-idempotent POST automatically unless the result is known;
+- cap polling and use exponential backoff on `429`, `502`, and `503`;
+- do not call internal relay/maintenance endpoints with a customer token.
 
-## Errors
+Custom OpenAPI extensions `x-agent-risk` and `x-internal` make these rules discoverable to tools.
 
-Every error response is `{ "error": "message" }` with an appropriate HTTP
-status (`400` bad input, `401` unauthorized, `404` not found, `502`/`503`
-upstream unavailable, `500` unexpected).
+## Errors and compatibility
+
+Errors use `{ "error": "message" }`. Common statuses are `400`, `401`, `404`, `409`, `429`, `502`, and `503`. There is no pagination cursor yet: events use `limit` (default 20, maximum 100). API versioning is not introduced; additive response fields must be tolerated. Breaking changes require a `/v2` API or a documented migration.
+
+Internal authentication differs: relay motion uses `x-relay-secret`; maintenance uses `MAINTENANCE_SECRET`; Stripe webhook verifies `Stripe-Signature`. These secrets are platform/site credentials, not customer API tokens.

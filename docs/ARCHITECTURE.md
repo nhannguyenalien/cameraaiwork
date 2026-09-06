@@ -3,13 +3,13 @@
 ## Overview
 
 ```
-Site A                              Site B (later)
-[Cameras] --RTSP/ONVIF-->            [Cameras] --RTSP/ONVIF-->
-  [go2rtc + apps/relay]                [go2rtc + apps/relay]
-        |                                     |
-        +-------------- Cloudflare Tunnel ----+
-                          (outbound only,
-                          no port forwarding)
+Site A                                      Site B
+[Cameras] --RTSP/ONVIF-->                   [Cameras] --RTSP/ONVIF-->
+  [go2rtc localhost + relay]                  [go2rtc localhost + relay]
+        |                                           |
+  [1 Named Tunnel / 1 hostname]               [1 Named Tunnel / 1 hostname]
+        +-------------------- Cloudflare ------------+
+                          (outbound only; no ports)
                               |
                               v
                  Cloudflare Pages (apps/pages)
@@ -87,11 +87,9 @@ change. See `schema.sql`.
 - `sites.id` / `cameras.id` must be globally unique (prefixed with the
   account id) because `/api/motion` looks a site up without an account
   filter — the relay authenticates with a site secret, not a customer key.
-- What's deliberately **not** built yet, because they're product decisions
-  rather than technical ones: a signup/login flow (magic link? OAuth?
-  Clerk/Auth0?), billing (Stripe? usage-based?), and plan/usage limits.
-  The schema and API don't block any of these — bolt them on when the
-  product direction is decided rather than guessing now.
+- Email/password signup/login, Stripe billing and plan limits are implemented.
+  Platform billing secrets stay server-side; customer Telegram/RunPod keys
+  are encrypted account settings.
 
 ## Production-hardening choices
 
@@ -120,16 +118,51 @@ change. See `schema.sql`.
   the Pages domain rather than hand-rolling a limiter in a Worker — the
   platform already does this well.
 
+## MVP tunnel and live-view boundary
+
+- Each site owns one Named Tunnel, one connector token and one hostname:
+  `https://<site-id>.<TUNNEL_BASE_DOMAIN>`.
+- cloudflared sends that hostname only to `127.0.0.1:4000` (the relay).
+  go2rtc binds `127.0.0.1:1984`; the AI worker is also an internal origin.
+- A SaaS-authenticated client calls `POST /api/cameras/:site/:camera/live`.
+  Pages signs a five-minute HMAC capability containing version, site,
+  go2rtc stream name, expiry, nonce and the account plan's viewer limit.
+  The relay validates it before proxying
+  `stream.html`, its static assets and `/api/ws` WebRTC signaling.
+- The relay counts active WebRTC signaling sockets per camera. Free allows
+  1 concurrent viewer/camera and Pro allows 5; excess connections get HTTP
+  429. The counter is local because MVP has one relay process per site.
+- Capture and AI requests use `/internal/go2rtc/*` and `/internal/ai/*`
+  with the site's relay secret. These paths reject browser/customer calls.
+- Cloudflare Access is intentionally absent from the customer flow. It
+  therefore consumes no Access user seats and customers need no Google or
+  Cloudflare identity.
+
+## Tunnel lifecycle and quota monitoring
+
+- An hourly GitHub Actions job calls `POST /api/internal/maintenance` with a
+  dedicated `MAINTENANCE_SECRET`; customer API keys cannot invoke it.
+- It compares `cameraaiwork-*` tunnels with IDs referenced by `sites`. Only
+  unreferenced product tunnels older than the six-hour grace period are
+  deleted with matching CNAME records. Unrelated tunnels and new provisioning
+  attempts remain untouched.
+- It reports managed and account-wide Tunnel/DNS counts. Configurable safety
+  thresholds default to 900 and return HTTP 503 so the workflow visibly fails
+  before capacity is exhausted. They are operational thresholds, not claims
+  about a fixed Cloudflare vendor quota.
+- Cloudflare Access is reserved for owner/admin operational tools only.
+
 ## Stability checklist (per site)
 
 - `go2rtc` and `apps/relay` both run under a process supervisor
   (launchd/systemd) that restarts on crash and reboot.
 - `cloudflared` (or Tailscale) handles the on-site ↔ Cloudflare link with
   automatic reconnect — no manual port forwarding.
-- Gate `go2rtc`'s own public tunnel hostname (the one the browser's
-  `<iframe>` hits directly for the live view) with Cloudflare Access if you
-  want it fully private; it's not covered by the API's bearer-token auth
-  since the browser loads it directly, not through a Pages Function.
+- Verify unsigned `/live/*` and `/internal/*` requests return 401, while a
+  freshly minted signed live URL loads and negotiates WebRTC.
+- Remote WebRTC media still needs a network path selected by ICE. If direct
+  UDP/TCP candidates cannot traverse a site's NAT/firewall, configure a TURN
+  server; the HTTP Cloudflare Tunnel carries signaling, not arbitrary UDP.
 
 ## Known issues carried over from the original single-camera code
 
