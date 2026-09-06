@@ -162,6 +162,40 @@ app.post("/ptz/:camera/:dir", requireSecret, (req, res) => {
   res.sendStatus(ok ? 200 : 404);
 });
 
+app.get("/controls/:camera", requireSecret, (req, res) => {
+  const camera = config.cameras.find((item) => item.id === req.params.camera);
+  if (!camera) return res.sendStatus(404);
+  const detected = ptz.capabilities(camera.id);
+  res.json({
+    online: detected.online,
+    ptz: detected.ptz,
+    talk: Boolean(config.tapoTalkbackPassword && camera.onvif?.ip),
+    light: detected.light,
+  });
+});
+
+app.post("/talk/:camera", requireSecret, express.raw({ type: "audio/*", limit: "3mb" }), async (req, res) => {
+  const camera = config.cameras.find((item) => item.id === req.params.camera);
+  if (!camera) return res.sendStatus(404);
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Audio trống" });
+  try {
+    const played = await talkback.play(camera, req.body);
+    if (!played) return res.status(409).json({ error: "Camera không hỗ trợ đàm thoại" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(`❌ Đàm thoại lỗi (${camera.id}):`, err.message || err);
+    res.status(502).json({ error: "Không phát được âm thanh qua camera" });
+  }
+});
+
+app.post("/light/:camera", requireSecret, async (req, res) => {
+  const camera = config.cameras.find((item) => item.id === req.params.camera);
+  if (!camera) return res.sendStatus(404);
+  const ok = await ptz.setLight(camera.id, Boolean(req.body?.enabled));
+  if (!ok) return res.status(409).json({ error: "Camera không hỗ trợ điều khiển đèn" });
+  res.json({ ok: true });
+});
+
 app.get("/health", requireSecret, (req, res) => res.json({ ok: true, cameras: config.cameras.map((c) => c.id) }));
 
 const cooldowns = new Map(); // camera id -> bool

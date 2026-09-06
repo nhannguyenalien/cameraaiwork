@@ -48,4 +48,28 @@ function stop(cameraId) {
   return true;
 }
 
-module.exports = { connectAll, move, stop };
+function capabilities(cameraId) {
+  const cam = connections.get(cameraId);
+  if (!cam) return { online: false, ptz: false, light: false };
+  const commands = cam.serviceCapabilities?.auxiliaryCommands || [];
+  const lightCommands = commands.filter((command) => /light|illumin|lamp|spot/i.test(command));
+  return {
+    online: true,
+    ptz: Boolean(cam.activeSource?.ptz),
+    light: lightCommands.length >= 2,
+    lightCommands,
+  };
+}
+
+function setLight(cameraId, enabled) {
+  const cam = connections.get(cameraId);
+  const available = capabilities(cameraId).lightCommands || [];
+  if (!cam || available.length < 2) return Promise.resolve(false);
+  const wanted = available.find((command) => enabled ? /on|start|enable/i.test(command) : /off|stop|disable/i.test(command));
+  if (!wanted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    cam.ptzSendAuxiliaryCommand({ data: wanted }, (err) => resolve(!err));
+  });
+}
+
+module.exports = { connectAll, move, stop, capabilities, setLight };
