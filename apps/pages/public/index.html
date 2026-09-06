@@ -80,6 +80,18 @@
 
             <!-- Cameras: grid, one tile per camera -->
             <div class="tab-pane active show" id="tab-cameras">
+              <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-home-plus me-2"></i>Thêm nhà / địa điểm mới</h3></div>
+                <div class="card-body">
+                  <p class="text-secondary">Mỗi PC/VPS chạy 24/7 tại một nhà tương ứng với một site. Với 3 nhà, hãy tạo và chạy 3 lệnh riêng; mỗi mã chỉ dùng được một lần trong 15 phút.</p>
+                  <div class="d-flex gap-2 mb-3">
+                    <button id="home-create-install-command" class="btn btn-primary" type="button"><i class="ti ti-key me-1"></i>Tạo lệnh cài cho nhà này</button>
+                    <button id="home-copy-install-command" class="btn btn-outline-secondary d-none" type="button"><i class="ti ti-copy me-1"></i>Sao chép</button>
+                  </div>
+                  <textarea id="home-install-command" class="form-control font-monospace d-none" rows="4" readonly spellcheck="false"></textarea>
+                  <div id="home-install-command-note" class="form-hint"></div>
+                </div>
+              </div>
               <div id="camera-grid" class="row row-cards"></div>
               <div id="camera-empty" class="text-secondary text-center py-5 d-none" data-i18n="no_cameras">Chưa có camera nào.</div>
             </div>
@@ -614,27 +626,36 @@
     </tr>`).join('');
   }
 
-  document.getElementById('create-install-command').addEventListener('click', async () => {
-    const button = document.getElementById('create-install-command');
-    button.disabled = true;
-    try {
-      const result = await api('/api/install-tokens', { method: 'POST' });
-      const origin = location.origin;
-      const command = `curl -fsSL '${origin}/install.sh' | sudo env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash`;
-      const output = document.getElementById('install-command');
-      output.value = command;
-      output.classList.remove('d-none');
-      document.getElementById('copy-install-command').classList.remove('d-none');
-      document.getElementById('install-command-note').textContent = `Lệnh này thuộc ${accountSummary?.email || 'tài khoản hiện tại'} và chỉ dùng được một lần trong 15 phút.`;
-    } catch (error) { showSettingsMessage(error.message, false); }
-    finally { button.disabled = false; }
-  });
+  function bindInstallCommand(prefix = '') {
+    const createButton = document.getElementById(`${prefix}create-install-command`);
+    const copyButton = document.getElementById(`${prefix}copy-install-command`);
+    const output = document.getElementById(`${prefix}install-command`);
+    const note = document.getElementById(`${prefix}install-command-note`);
 
-  document.getElementById('copy-install-command').addEventListener('click', async () => {
-    const command = document.getElementById('install-command').value;
-    await navigator.clipboard.writeText(command);
-    document.getElementById('install-command-note').textContent = 'Đã sao chép. Chạy lệnh này trên VPS cùng mạng LAN với camera.';
-  });
+    createButton.addEventListener('click', async () => {
+      createButton.disabled = true;
+      note.classList.remove('text-danger');
+      try {
+        const result = await api('/api/install-tokens', { method: 'POST' });
+        const origin = location.origin;
+        output.value = `curl -fsSL '${origin}/install.sh' | sudo env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash`;
+        output.classList.remove('d-none');
+        copyButton.classList.remove('d-none');
+        note.textContent = `Lệnh này thuộc ${accountSummary?.email || 'tài khoản hiện tại'} và chỉ dùng được một lần trong 15 phút.`;
+      } catch (error) {
+        note.textContent = error.message;
+        note.classList.add('text-danger');
+      } finally { createButton.disabled = false; }
+    });
+
+    copyButton.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(output.value);
+      note.textContent = 'Đã sao chép. Chạy lệnh này trên PC/VPS cùng mạng LAN với camera.';
+    });
+  }
+
+  bindInstallCommand();
+  bindInstallCommand('home-');
 
   async function deleteSite(siteId, name) {
     if (!confirm(t('delete_confirm', { name }))) return;
