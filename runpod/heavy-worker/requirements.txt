@@ -1,5 +1,1 @@
 runpod>=1.7
-# Add heavy-task deps as tasks are implemented, e.g.:
-# torch
-# ultralytics
-# onnxruntime-gpu

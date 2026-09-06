@@ -21,12 +21,23 @@ CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,               -- e.g. "acct_abc123"
     name TEXT,
     email TEXT,                        -- set for accounts created via Google Sign-In
-    created_at DATETIME DEFAULT (datetime('now'))
+    created_at DATETIME DEFAULT (datetime('now')),
+    plan TEXT DEFAULT 'free',
+    subscription_status TEXT DEFAULT 'inactive',
+    stripe_customer_id TEXT,
+    stripe_subscription_id TEXT
 );
 -- SQLite can't add a UNIQUE column via ALTER TABLE, so uniqueness is a
 -- separate index instead (NULLs don't collide, so accounts without an
 -- email — e.g. seeded manually — are unaffected).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_email ON accounts(email);
+
+CREATE TABLE IF NOT EXISTS auth_credentials (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id),
+    password_salt TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    updated_at DATETIME DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,               -- SHA-256 hash of the key, never the raw key
@@ -36,12 +47,21 @@ CREATE TABLE IF NOT EXISTS api_keys (
     revoked_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS account_integrations (
+    account_id TEXT NOT NULL REFERENCES accounts(id),
+    provider TEXT NOT NULL,
+    encrypted_config TEXT NOT NULL,
+    updated_at DATETIME DEFAULT (datetime('now')),
+    PRIMARY KEY (account_id, provider)
+);
+
 CREATE TABLE IF NOT EXISTS sites (
     id TEXT PRIMARY KEY,               -- e.g. "st-7789da83f1a2", see note above
     account_id TEXT NOT NULL REFERENCES accounts(id),
     name TEXT,
     go2rtc_url TEXT NOT NULL,          -- this site's go2rtc, via its Cloudflare Tunnel
     relay_url TEXT NOT NULL,           -- this site's relay, via its Cloudflare Tunnel
+    ai_worker_url TEXT,                -- optional local AI worker via the same tunnel
     relay_secret TEXT NOT NULL,        -- shared secret this site's relay authenticates with
     cloudflare_tunnel_id TEXT          -- lets us re-fetch the tunnel token later without storing it
 );
@@ -51,7 +71,8 @@ CREATE TABLE IF NOT EXISTS cameras (
     site_id TEXT NOT NULL REFERENCES sites(id),
     account_id TEXT NOT NULL REFERENCES accounts(id), -- denormalized for fast scoping
     stream TEXT NOT NULL,              -- go2rtc stream name at that site
-    name TEXT
+    name TEXT,
+    record_on_person INTEGER NOT NULL DEFAULT 1 -- upload an R2 clip for person events
 );
 
 -- One row per distinct face the system has clustered together — not
@@ -79,7 +100,11 @@ CREATE TABLE IF NOT EXISTS events (
     person_id TEXT REFERENCES people(id),  -- NULL if no face was matched (e.g. AI worker not deployed yet)
     timestamp DATETIME DEFAULT (datetime('now','localtime')),
     type TEXT,
-    video_link TEXT
+    video_link TEXT,
+    video_key TEXT                     -- R2 object key of the motion clip (functions/_lib/r2.js),
+                                        -- set asynchronously after upload finishes; NULL until
+                                        -- then, or forever if capture failed (best-effort, never
+                                        -- blocks the alert path)
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -99,9 +124,13 @@ CREATE INDEX IF NOT EXISTS idx_people_account ON people(account_id);
 --   CREATE UNIQUE INDEX idx_accounts_email ON accounts(email);
 -- Migrating an existing DB that predates the `cloudflare_tunnel_id` column:
 --   ALTER TABLE sites ADD COLUMN cloudflare_tunnel_id TEXT;
+-- Migrating an existing DB that predates the per-site AI URL:
+--   ALTER TABLE sites ADD COLUMN ai_worker_url TEXT;
 -- Migrating an existing DB that predates `people`/`events.person_id`:
 --   CREATE TABLE people (...); -- see above
 --   ALTER TABLE events ADD COLUMN person_id TEXT REFERENCES people(id);
+-- Migrating an existing DB that predates `events.video_key`:
+--   ALTER TABLE events ADD COLUMN video_key TEXT;
 
 -- Normally you don't hand-write these inserts at all — POST /api/sites and
 -- POST /api/sites/:id/cameras (called by apps/relay/install.sh) do this for

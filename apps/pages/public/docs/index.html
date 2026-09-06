@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CameraAIWork Docs</title>
+  <meta name="description" content="Tài liệu cài đặt camera, vận hành production và API cho CameraAIWork." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    :root { scroll-padding-top: 5rem; }
+    body { background: #f6f8fb; }
+    pre { margin: 0; padding: 1rem; color: #dbeafe; background: #111827; border-radius: .5rem; overflow-x: auto; }
+    code { font-size: .875em; }
+    .doc-section { margin-bottom: 2rem; }
+    .doc-nav { position: sticky; top: 1rem; }
+    .swagger-ui .topbar, .swagger-ui .information-container .info .title small { display: none; }
+    .swagger-ui { font-family: inherit; }
+    .swagger-ui .wrapper { padding: 0; max-width: none; }
+    .swagger-ui .scheme-container { box-shadow: none; padding: 1rem; }
+  </style>
+</head>
+<body class="border-top-wide border-primary">
+  <header class="navbar navbar-expand-md navbar-light bg-white border-bottom">
+    <div class="container-xl">
+      <a class="navbar-brand" href="/">CameraAIWork</a>
+      <div class="navbar-nav flex-row gap-2 align-items-center">
+        <select id="language-select" class="form-select form-select-sm" aria-label="Language">
+          <option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option>
+          <option value="fr">Français</option><option value="ko">한국어</option><option value="es">Español</option>
+        </select>
+        <a class="nav-link" href="/openapi.yaml" download><i class="ti ti-file-code me-1"></i>OpenAPI YAML</a>
+        <a id="dashboard-link" class="btn btn-primary btn-sm" href="/">Mở dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrapper">
+    <div class="page-header">
+      <div class="container-xl py-4">
+        <div class="page-pretitle">Documentation</div>
+        <h1 id="page-title" class="page-title">Cài đặt, vận hành và API</h1>
+        <p id="page-subtitle" class="text-secondary mt-2 mb-0">Một site · một Named Tunnel · một hostname · SaaS auth · signed live token.</p>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="container-xl">
+        <div class="row g-4">
+          <aside class="col-lg-3">
+            <div class="card doc-nav">
+              <div class="list-group list-group-flush">
+                <a id="nav-architecture" class="list-group-item list-group-item-action" href="#architecture">Kiến trúc MVP</a>
+                <a id="nav-prerequisites" class="list-group-item list-group-item-action" href="#prerequisites">Chuẩn bị máy site</a>
+                <a id="nav-install" class="list-group-item list-group-item-action" href="#install">Cài đặt</a>
+                <a id="nav-verify" class="list-group-item list-group-item-action" href="#verify">Kiểm tra E2E</a>
+                <a id="nav-agent" class="list-group-item list-group-item-action" href="#agent">Dùng API cho agent</a>
+                <a id="nav-production" class="list-group-item list-group-item-action" href="#production">Production checklist</a>
+                <a id="nav-api" class="list-group-item list-group-item-action" href="#api-reference">API reference</a>
+              </div>
+            </div>
+          </aside>
+
+          <div class="col-lg-9">
+            <section id="architecture" class="card doc-section">
+              <div class="card-body">
+                <h2 id="architecture-title">Mô hình triển khai</h2>
+                <p id="architecture-desc">Mỗi địa điểm có một máy luôn bật cùng LAN với camera. go2rtc và AI chỉ nghe trên localhost; Cloudflare Tunnel chỉ đưa relay đã xác thực ra ngoài. Khách đăng nhập SaaS và nhận URL WebRTC ký ngắn hạn, không dùng Google Cloudflare Access.</p>
+                <div class="row g-3">
+                  <div class="col-md-4"><div class="card card-sm bg-primary-lt"><div class="card-body"><strong>Free</strong><br><span class="text-secondary">1 viewer/camera</span></div></div></div>
+                  <div class="col-md-4"><div class="card card-sm bg-azure-lt"><div class="card-body"><strong>Pro</strong><br><span class="text-secondary">5 viewers/camera</span></div></div></div>
+                  <div class="col-md-4"><div class="card card-sm bg-green-lt"><div class="card-body"><strong>Clip</strong><br><span class="text-secondary">R2; live qua WebRTC</span></div></div></div>
+                </div>
+              </div>
+            </section>
+
+            <section id="prerequisites" class="card doc-section">
+              <div class="card-body">
+                <h2 id="prerequisites-title">1. Chuẩn bị máy tại site</h2>
+                <ul id="prerequisites-list">
+                  <li>macOS hoặc Linux 64-bit, chạy 24/7, ưu tiên Ethernet.</li>
+                  <li>Node.js 20+, Git, Python 3.10+ với <code>venv</code>, <code>curl</code>; Linux cần <code>sudo</code>.</li>
+                  <li>Camera đã bật RTSP + ONVIF, có IP cố định/DHCP reservation và tài khoản riêng.</li>
+                  <li>Outbound HTTPS/WSS tới Cloudflare, GitHub và dashboard; không mở port router.</li>
+                  <li>MVP yêu cầu nhập IP camera, chưa tự động quét camera trong LAN.</li>
+                </ul>
+                <div id="private-repo-note" class="alert alert-warning mb-0"><strong>Repo private:</strong> tạo GitHub deploy key chỉ-đọc cho từng máy site. Không chép PAT cá nhân lên máy khách.</div>
+              </div>
+            </section>
+
+            <section id="install" class="card doc-section">
+              <div class="card-body">
+                <h2 id="install-title">2. Cài đặt</h2>
+                <p id="install-desc">Đăng ký public key của máy trong GitHub Repository → Settings → Deploy keys, không bật quyền write.</p>
+                <pre><code>ssh-keygen -t ed25519 -C cameraai-site -f "$HOME/.ssh/cameraai_deploy" -N ''
+cat "$HOME/.ssh/cameraai_deploy.pub"
+
+git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git
+cd cameraaiwork
+CAMERAAIWORK_REPO=git@github.com:nhannguyenalien/cameraaiwork.git \
+CAMERAAIWORK_API=https://cameraaiwork.pages.dev \
+./apps/relay/install.sh</code></pre>
+                <p id="install-note" class="text-secondary mt-3 mb-0">Installer hỏi API key account, tên site, IP/ONVIF camera; sau đó đăng ký site, tạo Named Tunnel và cài go2rtc, relay, AI thành service.</p>
+              </div>
+            </section>
+
+            <section id="verify" class="card doc-section">
+              <div class="card-body">
+                <h2 id="verify-title">3. Kiểm tra</h2>
+                <div class="mb-3"><span class="badge bg-blue-lt me-2">macOS</span></div>
+                <pre><code>launchctl list | grep cameraaiwork
+tail -n 100 /tmp/cameraaiwork-relay.log
+curl -fsS http://127.0.0.1:1984/api/streams
+curl -fsS http://127.0.0.1:4000/health</code></pre>
+                <div class="mt-4 mb-3"><span class="badge bg-green-lt me-2">Linux</span></div>
+                <pre><code>systemctl --no-pager --full status cameraaiwork-go2rtc cameraaiwork-relay cameraaiwork-ai
+journalctl -u cameraaiwork-relay -n 100 --no-pager
+curl -fsS http://127.0.0.1:1984/api/streams
+curl -fsS http://127.0.0.1:4000/health</code></pre>
+                <p id="verify-note" class="mt-3 mb-0">Trên dashboard, test theo chuỗi: camera xuất hiện → live → PTZ rồi stop → motion event → AI → clip R2 → Telegram.</p>
+              </div>
+            </section>
+
+            <section id="agent" class="card doc-section">
+              <div class="card-body">
+                <h2 id="agent-title">API cho AI agent</h2>
+                <p id="agent-desc">Nạp <a href="/openapi.yaml"><code>/openapi.yaml</code></a> làm tool schema. Token phải nằm trong secret store và gửi qua <code>Authorization: Bearer</code>.</p>
+                <pre><code>export CAMERAAI_API='https://cameraaiwork.pages.dev'
+export CAMERAAI_TOKEN='account-session-key'
+curl -fsS "$CAMERAAI_API/api/cameras" \
+  -H "Authorization: Bearer $CAMERAAI_TOKEN"</code></pre>
+                <div id="agent-warning" class="alert alert-danger mt-3 mb-0">Account token hiện có toàn quyền. Agent phải mặc định chỉ đọc và xin xác nhận người dùng trước thao tác có nhãn <code>x-agent-risk</code> destructive, financial hoặc secret-write. Không tự retry POST tạo site/tunnel/job.</div>
+              </div>
+            </section>
+
+            <section id="production" class="card doc-section">
+              <div class="card-body">
+                <h2 id="production-title">Production checklist</h2>
+                <div id="production-list"></div>
+              </div>
+            </section>
+
+            <section id="api-reference" class="card doc-section">
+              <div class="card-header"><h2 id="api-title" class="card-title">Interactive API reference</h2></div>
+              <div class="card-body p-0"><div id="swagger-ui"></div></div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="/docs/i18n.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => SwaggerUIBundle({
+      url: '/openapi.yaml',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      defaultModelsExpandDepth: 1,
+      displayRequestDuration: true,
+      persistAuthorization: false,
+      tryItOutEnabled: false
+    }));
+  </script>
+</body>
+</html>

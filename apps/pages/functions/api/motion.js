@@ -3,14 +3,16 @@
 // Authenticated per-site (not per-account — the relay holds a site secret,
 // not a customer API key; see _middleware.js and getSiteUnscoped).
 import { getDb } from "../_lib/db.js";
-import { getSiteUnscoped } from "../_lib/sites.js";
+import { getCameraByStreamUnscoped, getSiteUnscoped } from "../_lib/sites.js";
 import { getFrame } from "../_lib/go2rtc.js";
 import { detectPerson } from "../_lib/detection.js";
 import { findOrCreatePerson } from "../_lib/faceMatch.js";
 import { sendPhotoAlert } from "../_lib/telegram.js";
+import { captureClip, uploadClip } from "../_lib/r2.js";
+import { getIntegration } from "../_lib/integrations.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
 
-export const onRequestPost = withErrorHandling(async ({ request, env }) => {
+export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil }) => {
   let body;
   try {
     body = await request.json();
@@ -28,8 +30,15 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
     return errorJson("Unauthorized", 401);
   }
 
+  const cameraConfig = await getCameraByStreamUnscoped(env, site.id, camera);
+  if (!cameraConfig) return errorJson("Camera not found", 404);
+
+  // Open the MP4 stream before the slower snapshot/AI/Telegram/DB path only
+  // when this camera is configured to retain person-event video.
+  const shouldRecord = Number(cameraConfig.record_on_person ?? 1) === 1;
+  const clipPromise = shouldRecord ? captureClip(site, camera) : null;
   const frame = await getFrame(env, site, camera);
-  const { hasPerson, faceEmbedding } = await detectPerson(env, frame);
+  const { hasPerson, faceEmbedding } = await detectPerson(env, site, frame);
 
   if (!hasPerson) {
     return json({ ok: true, alerted: false });
@@ -38,13 +47,28 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const personId = await findOrCreatePerson(env, site.account_id, faceEmbedding);
 
   const caption = `🔔 Phát hiện người (${site.name || site.id})!\n⏰ ${new Date().toLocaleString("vi-VN")}`;
-  const link = await sendPhotoAlert(env, frame, caption);
+  const telegram = await getIntegration(env, site.account_id, "telegram");
+  const link = await sendPhotoAlert(telegram, frame, caption);
 
   const db = getDb(env);
-  await db.execute({
+  const inserted = await db.execute({
     sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link) VALUES (?, ?, ?, ?, ?, ?)",
     args: [site.account_id, site.id, camera, personId, "Person", link],
   });
+  const eventId = Number(inserted.lastInsertRowid);
+
+  // Capture + upload happens after the response below (via waitUntil) —
+  // it takes several seconds (see _lib/r2.js), and the relay that called
+  // this webhook times its own request out at 5s (apps/relay/src/index.js),
+  // so it must never block the reply.
+  if (shouldRecord) {
+    waitUntil(
+      uploadClip(env, clipPromise, `${site.account_id}/${eventId}.mp4`).then((key) => {
+        if (!key) return;
+        return db.execute({ sql: "UPDATE events SET video_key = ? WHERE id = ?", args: [key, eventId] });
+      })
+    );
+  }
 
   return json({ ok: true, alerted: true, personId });
 });

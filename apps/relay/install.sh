@@ -7,9 +7,9 @@
 # the repo, installs cloudflared + go2rtc, asks for the account API key and
 # camera info, registers the site/camera with the backend (POST /api/sites,
 # POST /api/sites/:id/cameras — no manual Turso access needed), writes
-# local config, and installs the always-on service. The relay itself starts
-# its own Cloudflare Quick Tunnels and self-registers their URLs — nothing
-# to configure on Cloudflare's side either.
+# local config, and installs the always-on service. The backend provisions
+# one Named Tunnel + one hostname for the site and returns its connector
+# token; customers never need a Cloudflare account or Cloudflare Access.
 set -euo pipefail
 
 REPO_URL="${CAMERAAIWORK_REPO:-https://github.com/nhannguyenalien/cameraaiwork.git}"
@@ -28,6 +28,10 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 if ! command -v git >/dev/null 2>&1; then
   echo "!! Cần cài git trước." >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "!! Cần Python 3.10+ và module venv để cài AI worker." >&2
   exit 1
 fi
 
@@ -121,6 +125,8 @@ echo "==> Đã ghi apps/relay/cameras.json và apps/relay/.env"
 # --- 6. go2rtc + relay deps ---
 bash infra/setup.sh
 (cd apps/relay && npm install --silent)
+python3 -m venv ai/worker/.venv
+ai/worker/.venv/bin/pip install --quiet -r ai/worker/requirements.txt
 
 # --- 7. Install as an always-on service ---
 NODE_PATH="$(command -v node)"
@@ -129,7 +135,7 @@ USER_NAME="$(whoami)"
 if [[ "$(uname -s)" == "Darwin" ]]; then
   mkdir -p "$HOME/Library/LaunchAgents"
 
-  for svc in go2rtc relay; do
+  for svc in go2rtc relay ai; do
     src="infra/launchd/com.cameraaiwork.$svc.plist"
     dest="$HOME/Library/LaunchAgents/com.cameraaiwork.$svc.plist"
     sed -e "s#REPLACE_WITH_REPO_ROOT#$INSTALL_DIR#g" \
@@ -138,9 +144,9 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     launchctl unload "$dest" 2>/dev/null || true
     launchctl load "$dest"
   done
-  echo "==> Đã cài 2 launchd service (go2rtc, relay). Logs: /tmp/cameraaiwork-*.log"
+  echo "==> Đã cài 3 launchd service (go2rtc, relay, ai). Logs: /tmp/cameraaiwork-*.log"
 else
-  for svc in go2rtc relay; do
+  for svc in go2rtc relay ai; do
     src="infra/systemd/cameraaiwork-$svc.service"
     dest="/etc/systemd/system/cameraaiwork-$svc.service"
     sed -e "s#REPLACE_WITH_REPO_ROOT#$INSTALL_DIR#g" \
@@ -148,8 +154,8 @@ else
         "$src" | sudo tee "$dest" > /dev/null
   done
   sudo systemctl daemon-reload
-  sudo systemctl enable --now cameraaiwork-go2rtc cameraaiwork-relay
-  echo "==> Đã cài 2 systemd service (go2rtc, relay)."
+  sudo systemctl enable --now cameraaiwork-go2rtc cameraaiwork-relay cameraaiwork-ai
+  echo "==> Đã cài 3 systemd service (go2rtc, relay, ai)."
 fi
 
 echo

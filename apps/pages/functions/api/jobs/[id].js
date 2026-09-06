@@ -1,5 +1,6 @@
 import { getDb } from "../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
+import { getIntegration } from "../../_lib/integrations.js";
 
 export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
   const db = getDb(env);
@@ -12,10 +13,12 @@ export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
   if (!job) return errorJson("Job not found", 404); // also true if it belongs to another account
 
   if (job.id.startsWith("runpod-")) {
+    const runpod = await getIntegration(env, data.accountId, "runpod");
+    if (!runpod?.apiKey || !runpod?.endpointId) return errorJson("RunPod chưa được cấu hình", 503);
     const runpodId = job.id.replace("runpod-", "");
     const res = await fetch(
-      `https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/status/${runpodId}`,
-      { headers: { Authorization: `Bearer ${env.RUNPOD_API_KEY}` } }
+      `https://api.runpod.ai/v2/${runpod.endpointId}/status/${runpodId}`,
+      { headers: { Authorization: `Bearer ${runpod.apiKey}` } }
     );
     const statusData = await res.json();
     return json({ id: job.id, type: job.type, ...statusData });

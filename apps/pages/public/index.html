@@ -12,7 +12,12 @@
     <div class="container-xl">
       <h1 class="navbar-brand navbar-brand-autodark">CameraAIWork</h1>
       <div class="navbar-nav flex-row order-md-last">
-        <button id="logout-btn" class="btn btn-outline-secondary btn-sm d-none">Đăng xuất</button>
+        <select id="language-select" class="form-select form-select-sm me-2" style="width:auto" aria-label="Language">
+          <option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option>
+          <option value="fr">Français</option><option value="ko">한국어</option><option value="es">Español</option>
+        </select>
+        <a href="/docs/" class="btn btn-ghost-secondary btn-sm me-2"><i class="ti ti-book me-1"></i><span data-i18n="docs">Tài liệu</span></a>
+        <button id="logout-btn" class="btn btn-outline-secondary btn-sm d-none" data-i18n="logout">Đăng xuất</button>
       </div>
     </div>
   </header>
@@ -21,18 +26,20 @@
     <div class="page-body">
       <div class="container-xl">
 
-        <!-- Login: paste account API key, stored in localStorage only -->
+        <!-- Customer login. The server issues a scoped session API key after auth. -->
         <div id="login-card" class="row justify-content-center">
           <div class="col-md-5">
             <form id="login-form" class="card card-md">
               <div class="card-body">
-                <h2 class="card-title">Đăng nhập</h2>
-                <p class="text-secondary">Dán API key của account (tạo bằng <code>scripts/generate-api-key.js</code>).</p>
-                <div class="mb-3">
-                  <label class="form-label">API key</label>
-                  <input id="api-key-input" type="password" class="form-control" placeholder="API key" required />
+                <h2 class="card-title" data-i18n="login">Đăng nhập</h2>
+                <p class="text-secondary" data-i18n="login_intro">Đăng nhập hoặc tạo tài khoản để quản lý hệ thống camera.</p>
+                <div class="mb-2"><input id="email-input" type="email" class="form-control" placeholder="Email" /></div>
+                <div class="mb-2"><input id="password-input" type="password" class="form-control" data-i18n-placeholder="password_placeholder" placeholder="Mật khẩu (ít nhất 10 ký tự)" /></div>
+                <div class="d-flex gap-2">
+                  <button id="email-login-btn" type="button" class="btn btn-outline-primary flex-fill" data-i18n="login">Đăng nhập</button>
+                  <button id="signup-btn" type="button" class="btn btn-outline-secondary flex-fill" data-i18n="signup">Tạo tài khoản</button>
                 </div>
-                <button type="submit" class="btn btn-primary w-100">Vào dashboard</button>
+                <div id="auth-error" class="text-danger small mt-2"></div>
               </div>
             </form>
           </div>
@@ -43,29 +50,37 @@
 
           <ul class="nav nav-tabs mb-3" role="tablist">
             <li class="nav-item">
-              <a href="#tab-cameras" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-video me-1"></i>Camera</a>
+              <a href="#tab-cameras" class="nav-link active" data-bs-toggle="tab"><i class="ti ti-video me-1"></i><span data-i18n="cameras">Camera</span></a>
             </li>
             <li class="nav-item">
-              <a href="#tab-people" class="nav-link" data-bs-toggle="tab"><i class="ti ti-users me-1"></i>Người</a>
+              <a href="#tab-people" class="nav-link" data-bs-toggle="tab"><i class="ti ti-users me-1"></i><span data-i18n="people">Người</span></a>
             </li>
             <li class="nav-item">
-              <a href="#tab-events" class="nav-link" data-bs-toggle="tab"><i class="ti ti-bell me-1"></i>Sự kiện</a>
+              <a href="#tab-events" class="nav-link" data-bs-toggle="tab"><i class="ti ti-bell me-1"></i><span data-i18n="events">Sự kiện</span></a>
+            </li>
+            <li class="nav-item">
+              <a href="#tab-settings" class="nav-link" data-bs-toggle="tab"><i class="ti ti-settings me-1"></i><span data-i18n="settings">Cài đặt</span></a>
             </li>
           </ul>
+          <div class="d-flex justify-content-end gap-2 mb-3">
+            <span id="plan-badge" class="badge bg-secondary-lt align-self-center" data-i18n="loading_plan">Đang tải gói…</span>
+            <button id="subscribe-btn" class="btn btn-primary btn-sm" data-i18n="upgrade">Nâng cấp Pro</button>
+            <button id="billing-btn" class="btn btn-outline-secondary btn-sm" data-i18n="billing">Quản lý thanh toán</button>
+          </div>
 
           <div class="tab-content">
 
             <!-- Cameras: grid, one tile per camera -->
             <div class="tab-pane active show" id="tab-cameras">
               <div id="camera-grid" class="row row-cards"></div>
-              <div id="camera-empty" class="text-secondary text-center py-5 d-none">Chưa có camera nào.</div>
+              <div id="camera-empty" class="text-secondary text-center py-5 d-none" data-i18n="no_cameras">Chưa có camera nào.</div>
             </div>
 
             <!-- People: grid of clustered faces, rename inline -->
             <div class="tab-pane" id="tab-people">
               <div id="people-grid" class="row row-cards"></div>
-              <div id="people-empty" class="text-secondary text-center py-5 d-none">
-                Chưa có ai được ghi nhận — cần bật <code>AI_WORKER_URL</code> để nhận diện khuôn mặt.
+              <div id="people-empty" class="text-secondary text-center py-5 d-none" data-i18n="no_people">
+                Chưa có ai được ghi nhận — cần kết nối AI worker cho site để nhận diện khuôn mặt.
               </div>
             </div>
 
@@ -76,16 +91,86 @@
                   <table class="table card-table table-vcenter">
                     <thead>
                       <tr>
-                        <th>Thời gian</th>
-                        <th>Camera</th>
-                        <th>Người</th>
-                        <th>Ảnh</th>
+                        <th data-i18n="time">Thời gian</th><th>Camera</th>
+                        <th data-i18n="person">Người</th><th data-i18n="media">Ảnh</th>
                       </tr>
                     </thead>
                     <tbody id="events-body"></tbody>
                   </table>
                 </div>
               </div>
+            </div>
+
+            <div class="tab-pane" id="tab-settings">
+              <div id="settings-message" class="alert d-none" role="alert"></div>
+              <div class="row row-cards">
+                <div class="col-12">
+                  <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                      <div><h3 class="card-title" data-i18n="connected_sites">Site đã kết nối</h3><div id="site-usage" class="text-secondary small"></div></div>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadSites()" data-i18n="refresh">Làm mới</button>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table card-table table-vcenter"><thead><tr><th data-i18n="name">Tên</th><th>Camera</th><th data-i18n="relay_address">Địa chỉ relay</th><th></th></tr></thead><tbody id="sites-body"></tbody></table>
+                    </div>
+                    <div id="sites-empty" class="card-body text-secondary d-none" data-i18n="no_sites">Chưa có site. Chạy bộ cài relay tại máy ở địa điểm cần kết nối.</div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="card">
+                    <div class="card-header"><h3 class="card-title" data-i18n="event_recording">Lưu video theo sự kiện</h3></div>
+                    <div class="card-body">
+                      <p class="text-secondary" data-i18n="event_recording_note">Chọn camera cần lưu clip lên R2 khi AI xác nhận có người.</p>
+                      <div id="recording-options" class="row g-3"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <form id="account-form" class="card">
+                    <div class="card-header"><h3 class="card-title" data-i18n="account_security">Tài khoản & bảo mật</h3></div>
+                    <div class="card-body">
+                      <div class="mb-3">
+                        <label class="form-label" data-i18n="account_email">Email đăng nhập</label>
+                        <input id="account-email" type="email" class="form-control" autocomplete="email" />
+                        <div id="account-email-note" class="form-hint"></div>
+                      </div>
+                      <p class="text-secondary small" data-i18n="password_change_note">Bạn đã đăng nhập nên không cần nhập mật khẩu cũ.</p>
+                      <div class="mb-3">
+                        <label class="form-label" data-i18n="new_password">Mật khẩu mới</label>
+                        <input id="new-password" type="password" class="form-control" minlength="10" maxlength="1024" autocomplete="new-password" required data-i18n-placeholder="password_placeholder" />
+                      </div>
+                      <div>
+                        <label class="form-label" data-i18n="confirm_password">Nhập lại mật khẩu mới</label>
+                        <input id="confirm-password" type="password" class="form-control" minlength="10" maxlength="1024" autocomplete="new-password" required />
+                      </div>
+                    </div>
+                    <div class="card-footer"><button class="btn btn-primary" type="submit" data-i18n="change_password">Đổi mật khẩu</button></div>
+                  </form>
+                </div>
+                <div class="col-lg-6">
+                  <form id="telegram-form" class="card">
+                    <div class="card-header"><h3 class="card-title" data-i18n="telegram_alerts">Telegram cảnh báo</h3></div>
+                    <div class="card-body">
+                      <p id="telegram-status" class="text-secondary" data-i18n="not_configured">Chưa cấu hình</p>
+                      <div class="mb-3"><label class="form-label">Bot token</label><input id="telegram-token" type="password" class="form-control" autocomplete="off" required /></div>
+                      <div><label class="form-label">Chat ID</label><input id="telegram-chat" class="form-control" autocomplete="off" required /></div>
+                    </div>
+                    <div class="card-footer d-flex gap-2"><button class="btn btn-primary" type="submit" data-i18n="save_telegram">Lưu Telegram</button><button class="btn btn-outline-danger" type="button" onclick="removeIntegration('telegram')" data-i18n="remove_config">Xóa cấu hình</button></div>
+                  </form>
+                </div>
+                <div class="col-lg-6">
+                  <form id="runpod-form" class="card">
+                    <div class="card-header"><h3 class="card-title" data-i18n="runpod_ai">RunPod AI nâng cao</h3></div>
+                    <div class="card-body">
+                      <p id="runpod-status" class="text-secondary" data-i18n="not_configured">Chưa cấu hình</p>
+                      <div class="mb-3"><label class="form-label">API key</label><input id="runpod-key" type="password" class="form-control" autocomplete="off" required /></div>
+                      <div><label class="form-label">Endpoint ID</label><input id="runpod-endpoint" class="form-control" autocomplete="off" required /></div>
+                    </div>
+                    <div class="card-footer d-flex gap-2"><button class="btn btn-primary" type="submit" data-i18n="save_runpod">Lưu RunPod</button><button class="btn btn-outline-danger" type="button" onclick="removeIntegration('runpod')" data-i18n="remove_config">Xóa cấu hình</button></div>
+                  </form>
+                </div>
+              </div>
+              <p class="text-secondary small mt-3" data-i18n="credential_note">Credential được mã hóa riêng theo tài khoản và không bao giờ hiển thị lại trên dashboard.</p>
             </div>
 
           </div>
@@ -129,16 +214,16 @@
       <div class="modal-content">
         <form id="rename-form">
           <div class="modal-header">
-            <h5 class="modal-title">Đặt tên</h5>
+            <h5 class="modal-title" data-i18n="rename">Đặt tên</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
-            <label class="form-label">Tên</label>
-            <input id="rename-input" type="text" class="form-control" placeholder="vd: Bố, Mẹ, Người giao hàng..." />
+            <label class="form-label" data-i18n="name">Tên</label>
+            <input id="rename-input" type="text" class="form-control" data-i18n-placeholder="rename_placeholder" placeholder="vd: Bố, Mẹ, Người giao hàng..." />
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn" data-bs-dismiss="modal">Huỷ</button>
-            <button type="submit" class="btn btn-primary">Lưu</button>
+            <button type="button" class="btn" data-bs-dismiss="modal" data-i18n="cancel">Huỷ</button>
+            <button type="submit" class="btn btn-primary" data-i18n="save">Lưu</button>
           </div>
         </form>
       </div>
@@ -146,11 +231,13 @@
   </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
+<script src="/dashboard-i18n.js"></script>
 <script>
   const API_KEY_STORAGE = 'cameraaiwork_api_key';
   let cameras = [];
   let selectedCamera = null;
   let renamingPersonId = null;
+  let accountSummary = null;
 
   const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
   const setApiKey = (k) => localStorage.setItem(API_KEY_STORAGE, k);
@@ -170,7 +257,9 @@
       render();
       throw new Error('Unauthorized');
     }
-    return res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
   }
 
   function escapeHtml(s) {
@@ -178,24 +267,33 @@
   }
 
   // --- Cameras grid ---
+  let liveRefreshTimer;
   async function loadCameras() {
     cameras = await api('/api/cameras');
+    const live = await Promise.all(
+      cameras.map((c) => api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/live`, { method: 'POST' }))
+    );
+    cameras.forEach((camera, index) => {
+      camera.liveUrl = live[index].url;
+      camera.liveExpiresAt = live[index].expiresAt;
+    });
     const grid = document.getElementById('camera-grid');
     document.getElementById('camera-empty').classList.toggle('d-none', cameras.length > 0);
+    renderRecordingOptions();
     grid.innerHTML = cameras
       .map(
         (c, i) => `
         <div class="col-md-6 col-xl-4">
           <div class="card">
             <div class="ratio ratio-16x9 bg-dark">
-              <iframe src="${c.go2rtcUrl}/stream.html?src=${c.stream}" frameborder="0" loading="lazy"></iframe>
+              <iframe src="${escapeHtml(c.liveUrl)}" frameborder="0" loading="lazy" allow="autoplay; fullscreen"></iframe>
             </div>
             <div class="card-body d-flex align-items-center justify-content-between py-2">
               <div>
                 <div class="fw-bold">${escapeHtml(c.cameraName || c.cameraId)}</div>
                 <div class="text-secondary small">${escapeHtml(c.siteName || c.siteId)}</div>
               </div>
-              <button class="btn btn-sm btn-icon" onclick="openPtz(${i})" title="Điều khiển">
+              <button class="btn btn-sm btn-icon" onclick="openPtz(${i})" title="${t('control')}">
                 <i class="ti ti-arrows-move"></i>
               </button>
             </div>
@@ -203,13 +301,45 @@
         </div>`
       )
       .join('');
+    clearTimeout(liveRefreshTimer);
+    liveRefreshTimer = setTimeout(() => {
+      if (getApiKey()) loadCameras().catch(() => {});
+    }, 4 * 60 * 1000);
   }
 
-  function openPtz(index) {
+  function renderRecordingOptions() {
+    const container = document.getElementById('recording-options');
+    if (!container) return;
+    container.innerHTML = cameras.map((camera) => `<div class="col-md-6">
+      <label class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" ${Number(camera.recordOnPerson ?? 1) === 1 ? 'checked' : ''}
+          onchange="setRecordOnPerson('${escapeHtml(camera.siteId)}', '${escapeHtml(camera.cameraId)}', this.checked, this)" />
+        <span class="form-check-label"><strong>${escapeHtml(camera.cameraName || camera.cameraId)}</strong><br><span class="text-secondary">${t('record_when_person')}</span></span>
+      </label>
+    </div>`).join('');
+  }
+
+  async function setRecordOnPerson(siteId, cameraId, enabled, checkbox) {
+    checkbox.disabled = true;
+    try {
+      await api(`/api/cameras/${encodeURIComponent(siteId)}/${encodeURIComponent(cameraId)}/settings`, {
+        method: 'PATCH', body: JSON.stringify({ recordOnPerson: enabled })
+      });
+      const camera = cameras.find((item) => item.siteId === siteId && item.cameraId === cameraId);
+      if (camera) camera.recordOnPerson = enabled ? 1 : 0;
+      showSettingsMessage(t('recording_saved'));
+    } catch (error) {
+      checkbox.checked = !enabled;
+      showSettingsMessage(error.message, false);
+    } finally { checkbox.disabled = false; }
+  }
+
+  async function openPtz(index) {
     const c = cameras[index];
     selectedCamera = { siteId: c.siteId, cameraId: c.cameraId };
     document.getElementById('ptz-modal-title').textContent = `${c.siteName} — ${c.cameraName || c.cameraId}`;
-    document.getElementById('ptz-player').src = `${c.go2rtcUrl}/stream.html?src=${c.stream}`;
+    const live = await api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/live`, { method: 'POST' });
+    document.getElementById('ptz-player').src = live.url;
     new bootstrap.Modal(document.getElementById('ptz-modal')).show();
   }
 
@@ -234,10 +364,10 @@
             <div class="card-body d-flex align-items-center">
               <span class="avatar avatar-lg me-3 bg-blue-lt"><i class="ti ti-user fs-1"></i></span>
               <div class="flex-fill">
-                <div class="fw-bold">${p.label ? escapeHtml(p.label) : `<span class="text-secondary">Chưa đặt tên</span>`}</div>
-                <div class="text-secondary small">Thấy ${p.seen_count} lần · gần nhất ${escapeHtml(p.last_seen_at)}</div>
+                <div class="fw-bold">${p.label ? escapeHtml(p.label) : `<span class="text-secondary">${t('unnamed')}</span>`}</div>
+                <div class="text-secondary small">${t('seen', { count: p.seen_count, time: escapeHtml(p.last_seen_at) })}</div>
               </div>
-              <button class="btn btn-sm btn-icon" onclick="openRename('${p.id}', ${JSON.stringify(p.label || '')})" title="Đặt tên">
+              <button class="btn btn-sm btn-icon" onclick="openRename('${p.id}', ${JSON.stringify(p.label || '')})" title="${t('rename')}">
                 <i class="ti ti-edit"></i>
               </button>
             </div>
@@ -274,11 +404,29 @@
         (e) => `<tr>
           <td>${escapeHtml(e.timestamp)}</td>
           <td>${escapeHtml(cameraDisplayName(e.site_id, e.camera))}</td>
-          <td>${e.person_label ? escapeHtml(e.person_label) : '<span class="text-secondary">Chưa rõ</span>'}</td>
-          <td>${e.video_link ? `<a href="${e.video_link}" target="_blank">Xem</a>` : ''}</td>
+          <td>${e.person_label ? escapeHtml(e.person_label) : `<span class="text-secondary">${t('unknown')}</span>`}</td>
+          <td>${
+            e.video_key
+              ? `<a href="#" onclick="openClip(${e.id}); return false;">${t('view_clip')}</a>`
+              : e.video_link
+              ? `<a href="${e.video_link}" target="_blank">${t('view')}</a>`
+              : ''
+          }</td>
         </tr>`
       )
       .join('');
+  }
+
+  // video_key clips are private (per-account R2 object, served through the
+  // bearer-authed API, not a public R2/r2.dev URL), so a plain <a href>
+  // can't carry the Authorization header — fetch it as a blob instead.
+  async function openClip(eventId) {
+    const res = await fetch(`/api/events/${eventId}/video`, {
+      headers: { Authorization: `Bearer ${getApiKey()}` },
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), '_blank');
   }
 
   function render() {
@@ -289,16 +437,135 @@
     if (hasKey) {
       loadCameras().then(loadEvents).catch(() => {});
       loadPeople().catch(() => {});
+      loadIntegrations().catch(() => {});
+      loadAccount().catch(() => {});
+      loadSites().catch(() => {});
     }
   }
 
-  document.getElementById('login-form').addEventListener('submit', (e) => {
+  document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); emailAuth('/api/auth/login'); });
+
+  function showSettingsMessage(message, success = true) {
+    const element = document.getElementById('settings-message');
+    element.textContent = message;
+    element.className = `alert ${success ? 'alert-success' : 'alert-danger'}`;
+  }
+
+  async function loadIntegrations() {
+    const status = await api('/api/settings/integrations');
+    for (const provider of ['telegram', 'runpod']) {
+      const configured = !!status[provider]?.configured;
+      document.getElementById(`${provider}-status`).textContent = configured
+        ? t('configured', { time: status[provider].updatedAt })
+        : t('not_configured');
+    }
+  }
+
+  async function loadAccount() {
+    accountSummary = await api('/api/settings/account');
+    const { plan, usage, limits } = accountSummary;
+    document.getElementById('plan-badge').textContent = `${plan.toUpperCase()} · ${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${limits.cameras} camera · ${limits.viewersPerCamera} ${t('viewer')}`;
+    document.getElementById('site-usage').textContent = `${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${limits.cameras} camera`;
+    document.getElementById('account-email').value = accountSummary.email || '';
+    document.getElementById('account-email').readOnly = !!accountSummary.email;
+    document.getElementById('account-email').required = !accountSummary.email;
+    document.getElementById('account-email-note').textContent = accountSummary.email ? t('email_fixed_note') : t('legacy_email_note');
+    document.getElementById('subscribe-btn').classList.toggle('d-none', plan === 'pro');
+  }
+
+  async function loadSites() {
+    const sites = await api('/api/sites');
+    document.getElementById('sites-empty').classList.toggle('d-none', sites.length > 0);
+    document.getElementById('sites-body').innerHTML = sites.map((site) => `<tr>
+      <td><div class="fw-bold">${escapeHtml(site.name)}</div><div class="text-secondary small">${escapeHtml(site.id)}</div></td>
+      <td>${Number(site.camera_count || 0)}</td>
+      <td>${site.relay_url ? '<span class="badge bg-green-lt">Named Tunnel</span>' : `<span class="text-secondary">${t('tunnel_pending')}</span>`}</td>
+      <td class="text-end"><button class="btn btn-outline-danger btn-sm" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name)}" onclick="deleteSite(this.dataset.siteId, this.dataset.siteName)">${t('delete')}</button></td>
+    </tr>`).join('');
+  }
+
+  async function deleteSite(siteId, name) {
+    if (!confirm(t('delete_confirm', { name }))) return;
+    try {
+      await api(`/api/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
+      showSettingsMessage(t('site_deleted', { name }));
+      await Promise.all([loadSites(), loadAccount(), loadCameras(), loadEvents()]);
+    } catch (error) { showSettingsMessage(error.message, false); }
+  }
+
+  async function saveIntegration(provider, config) {
+    try {
+      await api('/api/settings/integrations', { method: 'PUT', body: JSON.stringify({ provider, ...config }) });
+      showSettingsMessage(t('config_saved', { provider }));
+      await loadIntegrations();
+    } catch (error) { showSettingsMessage(error.message, false); }
+  }
+
+  async function removeIntegration(provider) {
+    try {
+      await api('/api/settings/integrations', { method: 'DELETE', body: JSON.stringify({ provider }) });
+      showSettingsMessage(t('config_removed', { provider }));
+      await loadIntegrations();
+    } catch (error) { showSettingsMessage(error.message, false); }
+  }
+
+  document.getElementById('telegram-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const key = document.getElementById('api-key-input').value.trim();
-    if (key) { setApiKey(key); render(); }
+    await saveIntegration('telegram', { botToken: document.getElementById('telegram-token').value, chatId: document.getElementById('telegram-chat').value });
+    e.target.reset();
+  });
+  document.getElementById('runpod-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await saveIntegration('runpod', { apiKey: document.getElementById('runpod-key').value, endpointId: document.getElementById('runpod-endpoint').value });
+    e.target.reset();
+  });
+  document.getElementById('account-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newPassword = document.getElementById('new-password').value;
+    const confirmation = document.getElementById('confirm-password').value;
+    if (newPassword !== confirmation) {
+      showSettingsMessage(t('password_mismatch'), false);
+      return;
+    }
+    try {
+      const email = document.getElementById('account-email').value.trim();
+      await api('/api/settings/account', { method: 'PUT', body: JSON.stringify({ email, newPassword }) });
+      e.target.reset();
+      showSettingsMessage(t('password_changed'));
+      await loadAccount();
+    } catch (error) { showSettingsMessage(error.message, false); }
   });
 
-  document.getElementById('logout-btn').addEventListener('click', () => { clearApiKey(); render(); });
+  async function emailAuth(path) {
+    const error = document.getElementById('auth-error');
+    error.textContent = '';
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: document.getElementById('email-input').value, password: document.getElementById('password-input').value }),
+    });
+    const data = await res.json();
+    if (!res.ok) { error.textContent = data.error || t('login_failed'); return; }
+    setApiKey(data.apiKey);
+    render();
+  }
+
+  document.getElementById('email-login-btn').addEventListener('click', () => emailAuth('/api/auth/login'));
+  document.getElementById('signup-btn').addEventListener('click', () => emailAuth('/api/auth/signup'));
+  document.getElementById('subscribe-btn').addEventListener('click', async () => {
+    const data = await api('/api/billing/checkout', { method: 'POST' });
+    if (data.url) location.href = data.url;
+  });
+  document.getElementById('billing-btn').addEventListener('click', async () => {
+    const data = await api('/api/billing/portal', { method: 'POST' });
+    if (data.url) location.href = data.url;
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+    clearApiKey();
+    render();
+  });
 
   render();
   setInterval(() => { if (getApiKey()) { loadEvents().catch(() => {}); loadPeople().catch(() => {}); } }, 5000);

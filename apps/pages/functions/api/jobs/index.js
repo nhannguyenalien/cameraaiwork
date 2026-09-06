@@ -7,6 +7,7 @@
 // tenant's job.
 import { getDb } from "../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
+import { getIntegration } from "../../_lib/integrations.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, data }) => {
   let body;
@@ -20,14 +21,15 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
   if (type !== "runpod") {
     return errorJson(`Unsupported job type: ${type}`, 400);
   }
-  if (!env.RUNPOD_API_KEY || !env.RUNPOD_ENDPOINT_ID) {
+  const runpod = await getIntegration(env, data.accountId, "runpod");
+  if (!runpod?.apiKey || !runpod?.endpointId) {
     return errorJson("RunPod chưa được cấu hình", 503);
   }
 
-  const res = await fetch(`https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/run`, {
+  const res = await fetch(`https://api.runpod.ai/v2/${runpod.endpointId}/run`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.RUNPOD_API_KEY}`,
+      Authorization: `Bearer ${runpod.apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ input: { task, ...rest } }),

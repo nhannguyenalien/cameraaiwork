@@ -22,6 +22,13 @@ module.exports = {
     url: go2rtcUrl,
     port: Number(new URL(go2rtcUrl).port || 1984),
   },
+  aiWorkerUrl: process.env.AI_WORKER_URL || "http://127.0.0.1:8001",
+  // Cameras with broken ONVIF PullPoint support can still trigger alerts by
+  // periodically running the local person detector against a snapshot.
+  personPollIntervalMs: Number(process.env.PERSON_POLL_INTERVAL_MS || 5000),
+  tapoTalkbackPassword: process.env.TAPO_TALKBACK_PASSWORD || "",
+  tapoGreeting: process.env.TAPO_GREETING || "Xin chào",
+  tapoGreetingCooldownMs: Number(process.env.TAPO_GREETING_COOLDOWN_MS || 60000),
 
   pagesApiUrl,
   // Both derived from PAGES_API_URL — override individually only if the
@@ -29,8 +36,8 @@ module.exports = {
   motionWebhookUrl: process.env.MOTION_WEBHOOK_URL || (pagesApiUrl && `${pagesApiUrl}/api/motion`),
   siteUpdateUrl: pagesApiUrl && `${pagesApiUrl}/api/sites/${process.env.SITE_ID || ""}`,
 
-  // Set by the installer from POST /api/sites' response when the backend
-  // provisioned a real named tunnel. If empty, falls back to Quick Tunnels.
+  // Set by the installer from POST /api/sites. MVP sites require a named
+  // tunnel; there is intentionally no public Quick Tunnel fallback.
   cloudflareTunnelToken: process.env.CLOUDFLARE_TUNNEL_TOKEN || "",
 
   cameras, // [{ id, stream, onvif: { ip, port, username, password } }, ...]

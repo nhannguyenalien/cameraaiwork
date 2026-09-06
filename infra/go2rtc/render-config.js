@@ -22,6 +22,13 @@ for (const cam of cameras) {
   lines.push(`    - onvif://${username}:${password}@${ip}:${port}#backchannel=0`);
 }
 
+// go2rtc is never a public origin. cloudflared reaches the relay only; the
+// relay validates a signed live token (or its machine secret) before proxying
+// a request to this loopback listener.
+lines.push("");
+lines.push("api:");
+lines.push('  listen: "127.0.0.1:1984"');
+
 const outPath = path.resolve(__dirname, "go2rtc.yaml");
 fs.writeFileSync(outPath, lines.join("\n") + "\n");
 console.log(`Đã ghi ${outPath}`);

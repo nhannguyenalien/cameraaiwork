@@ -17,15 +17,16 @@ TURSO_AUTH_TOKEN=
 CLOUDFLARE_API_TOKEN=
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_ZONE_ID=
-# Base domain new site hostnames are minted under, e.g. a site "st-abc123"
-# gets "st-abc123-go2rtc.<this>" and "st-abc123-relay.<this>".
+# Base domain new site hostnames are minted under. A site "st-abc123" gets
+# exactly one public hostname: "st-abc123.<this>". That hostname reaches the
+# local relay; go2rtc and AI remain loopback-only behind it.
 #
 # IMPORTANT: this must be your zone's root domain (e.g. "yourdomain.com"),
 # NOT a subdomain of it (e.g. NOT "camera.yourdomain.com") — even if that
 # subdomain is already yours (e.g. a Pages custom domain). Cloudflare's
 # zone-level Universal SSL wildcard only covers one level
 # (*.yourdomain.com), so a tunnel hostname minted under an *already*
-#-subdomained base (like "st-abc123-go2rtc.camera.yourdomain.com", two
+#-subdomained base (like "st-abc123.camera.yourdomain.com", two
 # levels deep) falls outside it and gets no automatic certificate — every
 # request fails at the TLS handshake, not with a clean HTTP error, which
 # made this genuinely confusing to diagnose the first time. Real incident:
@@ -34,17 +35,23 @@ CLOUDFLARE_ZONE_ID=
 # "schoolsai.work" directly instead. See docs/PLAN.md.
 TUNNEL_BASE_DOMAIN=yourdomain.com
 
+# Hourly cleanup/quota monitor. Keep this separate from customer API keys.
+MAINTENANCE_SECRET=replace-with-a-long-random-secret
+# Operational warning thresholds, not claimed vendor hard limits.
+MANAGED_TUNNEL_WARN_AT=900
+MANAGED_DNS_WARN_AT=900
+ORPHAN_TUNNEL_GRACE_HOURS=6
+
 # CORS for the API — comma-separated origins, or "*" for any (fine even
 # wide open since auth is a bearer token, not a cookie).
 ALLOWED_ORIGINS=*
 
-# Local AI worker (ai/worker), reachable via a site's tunnel. If you run
-# more than one site each with its own AI worker, this becomes a per-site
-# column instead — not needed yet at one-account scale.
-AI_WORKER_URL=
+# 32 random bytes encoded as base64. Used to encrypt customer-owned
+# Telegram/RunPod credentials stored per account. Never rotate this key
+# without first re-encrypting all account_integrations rows.
+CUSTOMER_SECRETS_KEY=
 
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-
-RUNPOD_API_KEY=
-RUNPOD_ENDPOINT_ID=
+# Platform-owned billing credentials. Customers never enter these values.
+STRIPE_SECRET_KEY=
+STRIPE_PRICE_ID=
+STRIPE_WEBHOOK_SECRET=

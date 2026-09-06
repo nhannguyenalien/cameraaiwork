@@ -4,7 +4,7 @@
  * API, DB, AI orchestration, RunPod, multi-tenant accounts) lives on
  * Cloudflare Pages. See docs/ARCHITECTURE.md.
  *
- * Responsibilities, on purpose kept to just these two, for every camera
+ * Responsibilities for every camera
  * listed in cameras.json:
  *   1. Forward PTZ commands from the Pages Function to the right camera
  *      (ONVIF needs LAN access, can't be done from Cloudflare's edge).
@@ -21,19 +21,29 @@
  *      source for this anyway — motion detection is a camera capability,
  *      not something go2rtc does.
  *
- * Also starts a Cloudflare Quick Tunnel for go2rtc and one for itself, and
- * self-reports the resulting URLs to the backend (PATCH /api/sites/:id) —
- * no manual Cloudflare setup needed on-site. Quick Tunnel hostnames change
- * on every restart, so this re-registers every time, not just once.
+ *   3. Be the only origin behind the site's named tunnel: authenticated
+ *      internal proxy for go2rtc/AI plus signed, camera-scoped live view.
  */
 const express = require("express");
 const axios = require("axios");
+const http = require("http");
+const httpProxy = require("http-proxy");
 const config = require("./config");
 const ptz = require("./ptz");
-const { startQuickTunnel, startNamedTunnel } = require("./tunnel");
+const { startNamedTunnel } = require("./tunnel");
+const { parseLiveRequest } = require("./live-auth");
+const { createViewerLimiter } = require("./viewer-limit");
+const { createTalkback } = require("./talkback");
 
 const app = express();
 app.use(express.json());
+
+const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true });
+proxy.on("error", (err, _req, res) => {
+  console.error("❌ Local proxy lỗi:", err.message);
+  if (res && !res.headersSent) res.writeHead(502);
+  if (res && !res.writableEnded) res.end("Bad gateway");
+});
 
 function requireSecret(req, res, next) {
   if (!config.relaySecret || req.headers["x-relay-secret"] !== config.relaySecret) {
@@ -41,6 +51,103 @@ function requireSecret(req, res, next) {
   }
   next();
 }
+
+const liveAuthOptions = {
+  siteId: config.siteId,
+  relaySecret: config.relaySecret,
+  cameras: config.cameras,
+};
+const viewers = createViewerLimiter();
+const talkback = createTalkback({
+  go2rtcUrl: config.go2rtc.url,
+  password: config.tapoTalkbackPassword,
+  greeting: config.tapoGreeting,
+  cooldownMs: config.tapoGreetingCooldownMs,
+});
+
+function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 4 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const url = new URL("/api/stream.mp4", config.go2rtc.url);
+    url.searchParams.set("src", cameraId);
+    const chunks = [];
+    let bytes = 0;
+    let settled = false;
+    let upstream;
+
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      upstream?.destroy();
+      if (err) reject(err);
+      else resolve(Buffer.concat(chunks, bytes));
+    };
+
+    const timer = setTimeout(() => finish(), durationMs);
+    const request = http.get(url, (response) => {
+      upstream = response;
+      if (response.statusCode !== 200) return finish(new Error(`go2rtc HTTP ${response.statusCode}`));
+      response.on("data", (chunk) => {
+        if (bytes + chunk.length > maxBytes) return finish();
+        chunks.push(chunk);
+        bytes += chunk.length;
+      });
+      response.on("end", () => finish());
+      response.on("error", (err) => finish(err));
+    });
+    request.on("error", (err) => finish(err));
+  });
+}
+
+app.use("/internal/go2rtc", requireSecret, (req, res) => {
+  proxy.web(req, res, { target: config.go2rtc.url });
+});
+
+app.get("/internal/frame.jpeg", requireSecret, async (req, res) => {
+  const cameraId = String(req.query.src || "");
+  if (!config.cameras.some((camera) => camera.id === cameraId)) return res.sendStatus(404);
+  try {
+    const frame = await axios.get(`${config.go2rtc.url}/api/frame.jpeg`, {
+      params: { src: cameraId },
+      responseType: "arraybuffer",
+      timeout: 10000,
+    });
+    const jpeg = Buffer.from(frame.data);
+    if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) return res.sendStatus(502);
+    res.type("image/jpeg").send(jpeg);
+  } catch (err) {
+    console.error(`❌ Snapshot lỗi (${cameraId}):`, err.message || err);
+    res.sendStatus(502);
+  }
+});
+
+// Return a finite, locally-buffered clip. Buffering beside the camera avoids
+// Cloudflare treating go2rtc's never-ending progressive MP4 as a stale/long
+// response before the Pages Function uploads it to R2.
+app.get("/internal/clip.mp4", requireSecret, async (req, res) => {
+  const cameraId = String(req.query.src || "");
+  if (!config.cameras.some((camera) => camera.id === cameraId)) return res.sendStatus(404);
+  try {
+    const clip = await captureLocalClip(cameraId);
+    if (!clip.length) return res.sendStatus(502);
+    res.type("video/mp4").send(clip);
+  } catch (err) {
+    console.error(`❌ Ghi clip lỗi (${cameraId}):`, err.message || err);
+    res.sendStatus(502);
+  }
+});
+
+app.use("/internal/ai", requireSecret, (req, res) => {
+  proxy.web(req, res, { target: config.aiWorkerUrl });
+});
+
+app.use("/live/:token", (req, res) => {
+  const original = `/live/${req.params.token}${req.url}`;
+  const parsed = parseLiveRequest(original, liveAuthOptions);
+  if (!parsed) return res.sendStatus(401);
+  req.url = parsed.path;
+  proxy.web(req, res, { target: config.go2rtc.url });
+});
 
 app.post("/ptz/:camera/:dir", requireSecret, (req, res) => {
   const { camera, dir } = req.params;
@@ -55,9 +162,11 @@ app.post("/ptz/:camera/:dir", requireSecret, (req, res) => {
   res.sendStatus(ok ? 200 : 404);
 });
 
-app.get("/health", (req, res) => res.json({ ok: true, cameras: config.cameras.map((c) => c.id) }));
+app.get("/health", requireSecret, (req, res) => res.json({ ok: true, cameras: config.cameras.map((c) => c.id) }));
 
 const cooldowns = new Map(); // camera id -> bool
+const personPollers = new Map(); // camera id -> interval; ONVIF fallback only
+const personPresence = new Map(); // camera id -> { present, missingFrames }
 
 async function notifyMotion(cameraId) {
   if (!config.motionWebhookUrl) {
@@ -73,6 +182,64 @@ async function notifyMotion(cameraId) {
   } catch (e) {
     console.error(`❌ Gửi motion webhook thất bại (${cameraId}):`, e.message);
   }
+}
+
+function triggerMotion(cameraId, source) {
+  if (cooldowns.get(cameraId)) return;
+  console.log(`📡 Kích hoạt motion (${cameraId}, ${source})`);
+  cooldowns.set(cameraId, true);
+  notifyMotion(cameraId);
+  setTimeout(() => cooldowns.set(cameraId, false), 30000);
+}
+
+// A number of low-cost cameras expose ONVIF/PTZ correctly but abort every
+// PullMessages request. Once that failure is proven, poll the local snapshot
+// and local AI worker instead. The backend still re-checks the current frame,
+// so this only replaces the unreliable motion trigger, not server-side policy.
+function startPersonPolling(cameraId) {
+  if (personPollers.has(cameraId) || config.personPollIntervalMs <= 0) return;
+
+  const poll = async () => {
+    try {
+      const frame = await axios.get(`${config.go2rtc.url}/api/frame.jpeg`, {
+        params: { src: cameraId },
+        responseType: "arraybuffer",
+        timeout: 10000,
+      });
+      const jpeg = Buffer.from(frame.data);
+      if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) {
+        throw new Error("go2rtc trả snapshot không phải JPEG hợp lệ");
+      }
+      const detected = await axios.post(`${config.aiWorkerUrl}/detect`, jpeg, {
+        headers: { "content-type": "image/jpeg" },
+        timeout: 20000,
+      });
+      const camera = config.cameras.find((item) => item.id === cameraId);
+      const state = personPresence.get(cameraId) || { present: false, missingFrames: 0 };
+      if (detected.data?.hasPerson) {
+        triggerMotion(cameraId, "AI polling fallback");
+        if (!state.present && camera) {
+          state.present = true;
+          talkback.speak(camera)
+            .then((played) => played && console.log(`🔊 Đã phát lời chào (${cameraId})`))
+            .catch((err) => console.error(`❌ Phát lời chào lỗi (${cameraId}):`, err.message || err));
+        }
+        state.missingFrames = 0;
+      } else if (++state.missingFrames >= 3) {
+        // Require 3 negative frames before treating the next detection as a
+        // new arrival; this avoids repeated greetings from detector flicker.
+        state.present = false;
+      }
+      personPresence.set(cameraId, state);
+    } catch (err) {
+      console.error(`❌ AI polling lỗi (${cameraId}):`, err.message || err);
+    }
+  };
+
+  console.warn(`🔄 Bật AI polling fallback cho ${cameraId} mỗi ${config.personPollIntervalMs}ms.`);
+  const timer = setInterval(poll, config.personPollIntervalMs);
+  personPollers.set(cameraId, timer);
+  poll();
 }
 
 // Originally this treated ANY ONVIF event as "check it" — topic naming
@@ -107,10 +274,11 @@ function watchMotionOnvif(cameraId, cam) {
     }
 
     console.log(`📡 ONVIF motion (${cameraId}): ${topic}`);
-    if (cooldowns.get(cameraId)) return;
-    cooldowns.set(cameraId, true);
-    notifyMotion(cameraId);
-    setTimeout(() => cooldowns.set(cameraId, false), 30000); // nghỉ 30s tránh spam webhook
+    // Tapo can emit a burst (or even a continuous stream) of CellMotion
+    // events for light/noise changes. Never let those unverified events take
+    // the person-event cooldown: use them only to ensure local AI polling is
+    // awake. The poller calls triggerMotion only after hasPerson=true.
+    startPersonPolling(cameraId);
   }
 
   function onError(err) {
@@ -118,8 +286,13 @@ function watchMotionOnvif(cameraId, cam) {
     if (consecutiveErrors === 1 || consecutiveErrors % 10 === 0) {
       console.error(`❌ ONVIF events lỗi (${cameraId}, lần ${consecutiveErrors}):`, err.message || err);
     }
+    // Tapo PullPoint can remain broken for a long time between retries. Start
+    // the snapshot+AI fallback on the first proven error so detection never
+    // has a blind window while ONVIF is recovering.
+    if (consecutiveErrors === 1) startPersonPolling(cameraId);
     if (consecutiveErrors >= 5) {
       console.warn(`⏸️  Tạm dừng ONVIF events (${cameraId}) 15s do lỗi liên tục (camera có thể không giữ được long-poll)...`);
+      startPersonPolling(cameraId);
       cam.removeListener("event", onEvent);
       cam.removeListener("eventsError", onError);
       setTimeout(() => watchMotionOnvif(cameraId, cam), 15000);
@@ -135,44 +308,38 @@ if (!config.siteId) {
 }
 
 ptz.connectAll(watchMotionOnvif);
-app.listen(config.port, () => console.log(`🚀 Relay (${config.siteId}) chạy ở http://localhost:${config.port}`));
+const server = app.listen(config.port, "127.0.0.1", () =>
+  console.log(`🚀 Relay (${config.siteId}) chạy ở http://127.0.0.1:${config.port}`)
+);
 
-// --- Tunnels + self-registration ---
-let currentGo2rtcUrl = null;
-let currentRelayUrl = null;
-
-async function reportTunnelUrls() {
-  if (!currentGo2rtcUrl || !currentRelayUrl) return;
-  if (!config.siteUpdateUrl) {
-    console.warn("⚠️ PAGES_API_URL chưa cấu hình, không thể tự đăng ký tunnel URL.");
+server.on("upgrade", (req, socket, head) => {
+  const parsed = parseLiveRequest(req.url, liveAuthOptions);
+  if (!parsed || !parsed.camera) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+    socket.destroy();
     return;
   }
-  try {
-    await axios.patch(
-      config.siteUpdateUrl,
-      { go2rtcUrl: currentGo2rtcUrl, relayUrl: currentRelayUrl },
-      { headers: { "x-relay-secret": config.relaySecret }, timeout: 5000 }
-    );
-    console.log("✅ Đã cập nhật tunnel URL lên backend.");
-  } catch (e) {
-    console.error("❌ Cập nhật tunnel URL lên backend thất bại:", e.message);
+  if (!viewers.reserve(parsed.camera, parsed.viewerLimit)) {
+    socket.write("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\nRetry-After: 10\r\n\r\n");
+    socket.destroy();
+    return;
   }
-}
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    viewers.release(parsed.camera);
+  };
+  socket.once("close", release);
+  socket.once("error", release);
+  req.url = parsed.path;
+  proxy.ws(req, socket, head, { target: config.go2rtc.url });
+});
 
+// --- One named tunnel per site ---
 if (config.cloudflareTunnelToken) {
-  // Named tunnel: hostnames are stable and already in the DB from
-  // POST /api/sites, so there's nothing to self-report.
-  console.log("🚇 Dùng named tunnel (hostname cố định, không cần tự đăng ký URL).");
+  console.log("🚇 Dùng named tunnel một hostname/site.");
   startNamedTunnel(config.cloudflareTunnelToken);
-} else if (config.pagesApiUrl) {
-  startQuickTunnel("go2rtc", config.go2rtc.port, (url) => {
-    currentGo2rtcUrl = url;
-    reportTunnelUrls();
-  });
-  startQuickTunnel("relay", config.port, (url) => {
-    currentRelayUrl = url;
-    reportTunnelUrls();
-  });
 } else {
-  console.warn("⚠️ PAGES_API_URL chưa cấu hình — bỏ qua tunnel, chỉ chạy local.");
+  console.warn("⚠️ CLOUDFLARE_TUNNEL_TOKEN chưa cấu hình — chỉ chạy local, không tạo Quick Tunnel.");
 }
