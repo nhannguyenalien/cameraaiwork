@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chi tiết camera · CameraAIWork</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+<style>
+  .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
+  .ptz-pad .btn { height:3.25rem; }
+  .talk-button.is-recording { animation:talk-pulse 1s infinite; }
+  @keyframes talk-pulse { 50% { box-shadow:0 0 0 .4rem rgba(214,57,57,.18); } }
+  .event-line { position:relative; padding-left:2rem; }
+  .event-line::before { content:""; position:absolute; left:.5rem; top:0; bottom:-1.5rem; width:2px; background:var(--tblr-border-color); }
+  .event-line:last-child::before { bottom:50%; }
+  .event-dot { position:absolute; left:0; top:1.35rem; width:1.05rem; height:1.05rem; border-radius:50%; background:var(--tblr-primary); border:3px solid var(--tblr-bg-surface); z-index:1; }
+  .event-image { width:100%; max-height:320px; object-fit:cover; }
+  .video-shell video { width:100%; max-height:420px; background:#000; }
+</style>
+</head>
+<body class="border-top-wide border-primary">
+<header class="navbar navbar-expand-md navbar-light d-print-none">
+  <div class="container-xl">
+    <a href="/" class="btn btn-ghost-secondary btn-sm"><i class="ti ti-arrow-left me-1"></i>Dashboard</a>
+    <div class="navbar-brand navbar-brand-autodark ms-2">CameraAIWork</div>
+    <button id="logout-btn" class="btn btn-outline-secondary btn-sm ms-auto">Đăng xuất</button>
+  </div>
+</header>
+
+<main class="page-wrapper">
+  <div class="page-body"><div class="container-xl">
+    <div id="page-error" class="alert alert-danger d-none"></div>
+    <div id="camera-page" class="d-none">
+      <div class="page-header mb-3">
+        <div class="row align-items-center">
+          <div class="col"><div class="page-pretitle" id="site-name"></div><h2 class="page-title" id="camera-name">Camera</h2></div>
+          <div class="col-auto"><span id="online-badge" class="badge bg-secondary-lt">Đang kiểm tra…</span></div>
+        </div>
+      </div>
+
+      <div class="row row-cards">
+        <div class="col-xl-8">
+          <div class="card h-100">
+            <div class="card-header"><h3 class="card-title"><i class="ti ti-live-photo me-2"></i>Hình ảnh trực tiếp</h3></div>
+            <div class="ratio ratio-16x9 bg-dark"><iframe id="live-player" frameborder="0" allow="autoplay; fullscreen"></iframe></div>
+            <div class="card-footer text-secondary small" id="camera-status">Đang kết nối camera…</div>
+          </div>
+        </div>
+        <div class="col-xl-4">
+          <div class="card mb-3" id="ptz-card">
+            <div class="card-header"><h3 class="card-title"><i class="ti ti-arrows-move me-2"></i>Xoay camera</h3></div>
+            <div class="card-body"><div class="ptz-pad">
+              <span></span><button class="btn" onclick="move('up')" aria-label="Lên"><i class="ti ti-chevron-up"></i></button><span></span>
+              <button class="btn" onclick="move('left')" aria-label="Trái"><i class="ti ti-chevron-left"></i></button>
+              <button class="btn btn-outline-danger" onclick="move('stop')" aria-label="Dừng"><i class="ti ti-player-stop"></i></button>
+              <button class="btn" onclick="move('right')" aria-label="Phải"><i class="ti ti-chevron-right"></i></button>
+              <span></span><button class="btn" onclick="move('down')" aria-label="Xuống"><i class="ti ti-chevron-down"></i></button><span></span>
+            </div></div>
+          </div>
+          <div class="card mb-3" id="talk-card"><div class="card-body text-center">
+            <button id="talk-button" class="btn btn-primary talk-button" type="button"><i class="ti ti-microphone me-2"></i><span>Giữ để nói</span></button>
+            <div class="text-secondary small mt-2">Giữ tối đa 10 giây, thả ra để phát qua loa camera.</div>
+          </div></div>
+          <div class="card mb-3" id="light-card"><div class="card-body">
+            <label class="form-check form-switch m-0"><input id="camera-light" class="form-check-input" type="checkbox" /><span class="form-check-label"><i class="ti ti-bulb me-1"></i>Đèn camera</span></label>
+          </div></div>
+          <div class="card"><div class="card-body">
+            <label class="form-check form-switch m-0"><input id="record-person" class="form-check-input" type="checkbox" /><span class="form-check-label"><strong>Lưu video khi phát hiện người</strong><br><span class="text-secondary small">Ảnh sự kiện vẫn được lưu nếu clip gặp lỗi.</span></span></label>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="row align-items-center mt-4 mb-3">
+        <div class="col"><h2 class="mb-0">Nhật ký sự kiện</h2><div class="text-secondary">Người, hình ảnh và video của riêng camera này</div></div>
+        <div class="col-auto"><button class="btn btn-outline-secondary btn-sm" onclick="loadEvents()"><i class="ti ti-refresh me-1"></i>Làm mới</button></div>
+      </div>
+      <div id="event-summary" class="row row-cards mb-3"></div>
+      <div id="events-list"></div>
+      <div id="events-empty" class="card card-body text-center text-secondary py-5 d-none"><i class="ti ti-bell-off fs-1 mb-2"></i>Camera này chưa có sự kiện.</div>
+    </div>
+  </div></div>
+</main>
+
+<script>
+const API_KEY_STORAGE = 'cameraaiwork_api_key';
+const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
+const params = new URLSearchParams(location.search);
+const siteId = params.get('site');
+const cameraId = params.get('camera');
+let camera = null;
+let mediaRecorder = null;
+let talkChunks = [];
+let talkTimer = null;
+let objectUrls = [];
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: { ...(options.body && typeof options.body === 'string' ? {'Content-Type':'application/json'} : {}), ...(options.headers || {}), Authorization:`Bearer ${getApiKey()}` }
+  });
+  if (response.status === 401) { localStorage.removeItem(API_KEY_STORAGE); location.href='/'; throw new Error('Phiên đăng nhập đã hết hạn'); }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
+function endpoint(name) {
+  return `/api/cameras/${encodeURIComponent(siteId)}/${encodeURIComponent(cameraId)}/${name}`;
+}
+
+function showError(error) {
+  const box = document.getElementById('page-error');
+  box.textContent = error.message || String(error);
+  box.classList.remove('d-none');
+}
+
+async function init() {
+  if (!getApiKey()) return location.replace('/');
+  if (!siteId || !cameraId) throw new Error('Thiếu thông tin camera trong đường dẫn.');
+  const cameras = await api('/api/cameras');
+  camera = cameras.find(c => c.siteId === siteId && c.cameraId === cameraId);
+  if (!camera) throw new Error('Không tìm thấy camera hoặc tài khoản không có quyền truy cập.');
+  document.title = `${camera.cameraName || camera.cameraId} · CameraAIWork`;
+  document.getElementById('site-name').textContent = camera.siteName || camera.siteId;
+  document.getElementById('camera-name').textContent = camera.cameraName || camera.cameraId;
+  document.getElementById('record-person').checked = Number(camera.recordOnPerson ?? 1) === 1;
+  document.getElementById('camera-page').classList.remove('d-none');
+  await Promise.all([loadLive(), loadControls(), loadEvents()]);
+}
+
+async function loadLive() {
+  const live = await api(endpoint('live'), {method:'POST'});
+  document.getElementById('live-player').src = live.url;
+}
+
+async function loadControls() {
+  try {
+    const controls = await api(endpoint('controls'));
+    document.getElementById('ptz-card').classList.toggle('d-none', !controls.ptz);
+    document.getElementById('talk-card').classList.toggle('d-none', !controls.talk);
+    document.getElementById('light-card').classList.toggle('d-none', !controls.light);
+    const badge = document.getElementById('online-badge');
+    badge.className = `badge ${controls.online ? 'bg-green-lt' : 'bg-red-lt'}`;
+    badge.textContent = controls.online ? 'Đang trực tuyến' : 'Ngoại tuyến';
+    document.getElementById('camera-status').textContent = controls.online ? 'Camera đã kết nối qua relay.' : 'Không kết nối được chức năng điều khiển camera.';
+  } catch (error) {
+    document.getElementById('online-badge').textContent = 'Không rõ trạng thái';
+    document.getElementById('camera-status').textContent = `Không tải được chức năng điều khiển: ${error.message}`;
+  }
+}
+
+async function move(direction) {
+  try { await api(endpoint('ptz'), {method:'POST', body:JSON.stringify({direction})}); }
+  catch (error) { document.getElementById('camera-status').textContent = error.message; }
+}
+
+document.getElementById('camera-light').addEventListener('change', async event => {
+  const input = event.currentTarget; input.disabled = true;
+  try { await api(endpoint('controls'), {method:'POST', body:JSON.stringify({light:input.checked})}); }
+  catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
+  finally { input.disabled=false; }
+});
+
+document.getElementById('record-person').addEventListener('change', async event => {
+  const input = event.currentTarget; input.disabled=true;
+  try { await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({recordOnPerson:input.checked})}); }
+  catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
+  finally { input.disabled=false; }
+});
+
+async function startTalking(event) {
+  event.preventDefault();
+  if (mediaRecorder?.state === 'recording') return;
+  const button = document.getElementById('talk-button');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    talkChunks=[]; mediaRecorder=new MediaRecorder(stream);
+    mediaRecorder.ondataavailable=e=>e.data.size&&talkChunks.push(e.data);
+    mediaRecorder.onstop=async()=>{
+      stream.getTracks().forEach(track=>track.stop());
+      button.className='btn btn-primary talk-button'; button.innerHTML='<i class="ti ti-loader-2 ti-spin me-2"></i>Đang gửi…';
+      try {
+        const blob=new Blob(talkChunks,{type:mediaRecorder.mimeType||'audio/webm'});
+        await api(endpoint('talk'),{method:'POST',headers:{'Content-Type':blob.type},body:blob});
+        document.getElementById('camera-status').textContent='Đã phát âm thanh qua camera.';
+      } catch(error) { document.getElementById('camera-status').textContent=error.message; }
+      finally { button.innerHTML='<i class="ti ti-microphone me-2"></i>Giữ để nói'; mediaRecorder=null; }
+    };
+    mediaRecorder.start(); button.className='btn btn-danger talk-button is-recording'; button.innerHTML='<i class="ti ti-microphone me-2"></i>Đang ghi âm…';
+    talkTimer=setTimeout(stopTalking,10000);
+  } catch { document.getElementById('camera-status').textContent='Hãy cho phép trình duyệt truy cập microphone.'; }
+}
+function stopTalking(event) { event?.preventDefault(); clearTimeout(talkTimer); if(mediaRecorder?.state==='recording') mediaRecorder.stop(); }
+const talkButton=document.getElementById('talk-button');
+['pointerup','pointercancel','pointerleave'].forEach(name=>talkButton.addEventListener(name,stopTalking));
+talkButton.addEventListener('pointerdown',startTalking);
+
+async function loadEvents() {
+  const query = new URLSearchParams({site:siteId, camera:camera.stream, limit:'100'});
+  const events = await api(`/api/events?${query}`);
+  objectUrls.forEach(URL.revokeObjectURL); objectUrls=[];
+  const withImages=events.filter(e=>e.image_key).length, withVideos=events.filter(e=>e.video_key).length;
+  document.getElementById('event-summary').innerHTML = [
+    ['ti-user','Phát hiện người',events.length],['ti-photo','Có hình ảnh',withImages],['ti-video','Có video',withVideos]
+  ].map(([icon,label,count])=>`<div class="col-sm-4"><div class="card card-sm"><div class="card-body d-flex align-items-center"><span class="avatar bg-blue-lt me-3"><i class="ti ${icon}"></i></span><div><div class="h2 mb-0">${count}</div><div class="text-secondary">${label}</div></div></div></div></div>`).join('');
+  document.getElementById('events-empty').classList.toggle('d-none', events.length>0);
+  document.getElementById('events-list').innerHTML = events.map(eventCard).join('');
+  await hydrateImages();
+}
+
+function eventCard(event) {
+  const person=event.person_label||'Người chưa xác định';
+  let video='';
+  if(event.video_key) video=`<button class="btn btn-outline-primary btn-sm" onclick="loadVideo('${escapeHtml(event.id)}', this)"><i class="ti ti-player-play me-1"></i>Xem video</button><div class="video-shell mt-2" id="video-${escapeHtml(event.id)}"></div>`;
+  else if(event.video_status==='recording') video='<span class="badge bg-yellow-lt">Đang lưu video…</span>';
+  else if(event.video_status==='error') video=`<div class="alert alert-danger py-2 mb-0"><strong>Lỗi lưu clip:</strong> ${escapeHtml(event.video_error||'Không rõ lỗi')}</div>`;
+  else video='<span class="text-secondary small">Sự kiện không có video</span>';
+  return `<div class="event-line mb-4"><span class="event-dot"></span><div class="card"><div class="card-header"><div><span class="badge bg-blue-lt me-2"><i class="ti ti-user me-1"></i>Có người</span><strong>${escapeHtml(person)}</strong></div><div class="card-actions text-secondary small"><i class="ti ti-clock me-1"></i>${escapeHtml(event.timestamp)}</div></div><div class="card-body"><div class="row g-3"><div class="col-lg-7">${event.image_key?`<img class="rounded event-image bg-secondary-lt" data-event-image="${escapeHtml(event.id)}" alt="Ảnh sự kiện ${escapeHtml(event.id)}" />`:'<div class="text-secondary">Không có ảnh sự kiện</div>'}</div><div class="col-lg-5"><div class="text-secondary small mb-2">LOG SỰ KIỆN #${escapeHtml(event.id)}</div><div class="mb-3"><i class="ti ti-user-check me-1"></i>AI xác nhận có người</div>${video}</div></div></div></div></div>`;
+}
+
+async function hydrateImages() {
+  await Promise.all([...document.querySelectorAll('[data-event-image]')].map(async img=>{
+    const response=await fetch(`/api/events/${encodeURIComponent(img.dataset.eventImage)}/image`,{headers:{Authorization:`Bearer ${getApiKey()}`}});
+    if(!response.ok)return; const url=URL.createObjectURL(await response.blob()); objectUrls.push(url); img.src=url;
+  }));
+}
+
+async function loadVideo(eventId, button) {
+  button.disabled=true; button.innerHTML='<i class="ti ti-loader-2 ti-spin me-1"></i>Đang tải…';
+  try {
+    const response=await fetch(`/api/events/${encodeURIComponent(eventId)}/video`,{headers:{Authorization:`Bearer ${getApiKey()}`}});
+    if(!response.ok) throw new Error('Không tải được video');
+    const url=URL.createObjectURL(await response.blob()); objectUrls.push(url);
+    document.getElementById(`video-${eventId}`).innerHTML=`<video controls autoplay src="${url}"></video>`;
+    button.remove();
+  } catch(error) { button.disabled=false; button.textContent=error.message; }
+}
+
+document.getElementById('logout-btn').addEventListener('click',()=>{localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
+window.addEventListener('beforeunload',()=>objectUrls.forEach(URL.revokeObjectURL));
+init().catch(showError);
+setInterval(()=>{ if(camera) loadEvents().catch(()=>{}); },10000);
+</script>
+</body>
+</html>

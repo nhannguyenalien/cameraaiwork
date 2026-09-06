@@ -305,7 +305,7 @@
       .map(
         (c, i) => `
         <div class="col-md-6 col-xl-4">
-          <div class="card camera-card" onclick="openPtz(${i})">
+          <div class="card camera-card" onclick="openCamera(${i})">
             <div class="ratio ratio-16x9 bg-dark">
               <iframe src="${escapeHtml(c.liveUrl)}" frameborder="0" loading="lazy" allow="autoplay; fullscreen"></iframe>
             </div>
@@ -314,7 +314,7 @@
                 <div class="fw-bold">${escapeHtml(c.cameraName || c.cameraId)}</div>
                 <div class="text-secondary small">${escapeHtml(c.siteName || c.siteId)}</div>
               </div>
-              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openPtz(${i})" title="${t('control')}">
+              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openCamera(${i})" title="${t('control')}">
                 <i class="ti ti-adjustments-horizontal me-1"></i>${t('control')}
               </button>
             </div>
@@ -355,25 +355,10 @@
     } finally { checkbox.disabled = false; }
   }
 
-  async function openPtz(index) {
+  function openCamera(index) {
     const c = cameras[index];
-    selectedCamera = c;
-    document.getElementById('ptz-modal-title').textContent = `${c.siteName} — ${c.cameraName || c.cameraId}`;
-    document.getElementById('camera-control-status').textContent = t('checking_controls');
-    ['ptz-controls', 'talk-controls', 'light-controls'].forEach((id) => document.getElementById(id).classList.add('d-none'));
-    document.getElementById('detail-record-person').checked = Number(c.recordOnPerson ?? 1) === 1;
-    const live = await api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/live`, { method: 'POST' });
-    document.getElementById('ptz-player').src = live.url;
-    new bootstrap.Modal(document.getElementById('ptz-modal')).show();
-    try {
-      const controls = await api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/controls`);
-      document.getElementById('ptz-controls').classList.toggle('d-none', !controls.ptz);
-      document.getElementById('talk-controls').classList.toggle('d-none', !controls.talk);
-      document.getElementById('light-controls').classList.toggle('d-none', !controls.light);
-      document.getElementById('camera-control-status').textContent = controls.online ? t('camera_online') : t('camera_offline');
-    } catch (error) {
-      document.getElementById('camera-control-status').textContent = `${t('controls_unavailable')}: ${error.message}`;
-    }
+    const query = new URLSearchParams({ site: c.siteId, camera: c.cameraId });
+    location.href = `/camera.html?${query}`;
   }
 
   async function move(dir) {
