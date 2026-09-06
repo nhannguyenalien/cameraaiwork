@@ -10,7 +10,7 @@ Mỗi địa điểm dùng một máy luôn bật, một Named Tunnel và một 
 - Mạng cho phép outbound HTTPS/WSS tới Cloudflare, GitHub, dashboard và dịch vụ package. Không mở port inbound/router.
 - Một account CameraAI đã đăng nhập. Trong **Cấu hình → Cài relay lên VPS**, bấm tạo lệnh cài; lệnh chứa token dùng một lần, hết hạn sau 15 phút và gắn với đúng account/email đang đăng nhập.
 
-Vì repository đang private, cấu hình deploy key chỉ-đọc trên máy site trước khi cài:
+Không cần GitHub account hoặc deploy key cho lần cài đầu: script công khai tải gói relay không chứa secret từ dashboard. Nếu muốn cập nhật bằng `git pull`, có thể cấu hình deploy key chỉ-đọc:
 
 ```bash
 ssh-keygen -t ed25519 -C cameraai-site -f "$HOME/.ssh/cameraai_deploy" -N ''
@@ -26,7 +26,7 @@ ssh -T git@github.com
 Sao chép và chạy đúng lệnh do dashboard sinh. Dạng lệnh là:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nhannguyenalien/cameraaiwork/main/apps/relay/install.sh | \
+curl -fsSL https://camera.schoolsai.work/install.sh | \
   sudo env CAMERAAIWORK_INSTALL_TOKEN='TOKEN_DUNG_MOT_LAN' \
   CAMERAAIWORK_API='https://camera.schoolsai.work' bash
 ```
