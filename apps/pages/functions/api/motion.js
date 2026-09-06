@@ -8,7 +8,7 @@ import { getFrame } from "../_lib/go2rtc.js";
 import { detectPerson } from "../_lib/detection.js";
 import { findOrCreatePerson } from "../_lib/faceMatch.js";
 import { sendPhotoAlert } from "../_lib/telegram.js";
-import { captureClip, uploadClip } from "../_lib/r2.js";
+import { captureClip, uploadClip, uploadSnapshot } from "../_lib/r2.js";
 import { getIntegration } from "../_lib/integrations.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
 
@@ -52,19 +52,36 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
 
   const db = getDb(env);
   const inserted = await db.execute({
-    sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link) VALUES (?, ?, ?, ?, ?, ?)",
-    args: [site.account_id, site.id, camera, personId, "Person", link],
+    sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, video_status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [site.account_id, site.id, camera, personId, "Person", link, shouldRecord ? "recording" : "disabled"],
   });
   const eventId = Number(inserted.lastInsertRowid);
+
+  // The event is already durable at this point. Snapshot and clip persistence
+  // are independent so a broken video stream never removes the event/photo.
+  waitUntil(
+    uploadSnapshot(env, frame, `${site.account_id}/${eventId}.jpg`)
+      .then((key) => db.execute({ sql: "UPDATE events SET image_key = ? WHERE id = ?", args: [key, eventId] }))
+      .catch((err) => console.error(`Upload snapshot thất bại (${eventId}):`, err.message || err))
+  );
 
   // Capture + upload happens after the response below (via waitUntil) because
   // recording and uploading the finite clip takes several seconds.
   if (shouldRecord) {
     waitUntil(
-      uploadClip(env, clipPromise, `${site.account_id}/${eventId}.mp4`).then((key) => {
-        if (!key) return;
-        return db.execute({ sql: "UPDATE events SET video_key = ? WHERE id = ?", args: [key, eventId] });
-      })
+      uploadClip(env, clipPromise, `${site.account_id}/${eventId}.mp4`)
+        .then((key) => db.execute({
+          sql: "UPDATE events SET video_key = ?, video_status = 'ready', video_error = NULL WHERE id = ?",
+          args: [key, eventId],
+        }))
+        .catch((err) => {
+          const message = String(err.message || "Không lưu được clip").slice(0, 300);
+          console.error(`Lưu clip thất bại (${eventId}):`, message);
+          return db.execute({
+            sql: "UPDATE events SET video_status = 'error', video_error = ? WHERE id = ?",
+            args: [message, eventId],
+          });
+        })
     );
   }
 

@@ -101,10 +101,10 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp DATETIME DEFAULT (datetime('now','localtime')),
     type TEXT,
     video_link TEXT,
-    video_key TEXT                     -- R2 object key of the motion clip (functions/_lib/r2.js),
-                                        -- set asynchronously after upload finishes; NULL until
-                                        -- then, or forever if capture failed (best-effort, never
-                                        -- blocks the alert path)
+    image_key TEXT,                    -- R2 snapshot captured when AI confirmed the person
+    video_key TEXT,                    -- R2 object key of the motion clip (functions/_lib/r2.js)
+    video_status TEXT DEFAULT 'disabled', -- disabled, recording, ready, or error
+    video_error TEXT                   -- user-visible reason when video_status=error
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -131,6 +131,9 @@ CREATE INDEX IF NOT EXISTS idx_people_account ON people(account_id);
 --   ALTER TABLE events ADD COLUMN person_id TEXT REFERENCES people(id);
 -- Migrating an existing DB that predates `events.video_key`:
 --   ALTER TABLE events ADD COLUMN video_key TEXT;
+--   ALTER TABLE events ADD COLUMN image_key TEXT;
+--   ALTER TABLE events ADD COLUMN video_status TEXT DEFAULT 'disabled';
+--   ALTER TABLE events ADD COLUMN video_error TEXT;
 
 -- Normally you don't hand-write these inserts at all — POST /api/sites and
 -- POST /api/sites/:id/cameras (called by apps/relay/install.sh) do this for
