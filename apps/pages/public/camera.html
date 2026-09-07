@@ -105,6 +105,7 @@ let mediaRecorder = null;
 let talkChunks = [];
 let talkTimer = null;
 let objectUrls = [];
+let imageObserver = null;
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -143,12 +144,19 @@ async function init() {
   document.getElementById('camera-name-input').value = camera.cameraName || '';
   document.getElementById('record-person').checked = Number(camera.recordOnPerson ?? 1) === 1;
   document.getElementById('camera-page').classList.remove('d-none');
-  await Promise.all([loadLive(), loadControls(), loadEvents()]);
+  // Give the live player first access to the network. Event thumbnails can be
+  // numerous and previously competed with the MSE WebSocket during startup.
+  await loadLive();
+  void Promise.all([loadControls(), loadEvents()]).catch(showError);
 }
 
 async function loadLive() {
   const live = await api(endpoint('live'), {method:'POST'});
-  document.getElementById('live-player').src = live.url;
+  const player = document.getElementById('live-player');
+  player.addEventListener('load', () => {
+    document.getElementById('camera-status').textContent = 'Đã mở trình phát, đang nhận hình ảnh từ camera…';
+  }, {once:true});
+  player.src = live.url;
 }
 
 async function loadControls() {
@@ -223,7 +231,7 @@ async function loadEvents() {
   ].map(([icon,label,count])=>`<div class="col-sm-4"><div class="card card-sm"><div class="card-body d-flex align-items-center"><span class="avatar bg-blue-lt me-3"><i class="ti ${icon}"></i></span><div><div class="h2 mb-0">${count}</div><div class="text-secondary">${label}</div></div></div></div></div>`).join('');
   document.getElementById('events-empty').classList.toggle('d-none', events.length>0);
   document.getElementById('events-list').innerHTML = events.map(eventCard).join('');
-  await hydrateImages();
+  hydrateImages();
 }
 
 function eventCard(event) {
@@ -236,11 +244,29 @@ function eventCard(event) {
   return `<div class="event-line mb-4"><span class="event-dot"></span><div class="card"><div class="card-header"><div><span class="badge bg-blue-lt me-2"><i class="ti ti-user me-1"></i>Có người</span><strong>${escapeHtml(person)}</strong></div><div class="card-actions text-secondary small"><i class="ti ti-clock me-1"></i>${escapeHtml(event.timestamp)}</div></div><div class="card-body"><div class="row g-3"><div class="col-lg-7">${event.image_key?`<img class="rounded event-image bg-secondary-lt" data-event-image="${escapeHtml(event.id)}" alt="Ảnh sự kiện ${escapeHtml(event.id)}" />`:'<div class="text-secondary">Không có ảnh sự kiện</div>'}</div><div class="col-lg-5"><div class="text-secondary small mb-2">LOG SỰ KIỆN #${escapeHtml(event.id)}</div><div class="mb-3"><i class="ti ti-user-check me-1"></i>AI xác nhận có người</div>${video}</div></div></div></div></div>`;
 }
 
-async function hydrateImages() {
-  await Promise.all([...document.querySelectorAll('[data-event-image]')].map(async img=>{
+async function hydrateImage(img) {
+  if (img.dataset.loaded === 'true') return;
+  img.dataset.loaded = 'true';
+  try {
     const response=await fetch(`/api/events/${encodeURIComponent(img.dataset.eventImage)}/image`,{headers:{Authorization:`Bearer ${getApiKey()}`}});
-    if(!response.ok)return; const url=URL.createObjectURL(await response.blob()); objectUrls.push(url); img.src=url;
-  }));
+    if(!response.ok)return;
+    const url=URL.createObjectURL(await response.blob()); objectUrls.push(url); img.src=url;
+  } catch { img.dataset.loaded = 'false'; }
+}
+
+function hydrateImages() {
+  imageObserver?.disconnect();
+  const images=[...document.querySelectorAll('[data-event-image]')];
+  if (!('IntersectionObserver' in window)) {
+    images.slice(0, 6).forEach(img => void hydrateImage(img));
+    return;
+  }
+  imageObserver = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    imageObserver.unobserve(entry.target);
+    void hydrateImage(entry.target);
+  }), {rootMargin:'400px 0px'});
+  images.forEach(img => imageObserver.observe(img));
 }
 
 async function loadVideo(eventId, button) {
@@ -281,9 +307,9 @@ document.getElementById('delete-camera').addEventListener('click', async () => {
 });
 
 document.getElementById('logout-btn').addEventListener('click',()=>{localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
-window.addEventListener('beforeunload',()=>objectUrls.forEach(URL.revokeObjectURL));
+window.addEventListener('beforeunload',()=>{ imageObserver?.disconnect(); objectUrls.forEach(URL.revokeObjectURL); });
 init().catch(showError);
-setInterval(()=>{ if(camera) loadEvents().catch(()=>{}); },10000);
+setInterval(()=>{ if(camera && !document.hidden) loadEvents().catch(()=>{}); },30000);
 </script>
 </body>
 </html>
