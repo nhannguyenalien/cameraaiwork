@@ -35,6 +35,7 @@ const { parseLiveRequest } = require("./live-auth");
 const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
 const { validateCamera, publicCamera, updateGo2rtc, persistCameras } = require("./camera-config");
+const { discoverCameras, resolveRtsp } = require("./discovery");
 
 const app = express();
 app.use(express.json());
@@ -199,6 +200,15 @@ app.post("/light/:camera", requireSecret, async (req, res) => {
 
 app.get("/health", requireSecret, (req, res) => res.json({ ok: true, cameras: config.cameras.map((c) => c.id) }));
 
+app.post("/discover/cameras", requireSecret, async (_req, res) => {
+  try {
+    res.json({ cameras: await discoverCameras() });
+  } catch (error) {
+    console.error("❌ Quét ONVIF lỗi:", error.message || error);
+    res.status(502).json({ error: "Không quét được camera trong mạng LAN của site" });
+  }
+});
+
 app.get("/config/cameras/:camera", requireSecret, (req, res) => {
   const camera = config.cameras.find((item) => item.id === req.params.camera);
   if (!camera) return res.sendStatus(404);
@@ -209,7 +219,17 @@ app.put("/config/cameras/:camera", requireSecret, async (req, res) => {
   const index = config.cameras.findIndex((item) => item.id === req.params.camera);
   const current = index >= 0 ? config.cameras[index] : null;
   try {
-    const camera = validateCamera({ ...req.body, id: req.params.camera }, current);
+    let body = req.body || {};
+    if (body.autoConfigure) {
+      const rtsp = await resolveRtsp({
+        ip: body.ip,
+        onvifPort: Number(body.onvifPort || 80),
+        username: body.username,
+        password: body.password,
+      });
+      body = { ...body, ...rtsp };
+    }
+    const camera = validateCamera({ ...body, id: req.params.camera }, current);
     await updateGo2rtc(config.go2rtc.url, camera);
     if (index >= 0) config.cameras[index] = camera;
     else config.cameras.push(camera);
