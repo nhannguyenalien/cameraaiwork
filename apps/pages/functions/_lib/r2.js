@@ -51,10 +51,16 @@ async function readBoundedClip(readableBody, maxMs, maxBytes) {
 // the evidence could be gone before recording began.
 export async function captureClip(site, camera) {
   try {
-    const clipUrl = `${site.relay_url}/internal/clip.mp4?src=${encodeURIComponent(camera)}`;
+    // The site hostname passes through Cloudflare. Use a unique URL per event
+    // so an account-level Cache Everything rule can never replay an older MP4.
+    const nonce = `${Date.now()}-${crypto.randomUUID()}`;
+    const clipUrl = `${site.relay_url}/internal/clip.mp4?src=${encodeURIComponent(camera)}&_clip=${encodeURIComponent(nonce)}`;
     const res = await fetch(clipUrl, {
       redirect: "manual",
-      headers: { "x-relay-secret": site.relay_secret },
+      headers: {
+        "x-relay-secret": site.relay_secret,
+        "cache-control": "no-cache, no-store",
+      },
     });
     if (!res.ok || !res.body) throw new Error(`go2rtc stream lỗi: ${res.status}`);
     const contentType = res.headers.get("content-type") || "";
