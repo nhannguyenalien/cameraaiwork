@@ -88,10 +88,10 @@
           </form>
           <hr class="my-4">
           <form id="camera-config-form" class="row g-3">
-            <div class="col-12"><h4 class="mb-0">Kết nối RTSP / ONVIF</h4><div class="text-secondary small">Cấu hình được gửi mã hóa tới relay và mật khẩu chỉ lưu trên máy tại site.</div></div>
+            <div class="col-12"><h4 class="mb-0">Kết nối RTSP / ONVIF</h4><div class="text-secondary small">Hiển thị đầy đủ cấu hình đang lưu trên máy tại site. Dữ liệu được truyền qua kết nối HTTPS bảo mật.</div></div>
             <div class="col-md-6"><label class="form-label">IP hoặc hostname</label><input id="config-ip" class="form-control" placeholder="192.168.2.23" required></div>
             <div class="col-md-6"><label class="form-label">Tài khoản camera</label><input id="config-username" class="form-control" autocomplete="username" required></div>
-            <div class="col-md-6"><label class="form-label">Mật khẩu camera</label><input id="config-password" type="password" class="form-control" autocomplete="current-password" placeholder="Để trống nếu không đổi"><div class="form-hint">Mật khẩu hiện tại không bao giờ được tải ngược về trình duyệt.</div></div>
+            <div class="col-md-6"><label class="form-label">Mật khẩu camera</label><input id="config-password" type="text" class="form-control" autocomplete="off" required><div class="form-hint">Mật khẩu đang lưu trên máy site được hiển thị đầy đủ tại đây.</div></div>
             <div class="col-md-2"><label class="form-label">Cổng RTSP</label><input id="config-rtsp-port" type="number" min="1" max="65535" class="form-control" value="554" required></div>
             <div class="col-md-4"><label class="form-label">Đường dẫn RTSP</label><input id="config-rtsp-path" class="form-control" value="/stream1" required></div>
             <div class="col-md-3"><label class="form-label">Cổng ONVIF</label><input id="config-onvif-port" type="number" min="1" max="65535" class="form-control" value="2020" required></div>
@@ -164,10 +164,11 @@ async function loadCameraConfig() {
   const value = await api(endpoint('config'));
   document.getElementById('config-ip').value = value.ip || '';
   document.getElementById('config-username').value = value.username || '';
+  document.getElementById('config-password').value = value.password || '';
   document.getElementById('config-onvif-port').value = value.onvifPort || 2020;
   document.getElementById('config-rtsp-port').value = value.rtspPort || 554;
   document.getElementById('config-rtsp-path').value = value.rtspPath || '/stream1';
-  document.getElementById('camera-config-status').textContent = value.hasPassword ? 'Đã có mật khẩu trên máy site.' : 'Chưa có mật khẩu.';
+  document.getElementById('camera-config-status').textContent = value.hasPassword ? 'Đã tải đầy đủ cấu hình từ máy site.' : 'Chưa có mật khẩu.';
 }
 
 async function loadLive() {
@@ -332,8 +333,8 @@ document.getElementById('camera-config-form').addEventListener('submit', async e
     rtspPath: document.getElementById('config-rtsp-path').value.trim(),
   };
   try {
-    await api(endpoint('config'), {method:'PUT', body:JSON.stringify(payload)});
-    document.getElementById('config-password').value = '';
+    const saved = await api(endpoint('config'), {method:'PUT', body:JSON.stringify(payload)});
+    document.getElementById('config-password').value = saved.password || payload.password;
     status.textContent = 'Đã lưu trên máy site và kết nối lại. Luồng hình có thể cần vài giây.';
     setTimeout(() => { loadLive().catch(showError); loadControls().catch(showError); }, 2500);
   } catch (error) { status.textContent = error.message; }
