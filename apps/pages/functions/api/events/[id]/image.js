@@ -16,7 +16,10 @@ export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
     headers: {
       "Content-Type": object.httpMetadata?.contentType || "image/jpeg",
       "Content-Length": String(object.size),
-      "Cache-Control": "private, max-age=3600",
+      // Event images never change, but keeping this private and uncached avoids
+      // stale responses from an overly broad edge/browser cache rule.
+      "Cache-Control": "private, no-store, no-cache, max-age=0",
+      Pragma: "no-cache",
     },
   });
 });

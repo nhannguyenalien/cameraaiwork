@@ -128,6 +128,8 @@ app.get("/internal/frame.jpeg", requireSecret, async (req, res) => {
     });
     const jpeg = Buffer.from(frame.data);
     if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) return res.sendStatus(502);
+    res.set("Cache-Control", "private, no-store, no-cache, max-age=0");
+    res.set("Pragma", "no-cache");
     res.type("image/jpeg").send(jpeg);
   } catch (err) {
     console.error(`❌ Snapshot lỗi (${cameraId}):`, err.message || err);
