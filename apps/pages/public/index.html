@@ -41,8 +41,8 @@
               <div class="card-body">
                 <h2 class="card-title" data-i18n="login">Đăng nhập</h2>
                 <p class="text-secondary" data-i18n="login_intro">Đăng nhập hoặc tạo tài khoản để quản lý hệ thống camera.</p>
-                <div class="mb-2"><input id="email-input" type="email" class="form-control" placeholder="Email" /></div>
-                <div class="mb-2"><input id="password-input" type="password" class="form-control" data-i18n-placeholder="password_placeholder" placeholder="Mật khẩu (ít nhất 10 ký tự)" /></div>
+                <div class="mb-2"><input id="email-input" type="email" class="form-control" autocomplete="username" placeholder="Email" /></div>
+                <div class="mb-2"><input id="password-input" type="password" class="form-control" autocomplete="current-password" data-i18n-placeholder="password_placeholder" placeholder="Mật khẩu (ít nhất 10 ký tự)" /></div>
                 <div class="d-flex gap-2">
                   <button id="email-login-btn" type="button" class="btn btn-outline-primary flex-fill" data-i18n="login">Đăng nhập</button>
                   <button id="signup-btn" type="button" class="btn btn-outline-secondary flex-fill" data-i18n="signup">Tạo tài khoản</button>
@@ -713,15 +713,20 @@
   async function emailAuth(path) {
     const error = document.getElementById('auth-error');
     error.textContent = '';
-    const res = await fetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: document.getElementById('email-input').value, password: document.getElementById('password-input').value }),
-    });
-    const data = await res.json();
-    if (!res.ok) { error.textContent = data.error || t('login_failed'); return; }
-    setApiKey(data.apiKey);
-    render();
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: document.getElementById('email-input').value, password: document.getElementById('password-input').value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { error.textContent = data.error || `${t('login_failed')} (HTTP ${res.status})`; return; }
+      if (!data.apiKey) { error.textContent = t('login_failed'); return; }
+      setApiKey(data.apiKey);
+      render();
+    } catch (requestError) {
+      error.textContent = requestError.message || t('login_failed');
+    }
   }
 
   document.getElementById('email-login-btn').addEventListener('click', () => emailAuth('/api/auth/login'));

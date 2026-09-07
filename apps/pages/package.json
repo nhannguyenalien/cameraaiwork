@@ -6,7 +6,8 @@
   "description": "Cloudflare Pages: static dashboard + Pages Functions (API, DB, AI orchestration, RunPod dispatch). Deploy via git integration in the Cloudflare dashboard, or `wrangler pages deploy public`.",
   "scripts": {
     "dev": "wrangler pages dev public --compatibility-date=2026-08-01",
-    "build:functions": "wrangler pages functions build"
+    "build:functions": "wrangler pages functions build",
+    "deploy": "wrangler pages deploy public --project-name cameraaiwork"
   },
   "devDependencies": {
     "wrangler": "^3.78.0"
