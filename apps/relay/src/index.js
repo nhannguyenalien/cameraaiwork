@@ -28,6 +28,7 @@ const express = require("express");
 const axios = require("axios");
 const http = require("http");
 const httpProxy = require("http-proxy");
+const { spawn } = require("child_process");
 const config = require("./config");
 const ptz = require("./ptz");
 const { startNamedTunnel } = require("./tunnel");
@@ -69,35 +70,46 @@ const talkback = createTalkback({
 
 function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 4 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
-    const url = new URL("/api/stream.mp4", config.go2rtc.url);
-    url.searchParams.set("src", cameraId);
+    const rtspUrl = `${config.go2rtc.rtspUrl.replace(/\/$/, "")}/${encodeURIComponent(cameraId)}`;
     const chunks = [];
     let bytes = 0;
     let settled = false;
-    let upstream;
+    let stderr = "";
+
+    // go2rtc's HTTP MP4 endpoint may replay the same completed fragment after
+    // a client truncates it. FFmpeg opening go2rtc's RTSP endpoint creates a
+    // genuinely new consumer for every event and closes a valid finite MP4.
+    const ffmpeg = spawn("ffmpeg", [
+      "-hide_banner", "-loglevel", "error",
+      "-rtsp_transport", "tcp",
+      "-i", rtspUrl,
+      "-t", String(durationMs / 1000),
+      "-map", "0:v:0", "-c:v", "copy", "-an",
+      "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+      "-f", "mp4", "pipe:1",
+    ], { stdio: ["ignore", "pipe", "pipe"] });
 
     const finish = (err) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      upstream?.destroy();
+      if (!ffmpeg.killed) ffmpeg.kill("SIGKILL");
       if (err) reject(err);
       else resolve(Buffer.concat(chunks, bytes));
     };
 
-    const timer = setTimeout(() => finish(), durationMs);
-    const request = http.get(url, (response) => {
-      upstream = response;
-      if (response.statusCode !== 200) return finish(new Error(`go2rtc HTTP ${response.statusCode}`));
-      response.on("data", (chunk) => {
-        if (bytes + chunk.length > maxBytes) return finish();
-        chunks.push(chunk);
-        bytes += chunk.length;
-      });
-      response.on("end", () => finish());
-      response.on("error", (err) => finish(err));
+    const timer = setTimeout(() => finish(new Error("FFmpeg ghi clip quá thời gian")), durationMs + 15000);
+    ffmpeg.stdout.on("data", (chunk) => {
+      if (bytes + chunk.length > maxBytes) return finish(new Error("Clip vượt giới hạn dung lượng"));
+      chunks.push(chunk);
+      bytes += chunk.length;
     });
-    request.on("error", (err) => finish(err));
+    ffmpeg.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-2000); });
+    ffmpeg.on("error", (err) => finish(err));
+    ffmpeg.on("close", (code) => {
+      if (code !== 0) return finish(new Error(`FFmpeg thoát mã ${code}: ${stderr.trim()}`));
+      finish();
+    });
   });
 }
 
@@ -132,6 +144,7 @@ app.get("/internal/clip.mp4", requireSecret, async (req, res) => {
   try {
     const clip = await captureLocalClip(cameraId);
     if (!clip.length) return res.sendStatus(502);
+    res.set("Cache-Control", "private, no-store, no-cache, max-age=0");
     res.type("video/mp4").send(clip);
   } catch (err) {
     console.error(`❌ Ghi clip lỗi (${cameraId}):`, err.message || err);

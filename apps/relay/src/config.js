@@ -23,6 +23,7 @@ module.exports = {
   go2rtc: {
     url: go2rtcUrl,
     port: Number(new URL(go2rtcUrl).port || 1984),
+    rtspUrl: process.env.GO2RTC_RTSP_URL || "rtsp://127.0.0.1:8554",
   },
   aiWorkerUrl: process.env.AI_WORKER_URL || "http://127.0.0.1:8001",
   // Cameras with broken ONVIF PullPoint support can still trigger alerts by
