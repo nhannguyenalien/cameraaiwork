@@ -157,6 +157,25 @@
                 </div>
                 <div class="col-12">
                   <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                      <div><h3 class="card-title"><i class="ti ti-database me-2"></i>Dung lượng lưu trữ R2</h3><div class="text-secondary small">Thống kê thực tế, hiện chưa áp giới hạn.</div></div>
+                      <button id="refresh-storage" type="button" class="btn btn-outline-secondary btn-sm">Làm mới</button>
+                    </div>
+                    <div class="card-body">
+                      <div id="storage-loading" class="text-secondary">Đang đo dung lượng…</div>
+                      <div id="storage-summary" class="row g-3 d-none"></div>
+                      <div id="storage-warning" class="alert alert-warning mt-3 mb-0 d-none"></div>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table card-table table-vcenter">
+                        <thead><tr><th>Site / Camera</th><th>Event</th><th>Ảnh</th><th>Video</th><th>Tổng</th></tr></thead>
+                        <tbody id="storage-cameras"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="card">
                     <div class="card-header d-flex justify-content-between">
                       <div><h3 class="card-title" data-i18n="connected_sites">Site đã kết nối</h3><div id="site-usage" class="text-secondary small"></div></div>
                       <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadSites()" data-i18n="refresh">Làm mới</button>
@@ -600,6 +619,7 @@
       loadIntegrations().catch(() => {});
       loadAccount().catch(() => {});
       loadSites().catch(() => {});
+      loadStorageUsage().catch(() => {});
     }
   }
 
@@ -633,6 +653,50 @@
     document.getElementById('account-email-note').textContent = accountSummary.email ? t('email_fixed_note') : t('legacy_email_note');
     document.getElementById('subscribe-btn').classList.toggle('d-none', plan === 'pro');
   }
+
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let amount = bytes;
+    let unit = -1;
+    do { amount /= 1024; unit += 1; } while (amount >= 1024 && unit < units.length - 1);
+    return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${units[unit]}`;
+  }
+
+  async function loadStorageUsage() {
+    const loading = document.getElementById('storage-loading');
+    const summaryElement = document.getElementById('storage-summary');
+    const warning = document.getElementById('storage-warning');
+    loading.classList.remove('d-none');
+    loading.textContent = 'Đang đo dung lượng thực tế trên R2…';
+    try {
+      const storage = await api('/api/settings/storage');
+      const cards = [
+        ['Tổng lưu trữ', formatBytes(storage.totalBytes), `${storage.objectCount} file`],
+        ['Ảnh sự kiện', formatBytes(storage.imageBytes), `${storage.imageCount} ảnh`],
+        ['Video sự kiện', formatBytes(storage.videoBytes), `${storage.videoCount} clip`],
+        ['Event', Number(storage.eventCount).toLocaleString(), `${storage.videoErrorCount} lỗi · ${storage.recordingCount} đang ghi`],
+      ];
+      summaryElement.innerHTML = cards.map(([label, value, note]) => `<div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><div class="text-secondary small">${label}</div><div class="h2 mb-1">${value}</div><div class="text-secondary small">${note}</div></div></div>`).join('');
+      summaryElement.classList.remove('d-none');
+      document.getElementById('storage-cameras').innerHTML = storage.cameras.map(camera => {
+        const total = Number(camera.imageBytes) + Number(camera.videoBytes);
+        return `<tr><td><div class="fw-bold">${escapeHtml(camera.siteName)}</div><div class="text-secondary small">${escapeHtml(camera.cameraName)}</div></td><td>${camera.events}</td><td>${camera.images} · ${formatBytes(camera.imageBytes)}</td><td>${camera.videos} · ${formatBytes(camera.videoBytes)}</td><td>${formatBytes(total)}</td></tr>`;
+      }).join('') || '<tr><td colspan="5" class="text-secondary">Chưa có dữ liệu lưu trữ.</td></tr>';
+      const issues = [];
+      if (storage.missingObjects) issues.push(`${storage.missingObjects} file được DB tham chiếu nhưng không còn trên R2`);
+      if (storage.orphanCount) issues.push(`${storage.orphanCount} file mồ côi (${formatBytes(storage.orphanBytes)})`);
+      if (storage.truncated) issues.push('Số liệu bị rút gọn vì tài khoản có trên 100.000 file');
+      warning.textContent = issues.join(' · ');
+      warning.classList.toggle('d-none', issues.length === 0);
+      loading.classList.add('d-none');
+    } catch (error) {
+      loading.textContent = `Không đo được dung lượng: ${error.message}`;
+    }
+  }
+
+  document.getElementById('refresh-storage').addEventListener('click', loadStorageUsage);
 
   async function loadSites() {
     sites = await api('/api/sites');
@@ -746,7 +810,7 @@
     try {
       await api(`/api/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
       showSettingsMessage(t('site_deleted', { name }));
-      await Promise.all([loadSites(), loadAccount(), loadCameras(), loadEvents()]);
+      await Promise.all([loadSites(), loadAccount(), loadCameras(), loadEvents(), loadStorageUsage()]);
     } catch (error) { showSettingsMessage(error.message, false); }
   }
 
