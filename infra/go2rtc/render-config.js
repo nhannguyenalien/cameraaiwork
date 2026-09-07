@@ -3,6 +3,7 @@
 // one stream entry per camera at that site, stream name = camera.id.
 const fs = require("fs");
 const path = require("path");
+const { sourceUrls } = require("../../apps/relay/src/camera-config");
 
 const camerasPath = path.resolve(__dirname, "../../apps/relay/cameras.json");
 if (!fs.existsSync(camerasPath)) {
@@ -16,10 +17,10 @@ const cameras = JSON.parse(fs.readFileSync(camerasPath, "utf8"));
 
 const lines = ["streams:"];
 for (const cam of cameras) {
-  const { username, password, ip, port } = cam.onvif;
   lines.push(`  ${cam.id}:`);
-  lines.push(`    - rtsp://${username}:${password}@${ip}:554/stream1`);
-  lines.push(`    - onvif://${username}:${password}@${ip}:${port}#backchannel=0`);
+  for (const source of sourceUrls({ ...cam, rtsp: cam.rtsp || { port: 554, path: "/stream1" } })) {
+    lines.push(`    - ${JSON.stringify(source)}`);
+  }
 }
 
 // go2rtc is never a public origin. cloudflared reaches the relay only; the

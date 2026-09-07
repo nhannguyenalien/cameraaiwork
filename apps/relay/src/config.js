@@ -43,4 +43,5 @@ module.exports = {
   cloudflareTunnelToken: process.env.CLOUDFLARE_TUNNEL_TOKEN || "",
 
   cameras, // [{ id, stream, onvif: { ip, port, username, password } }, ...]
+  camerasPath,
 };

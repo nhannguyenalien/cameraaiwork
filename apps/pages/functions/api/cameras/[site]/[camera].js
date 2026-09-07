@@ -1,4 +1,4 @@
-import { getCamera } from "../../../_lib/sites.js";
+import { getCamera, getSite } from "../../../_lib/sites.js";
 import { getDb } from "../../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../../_lib/http.js";
 
@@ -30,6 +30,14 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
 export const onRequestDelete = withErrorHandling(async ({ params, env, data }) => {
   const camera = await getCamera(env, data.accountId, params.site, params.camera);
   if (!camera) return errorJson("Camera not found", 404);
+  const site = await getSite(env, data.accountId, params.site);
+  if (site?.relay_url) {
+    const relayResponse = await fetch(`${site.relay_url}/config/cameras/${encodeURIComponent(camera.stream)}`, {
+      method: "DELETE",
+      headers: { "x-relay-secret": site.relay_secret },
+    });
+    if (!relayResponse.ok && relayResponse.status !== 404) return errorJson("Không xóa được cấu hình camera tại máy site", 502);
+  }
   const db = getDb(env);
   const events = await db.execute({
     sql: "SELECT image_key, video_key FROM events WHERE account_id = ? AND site_id = ? AND camera = ?",

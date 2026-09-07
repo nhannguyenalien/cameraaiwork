@@ -92,6 +92,22 @@
                   <div id="home-install-command-note" class="form-hint"></div>
                 </div>
               </div>
+              <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-camera-plus me-2"></i>Thêm camera</h3></div>
+                <div class="card-body">
+                  <form id="add-camera-form" class="row g-3">
+                    <div class="col-md-4"><label class="form-label">Nhà / site</label><select id="add-camera-site" class="form-select" required></select></div>
+                    <div class="col-md-4"><label class="form-label">Tên camera</label><input id="add-camera-name" class="form-control" placeholder="Phòng khách" maxlength="120" required></div>
+                    <div class="col-md-4"><label class="form-label">IP camera</label><input id="add-camera-ip" class="form-control" placeholder="192.168.2.23" required></div>
+                    <div class="col-md-4"><label class="form-label">Tài khoản camera</label><input id="add-camera-username" class="form-control" autocomplete="username" required></div>
+                    <div class="col-md-4"><label class="form-label">Mật khẩu camera</label><input id="add-camera-password" type="password" class="form-control" autocomplete="current-password" required></div>
+                    <div class="col-md-2"><label class="form-label">RTSP</label><input id="add-camera-rtsp-port" type="number" class="form-control" min="1" max="65535" value="554" required></div>
+                    <div class="col-md-2"><label class="form-label">ONVIF</label><input id="add-camera-onvif-port" type="number" class="form-control" min="1" max="65535" value="2020" required></div>
+                    <div class="col-md-6"><label class="form-label">Đường dẫn RTSP</label><input id="add-camera-rtsp-path" class="form-control" value="/stream1" required></div>
+                    <div class="col-12 d-flex align-items-center gap-3"><button id="add-camera-button" class="btn btn-primary" type="submit">Thêm và kết nối</button><span id="add-camera-status" class="text-secondary small">PC/VPS của site phải đang online và cùng LAN với camera.</span></div>
+                  </form>
+                </div>
+              </div>
               <div id="camera-grid" class="row row-cards"></div>
               <div id="camera-empty" class="text-secondary text-center py-5 d-none" data-i18n="no_cameras">Chưa có camera nào.</div>
             </div>
@@ -285,6 +301,7 @@
   let selectedCamera = null;
   let renamingPersonId = null;
   let accountSummary = null;
+  let sites = [];
 
   const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
   const setApiKey = (k) => localStorage.setItem(API_KEY_STORAGE, k);
@@ -617,7 +634,9 @@
   }
 
   async function loadSites() {
-    const sites = await api('/api/sites');
+    sites = await api('/api/sites');
+    const siteSelect = document.getElementById('add-camera-site');
+    siteSelect.innerHTML = sites.map(site => `<option value="${escapeHtml(site.id)}">${escapeHtml(site.name)}${site.relay_url ? '' : ' (chưa online)'}</option>`).join('');
     document.getElementById('sites-empty').classList.toggle('d-none', sites.length > 0);
     document.getElementById('sites-body').innerHTML = sites.map((site) => `<tr>
       <td><div class="fw-bold">${escapeHtml(site.name)}</div><div class="text-secondary small">${escapeHtml(site.id)}</div></td>
@@ -626,6 +645,35 @@
       <td class="text-end"><button class="btn btn-outline-danger btn-sm" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name)}" onclick="deleteSite(this.dataset.siteId, this.dataset.siteName)">${t('delete')}</button></td>
     </tr>`).join('');
   }
+
+  document.getElementById('add-camera-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = document.getElementById('add-camera-button');
+    const status = document.getElementById('add-camera-status');
+    const siteId = document.getElementById('add-camera-site').value;
+    if (!siteId) { status.textContent = 'Hãy tạo và kết nối site trước.'; return; }
+    button.disabled = true; status.textContent = 'Đang lưu cấu hình vào máy site…';
+    const payload = {
+      name: document.getElementById('add-camera-name').value.trim(),
+      ip: document.getElementById('add-camera-ip').value.trim(),
+      username: document.getElementById('add-camera-username').value.trim(),
+      password: document.getElementById('add-camera-password').value,
+      rtspPort: Number(document.getElementById('add-camera-rtsp-port').value),
+      onvifPort: Number(document.getElementById('add-camera-onvif-port').value),
+      rtspPath: document.getElementById('add-camera-rtsp-path').value.trim(),
+    };
+    try {
+      await api(`/api/sites/${encodeURIComponent(siteId)}/cameras`, {method:'POST', body:JSON.stringify(payload)});
+      event.currentTarget.reset();
+      document.getElementById('add-camera-rtsp-port').value = 554;
+      document.getElementById('add-camera-onvif-port').value = 2020;
+      document.getElementById('add-camera-rtsp-path').value = '/stream1';
+      status.textContent = 'Đã thêm camera. Đang tải lại danh sách…';
+      await Promise.all([loadCameras(), loadSites(), loadAccount()]);
+      status.textContent = 'Camera đã được lưu và kết nối tại site.';
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
 
   function bindInstallCommand(prefix = '') {
     const createButton = document.getElementById(`${prefix}create-install-command`);
