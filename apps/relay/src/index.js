@@ -34,6 +34,7 @@ const { startNamedTunnel } = require("./tunnel");
 const { parseLiveRequest } = require("./live-auth");
 const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
+const { validateCamera, publicCamera, updateGo2rtc, persistCameras } = require("./camera-config");
 
 const app = express();
 app.use(express.json());
@@ -197,6 +198,49 @@ app.post("/light/:camera", requireSecret, async (req, res) => {
 });
 
 app.get("/health", requireSecret, (req, res) => res.json({ ok: true, cameras: config.cameras.map((c) => c.id) }));
+
+app.get("/config/cameras/:camera", requireSecret, (req, res) => {
+  const camera = config.cameras.find((item) => item.id === req.params.camera);
+  if (!camera) return res.sendStatus(404);
+  res.json(publicCamera(camera));
+});
+
+app.put("/config/cameras/:camera", requireSecret, async (req, res) => {
+  const index = config.cameras.findIndex((item) => item.id === req.params.camera);
+  const current = index >= 0 ? config.cameras[index] : null;
+  try {
+    const camera = validateCamera({ ...req.body, id: req.params.camera }, current);
+    await updateGo2rtc(config.go2rtc.url, camera);
+    if (index >= 0) config.cameras[index] = camera;
+    else config.cameras.push(camera);
+    persistCameras(config.camerasPath, config.cameras);
+    ptz.reconnect(camera, watchMotionOnvif);
+    res.json(publicCamera(camera));
+  } catch (error) {
+    console.error(`❌ Cấu hình camera lỗi (${req.params.camera}):`, error.message);
+    res.status(400).json({ error: error.message || "Cấu hình camera không hợp lệ" });
+  }
+});
+
+app.delete("/config/cameras/:camera", requireSecret, async (req, res) => {
+  const index = config.cameras.findIndex((item) => item.id === req.params.camera);
+  if (index < 0) return res.sendStatus(404);
+  try {
+    const url = new URL("/api/streams", config.go2rtc.url);
+    url.searchParams.set("src", req.params.camera);
+    await fetch(url, { method: "DELETE" });
+    config.cameras.splice(index, 1);
+    persistCameras(config.camerasPath, config.cameras);
+    ptz.remove(req.params.camera);
+    const timer = personPollers.get(req.params.camera);
+    if (timer) clearInterval(timer);
+    personPollers.delete(req.params.camera);
+    personPresence.delete(req.params.camera);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(502).json({ error: error.message || "Không xóa được camera tại site" });
+  }
+});
 
 const cooldowns = new Map(); // camera id -> bool
 const personPollers = new Map(); // camera id -> interval; ONVIF fallback only

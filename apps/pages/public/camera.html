@@ -86,7 +86,17 @@
             <div class="col-md"><label class="form-label">Tên hiển thị</label><input id="camera-name-input" class="form-control" maxlength="120" required></div>
             <div class="col-md-auto"><button class="btn btn-primary" type="submit">Lưu tên</button></div>
           </form>
-          <div class="alert alert-info mt-3 mb-0"><strong>RTSP/ONVIF được giữ tại VPS.</strong> Mật khẩu camera không tải lên cloud. Muốn đổi IP hoặc tài khoản camera, sửa <code>apps/relay/cameras.json</code> trên VPS rồi chạy lại <code>infra/setup.sh</code> và khởi động lại dịch vụ relay/go2rtc.</div>
+          <hr class="my-4">
+          <form id="camera-config-form" class="row g-3">
+            <div class="col-12"><h4 class="mb-0">Kết nối RTSP / ONVIF</h4><div class="text-secondary small">Cấu hình được gửi mã hóa tới relay và mật khẩu chỉ lưu trên máy tại site.</div></div>
+            <div class="col-md-6"><label class="form-label">IP hoặc hostname</label><input id="config-ip" class="form-control" placeholder="192.168.2.23" required></div>
+            <div class="col-md-6"><label class="form-label">Tài khoản camera</label><input id="config-username" class="form-control" autocomplete="username" required></div>
+            <div class="col-md-6"><label class="form-label">Mật khẩu camera</label><input id="config-password" type="password" class="form-control" autocomplete="current-password" placeholder="Để trống nếu không đổi"><div class="form-hint">Mật khẩu hiện tại không bao giờ được tải ngược về trình duyệt.</div></div>
+            <div class="col-md-2"><label class="form-label">Cổng RTSP</label><input id="config-rtsp-port" type="number" min="1" max="65535" class="form-control" value="554" required></div>
+            <div class="col-md-4"><label class="form-label">Đường dẫn RTSP</label><input id="config-rtsp-path" class="form-control" value="/stream1" required></div>
+            <div class="col-md-3"><label class="form-label">Cổng ONVIF</label><input id="config-onvif-port" type="number" min="1" max="65535" class="form-control" value="2020" required></div>
+            <div class="col-12 d-flex align-items-center gap-3"><button id="save-camera-config" class="btn btn-primary" type="submit"><i class="ti ti-device-floppy me-1"></i>Lưu và kết nối lại</button><span id="camera-config-status" class="text-secondary small"></span></div>
+          </form>
         </div>
         <div class="card-footer"><button id="delete-camera" class="btn btn-outline-danger" type="button"><i class="ti ti-trash me-1"></i>Xóa camera và toàn bộ sự kiện</button></div>
       </div>
@@ -147,7 +157,17 @@ async function init() {
   // Give the live player first access to the network. Event thumbnails can be
   // numerous and previously competed with the MSE WebSocket during startup.
   await loadLive();
-  void Promise.all([loadControls(), loadEvents()]).catch(showError);
+  void Promise.all([loadControls(), loadEvents(), loadCameraConfig()]).catch(showError);
+}
+
+async function loadCameraConfig() {
+  const value = await api(endpoint('config'));
+  document.getElementById('config-ip').value = value.ip || '';
+  document.getElementById('config-username').value = value.username || '';
+  document.getElementById('config-onvif-port').value = value.onvifPort || 2020;
+  document.getElementById('config-rtsp-port').value = value.rtspPort || 554;
+  document.getElementById('config-rtsp-path').value = value.rtspPath || '/stream1';
+  document.getElementById('camera-config-status').textContent = value.hasPassword ? 'Đã có mật khẩu trên máy site.' : 'Chưa có mật khẩu.';
 }
 
 async function loadLive() {
@@ -296,6 +316,28 @@ document.getElementById('camera-name-form').addEventListener('submit', async eve
     camera.cameraName=name; document.getElementById('camera-name').textContent=name; document.title=`${name} · CameraAIWork`;
     document.getElementById('camera-status').textContent='Đã đổi tên camera.';
   } catch(error) { document.getElementById('camera-status').textContent=error.message; }
+});
+
+document.getElementById('camera-config-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = document.getElementById('save-camera-config');
+  const status = document.getElementById('camera-config-status');
+  button.disabled = true; status.textContent = 'Đang cập nhật camera tại site…';
+  const payload = {
+    ip: document.getElementById('config-ip').value.trim(),
+    username: document.getElementById('config-username').value.trim(),
+    password: document.getElementById('config-password').value,
+    onvifPort: Number(document.getElementById('config-onvif-port').value),
+    rtspPort: Number(document.getElementById('config-rtsp-port').value),
+    rtspPath: document.getElementById('config-rtsp-path').value.trim(),
+  };
+  try {
+    await api(endpoint('config'), {method:'PUT', body:JSON.stringify(payload)});
+    document.getElementById('config-password').value = '';
+    status.textContent = 'Đã lưu trên máy site và kết nối lại. Luồng hình có thể cần vài giây.';
+    setTimeout(() => { loadLive().catch(showError); loadControls().catch(showError); }, 2500);
+  } catch (error) { status.textContent = error.message; }
+  finally { button.disabled = false; }
 });
 
 document.getElementById('delete-camera').addEventListener('click', async () => {

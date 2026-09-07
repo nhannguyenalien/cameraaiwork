@@ -33,6 +33,19 @@ function connectOne(camera, onReady) {
   );
 }
 
+function reconnect(camera, onReady) {
+  const old = connections.get(camera.id);
+  connections.delete(camera.id);
+  try { old?.removeAllListeners(); } catch {}
+  connectOne(camera, onReady);
+}
+
+function remove(cameraId) {
+  const old = connections.get(cameraId);
+  connections.delete(cameraId);
+  try { old?.removeAllListeners(); } catch {}
+}
+
 function move(cameraId, x, y) {
   const cam = connections.get(cameraId);
   if (!cam) return false;
@@ -72,4 +85,4 @@ function setLight(cameraId, enabled) {
   });
 }
 
-module.exports = { connectAll, move, stop, capabilities, setLight };
+module.exports = { connectAll, reconnect, remove, move, stop, capabilities, setLight };
