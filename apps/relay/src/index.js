@@ -35,7 +35,7 @@ const { parseLiveRequest } = require("./live-auth");
 const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
 const { validateCamera, publicCamera, updateGo2rtc, persistCameras } = require("./camera-config");
-const { discoverCameras, resolveRtsp } = require("./discovery");
+const { discoverAll, resolveRtsp } = require("./discovery");
 
 const app = express();
 app.use(express.json());
@@ -202,7 +202,7 @@ app.get("/health", requireSecret, (req, res) => res.json({ ok: true, cameras: co
 
 app.post("/discover/cameras", requireSecret, async (_req, res) => {
   try {
-    res.json({ cameras: await discoverCameras() });
+    res.json({ cameras: await discoverAll() });
   } catch (error) {
     console.error("❌ Quét ONVIF lỗi:", error.message || error);
     res.status(502).json({ error: "Không quét được camera trong mạng LAN của site" });
