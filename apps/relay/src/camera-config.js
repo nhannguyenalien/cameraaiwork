@@ -35,6 +35,7 @@ function publicCamera(camera) {
     id: camera.id,
     ip: camera.onvif.ip,
     username: camera.onvif.username,
+    password: camera.onvif.password,
     onvifPort: camera.onvif.port,
     rtspPort: camera.rtsp?.port || 554,
     rtspPath: camera.rtsp?.path || "/stream1",

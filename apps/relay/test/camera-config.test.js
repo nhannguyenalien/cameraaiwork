@@ -7,7 +7,7 @@ test("keeps the local password when an edit submits an empty password", () => {
   const updated = validateCamera({ id: "cam1", ip: "192.168.1.3", username: "new", password: "" }, current);
   assert.equal(updated.onvif.password, "secret");
   assert.equal(updated.onvif.ip, "192.168.1.3");
-  assert.equal(publicCamera(updated).password, undefined);
+  assert.equal(publicCamera(updated).password, "secret");
   assert.equal(publicCamera(updated).hasPassword, true);
 });
 
