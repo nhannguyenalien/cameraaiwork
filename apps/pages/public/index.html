@@ -550,6 +550,8 @@
   });
   document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => tab.addEventListener('shown.bs.tab', event => {
     if (event.target.getAttribute('href') !== '#tab-cameras') stopAllCameraPreviews();
+    if (event.target.getAttribute('href') === '#tab-people') loadPeople().catch(() => {});
+    if (event.target.getAttribute('href') === '#tab-events') loadEvents().catch(() => {});
   }));
 
   function renderRecordingOptions() {
@@ -672,11 +674,21 @@
   });
 
   // --- People grid ---
+  let peopleRenderSignature = '';
+  let eventsRenderSignature = '';
+
+  function revokeBlobImages(container) {
+    container.querySelectorAll('img[src^="blob:"]').forEach((image) => URL.revokeObjectURL(image.src));
+  }
+
   async function loadPeople() {
     const people = await api('/api/people');
     const grid = document.getElementById('people-grid');
     document.getElementById('people-empty').classList.toggle('d-none', people.length > 0);
-    grid.innerHTML = people
+    const signature = JSON.stringify([document.documentElement.lang, people]);
+    if (signature === peopleRenderSignature) return;
+    peopleRenderSignature = signature;
+    const markup = people
       .map(
         (p) => `
         <div class="col-md-6 col-xl-4">
@@ -697,6 +709,8 @@
         </div>`
       )
       .join('');
+    revokeBlobImages(grid);
+    grid.innerHTML = markup;
     await Promise.all([...grid.querySelectorAll('[data-person-image]')].map(async (image) => {
       try { await loadProtectedImage(image, `/api/events/${image.dataset.personImage}/image`); } catch { image.replaceWith(createPersonPlaceholder()); }
     }));
@@ -737,7 +751,11 @@
 
   async function loadEvents() {
     const events = await api('/api/events?limit=20');
-    document.getElementById('events-body').innerHTML = events
+    const body = document.getElementById('events-body');
+    const signature = JSON.stringify([document.documentElement.lang, events, cameras.map((camera) => [camera.siteId, camera.stream, camera.cameraName, camera.cameraId])]);
+    if (signature === eventsRenderSignature) return;
+    eventsRenderSignature = signature;
+    const markup = events
       .map(
         (e) => `<tr>
           <td>${escapeHtml(e.timestamp)}</td>
@@ -762,6 +780,8 @@
         </tr>`
       )
       .join('');
+    revokeBlobImages(body);
+    body.innerHTML = markup;
     hydrateEventImages();
   }
 
@@ -1073,7 +1093,12 @@
   });
 
   render();
-  setInterval(() => { if (getApiKey()) { loadEvents().catch(() => {}); loadPeople().catch(() => {}); } }, 5000);
+  setInterval(() => {
+    if (!getApiKey() || document.hidden) return;
+    const activeTab = document.querySelector('[data-bs-toggle="tab"].active')?.getAttribute('href');
+    if (activeTab === '#tab-events') loadEvents().catch(() => {});
+    if (activeTab === '#tab-people') loadPeople().catch(() => {});
+  }, 5000);
 </script>
 </body>
 </html>
