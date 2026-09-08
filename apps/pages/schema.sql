@@ -137,9 +137,12 @@ CREATE TABLE IF NOT EXISTS event_people (
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
+    face_box TEXT,
     id TEXT PRIMARY KEY,               -- "runpod-<runpod_job_id>" — provider-prefixed, "-" not ":"
     account_id TEXT NOT NULL REFERENCES accounts(id),
     type TEXT,
+ALTER TABLE event_people ADD COLUMN IF NOT EXISTS face_box TEXT;
+
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

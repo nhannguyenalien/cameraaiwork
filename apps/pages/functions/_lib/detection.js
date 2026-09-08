@@ -6,7 +6,7 @@
 export async function detectPerson(env, site, frameBuffer) {
   const workerUrls = detectionWorkerUrls(env, site);
   if (workerUrls.length === 0) {
-    return { hasPerson: true, faceEmbedding: null, faceEmbeddings: [] };
+    return { hasPerson: true, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] };
   }
 
   const failures = [];
@@ -22,16 +22,21 @@ export async function detectPerson(env, site, frameBuffer) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const faceEmbeddings = Array.isArray(data.faceEmbeddings)
+      const faceDetections = Array.isArray(data.faceEmbeddings)
         ? data.faceEmbeddings
-            .map((face) => Array.isArray(face) ? face : face?.embedding)
-            .filter(Array.isArray)
+            .map((face) => Array.isArray(face) ? { embedding: face, box: null } : {
+              embedding: face?.embedding,
+              box: Array.isArray(face?.box) && face.box.length === 4 ? face.box : null,
+            })
+            .filter((face) => Array.isArray(face.embedding))
         : [];
+      const faceEmbeddings = faceDetections.map((face) => face.embedding);
       const faceEmbedding = Array.isArray(data.faceEmbedding) ? data.faceEmbedding : faceEmbeddings[0] || null;
       return {
         hasPerson: Boolean(data.hasPerson),
         faceEmbedding,
         faceEmbeddings: faceEmbeddings.length ? faceEmbeddings : (faceEmbedding ? [faceEmbedding] : []),
+        faceDetections: faceDetections.length ? faceDetections : (faceEmbedding ? [{ embedding: faceEmbedding, box: null }] : []),
       };
     } catch (e) {
       failures.push(`${workerUrl}: ${e.message}`);
@@ -42,7 +47,7 @@ export async function detectPerson(env, site, frameBuffer) {
   // fail-open behavior created empty clips with personId=null whenever a
   // transient go2rtc snapshot was not a valid JPEG.
   console.warn("AI worker không xác nhận được người, bỏ qua event:", failures.join("; "));
-  return { hasPerson: false, faceEmbedding: null, faceEmbeddings: [] };
+  return { hasPerson: false, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] };
 }
 
 export function detectionWorkerUrls(env, site) {

@@ -89,16 +89,31 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
     return json({ ok: true, retry: true });
   }
 
-  const embeddings = Array.isArray(body.faceEmbeddings) ? body.faceEmbeddings.slice(0, 20) : [];
+  const detections = (Array.isArray(body.faceEmbeddings) ? body.faceEmbeddings : []).slice(0, 20).map((face) => ({
+    embedding: Array.isArray(face) ? face : face?.embedding,
+    box: !Array.isArray(face) && Array.isArray(face?.box) && face.box.length === 4 ? face.box : null,
+  }));
   const personIds = [];
-  for (const embedding of embeddings) {
-    const id = await findOrCreatePerson(env, site.account_id, embedding);
+  const personBoxes = new Map();
+  for (const detection of detections) {
+    const id = await findOrCreatePerson(env, site.account_id, detection.embedding);
     if (id && !personIds.includes(id)) personIds.push(id);
+    if (id && detection.box && !personBoxes.has(id)) personBoxes.set(id, detection.box);
   }
   for (const personId of personIds) {
     await db.execute({
-      sql: "INSERT INTO event_people (event_id, person_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-      args: [eventId, personId],
+      sql: "INSERT INTO event_people (event_id, person_id, face_box) VALUES (?, ?, ?) ON CONFLICT (event_id, person_id) DO UPDATE SET face_box = COALESCE(event_people.face_box, EXCLUDED.face_box)",
+      args: [eventId, personId, personBoxes.has(personId) ? JSON.stringify(personBoxes.get(personId)) : null],
+    });
+    // A retry or deliberate historical rescan must not inflate seen_count.
+    // Derive all counters from the durable event links after the upsert.
+    await db.execute({
+      sql: `UPDATE people SET
+              seen_count = (SELECT COUNT(*) FROM event_people WHERE person_id = ?),
+              first_seen_at = COALESCE((SELECT MIN(e.timestamp) FROM event_people ep JOIN events e ON e.id = ep.event_id WHERE ep.person_id = ?), first_seen_at),
+              last_seen_at = COALESCE((SELECT MAX(e.timestamp) FROM event_people ep JOIN events e ON e.id = ep.event_id WHERE ep.person_id = ?), last_seen_at)
+            WHERE id = ?`,
+      args: [personId, personId, personId, personId],
     });
   }
   await db.execute({
