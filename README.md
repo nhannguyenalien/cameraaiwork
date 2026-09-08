@@ -46,6 +46,18 @@ verification commands are in [docs/INSTALL-SITE.md](docs/INSTALL-SITE.md).
 curl -fsSL https://camera.schoolsai.work/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='...' CAMERAAIWORK_API='https://camera.schoolsai.work' bash
 ```
 
+Máy đã cài chỉ cần cập nhật bằng lệnh dưới đây. Updater không claim lại site và giữ nguyên `.env`/camera:
+
+```bash
+curl -fsSL https://camera.schoolsai.work/update.sh | bash
+```
+
+Nếu lúc cài đã dùng thư mục khác `$HOME/cameraaiwork`, truyền lại đúng đường dẫn:
+
+```bash
+curl -fsSL https://camera.schoolsai.work/update.sh | env CAMERAAIWORK_DIR='/duong/dan/cameraaiwork' bash
+```
+
 **Windows** (PowerShell, as Administrator — required to install a service):
 ```powershell
 git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git

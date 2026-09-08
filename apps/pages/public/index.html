@@ -9,6 +9,14 @@
 <style>
   .camera-card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
   .camera-card:hover, .camera-card:focus-within { transform: translateY(-2px); box-shadow: var(--tblr-box-shadow-lg); }
+  .camera-preview { position: relative; overflow: hidden; }
+  .camera-preview iframe { pointer-events: none; }
+  .camera-thumbnail { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .58; visibility: visible; filter: brightness(.72); transition: none; }
+  .camera-preview-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; color: rgba(255,255,255,.85); background: #182433; }
+  .camera-preview-placeholder .ti { font-size: 2rem; }
+  .camera-preview-toggle { position: absolute; right: .65rem; bottom: .65rem; z-index: 2; }
+  .camera-online-state { position: absolute; left: .65rem; top: .65rem; z-index: 2; }
+  .person-avatar { width: 5rem; height: 5rem; flex: 0 0 5rem; object-fit: cover; border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
   .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
   .ptz-pad .btn { height:3.25rem; }
   .talk-button.is-recording { animation: talk-pulse 1s infinite; }
@@ -351,16 +359,16 @@
   }
 
   // --- Cameras grid ---
-  let liveRefreshTimer;
+  const activePreviews = new Map();
+  const cameraThumbnailUrls = new Map();
+  const visibleCameraThumbnails = new Set();
+  let cameraThumbnailObserver;
+  const MAX_ACTIVE_PREVIEWS = window.matchMedia('(max-width: 767px)').matches ? 1 : 2;
+
   async function loadCameras() {
+    stopAllCameraPreviews();
+    clearCameraThumbnails();
     cameras = await api('/api/cameras');
-    const live = await Promise.all(
-      cameras.map((c) => api(`/api/cameras/${encodeURIComponent(c.siteId)}/${encodeURIComponent(c.cameraId)}/live`, { method: 'POST' }))
-    );
-    cameras.forEach((camera, index) => {
-      camera.liveUrl = live[index].url;
-      camera.liveExpiresAt = live[index].expiresAt;
-    });
     const grid = document.getElementById('camera-grid');
     document.getElementById('camera-empty').classList.toggle('d-none', cameras.length > 0);
     renderRecordingOptions();
@@ -369,8 +377,16 @@
         (c, i) => `
         <div class="col-md-6 col-xl-4">
           <div class="card camera-card" onclick="openCamera(${i})">
-            <div class="ratio ratio-16x9 bg-dark">
-              <iframe src="${escapeHtml(c.liveUrl)}" frameborder="0" loading="lazy" allow="autoplay; fullscreen"></iframe>
+            <div class="ratio ratio-16x9 bg-dark camera-preview" id="camera-preview-${i}" data-camera-thumbnail="${i}">
+              <img class="camera-thumbnail d-none" alt="Ảnh xem trước ${escapeHtml(c.cameraName || c.cameraId)}" />
+              <div class="camera-preview-placeholder">
+                <i class="ti ti-video"></i>
+                <span class="small">Đang kiểm tra camera…</span>
+              </div>
+              <span class="badge bg-secondary-lt camera-online-state">Đang kiểm tra</span>
+              <button class="btn btn-sm btn-light camera-preview-toggle" type="button" onclick="toggleCameraPreview(${i}, event)" aria-label="Xem trực tiếp">
+                <i class="ti ti-player-play-filled"></i>
+              </button>
             </div>
             <div class="card-body d-flex align-items-center justify-content-between py-2">
               <div>
@@ -385,11 +401,156 @@
         </div>`
       )
       .join('');
-    clearTimeout(liveRefreshTimer);
-    liveRefreshTimer = setTimeout(() => {
-      if (getApiKey()) loadCameras().catch(() => {});
-    }, 4 * 60 * 1000);
+    observeCameraThumbnails();
   }
+
+  function observeCameraThumbnails() {
+    cameraThumbnailObserver?.disconnect();
+    const thumbnails = document.querySelectorAll('[data-camera-thumbnail]');
+    cameraThumbnailObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        const index = Number(entry.target.dataset.cameraThumbnail);
+        if (entry.isIntersecting) {
+          visibleCameraThumbnails.add(index);
+          loadCameraThumbnail(index);
+        } else {
+          visibleCameraThumbnails.delete(index);
+        }
+      });
+    }, { rootMargin: '150px' });
+    thumbnails.forEach(container => {
+      cameraThumbnailObserver.observe(container);
+      // Load every thumbnail as soon as the grid is rendered. Intersection is
+      // used only to limit the periodic refresh to nearby cards.
+      loadCameraThumbnail(Number(container.dataset.cameraThumbnail));
+    });
+  }
+
+  async function loadCameraThumbnail(index) {
+    if (document.hidden) return;
+    const camera = cameras[index];
+    const container = document.getElementById(`camera-preview-${index}`);
+    const image = container?.querySelector('.camera-thumbnail');
+    const badge = container?.querySelector('.camera-online-state');
+    if (!camera || !image || !badge || image.dataset.loading === 'true') return;
+    image.dataset.loading = 'true';
+    try {
+      const response = await fetch(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/snapshot`, {
+        headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('offline');
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const previousUrl = cameraThumbnailUrls.get(index);
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      cameraThumbnailUrls.set(index, objectUrl);
+      image.src = objectUrl;
+      image.classList.toggle('d-none', Boolean(activePreviews.get(index)?.iframe));
+      container.querySelector('.camera-preview-placeholder')?.classList.add('d-none');
+      badge.className = 'badge bg-green-lt camera-online-state';
+      badge.textContent = 'Online';
+    } catch (_) {
+      badge.className = 'badge bg-red-lt camera-online-state';
+      badge.textContent = 'Offline';
+      const message = container.querySelector('.camera-preview-placeholder span');
+      if (!image.src && message) message.textContent = 'Camera đang ngoại tuyến';
+    } finally {
+      delete image.dataset.loading;
+    }
+  }
+
+  function clearCameraThumbnails() {
+    cameraThumbnailObserver?.disconnect();
+    visibleCameraThumbnails.clear();
+    cameraThumbnailUrls.forEach(url => URL.revokeObjectURL(url));
+    cameraThumbnailUrls.clear();
+  }
+
+  setInterval(() => {
+    visibleCameraThumbnails.forEach(index => loadCameraThumbnail(index));
+  }, 60 * 1000);
+
+  async function toggleCameraPreview(index, event) {
+    event.stopPropagation();
+    if (activePreviews.has(index)) {
+      stopCameraPreview(index);
+      return;
+    }
+
+    while (activePreviews.size >= MAX_ACTIVE_PREVIEWS) {
+      stopCameraPreview(activePreviews.keys().next().value);
+    }
+
+    const camera = cameras[index];
+    const container = document.getElementById(`camera-preview-${index}`);
+    const button = container?.querySelector('.camera-preview-toggle');
+    if (!camera || !container || !button) return;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>';
+    const session = { button, controller: new AbortController(), iframe: null };
+    activePreviews.set(index, session);
+
+    try {
+      const live = await api(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/live`, {
+        method: 'POST', signal: session.controller.signal
+      });
+      if (activePreviews.get(index) !== session || document.hidden || !document.body.contains(container)) {
+        stopCameraPreview(index);
+        return;
+      }
+      const iframe = document.createElement('iframe');
+      iframe.frameBorder = '0';
+      iframe.allow = 'autoplay; fullscreen';
+      iframe.title = `Camera ${camera.cameraName || camera.cameraId}`;
+      iframe.src = live.url;
+      container.prepend(iframe);
+      container.querySelector('.camera-thumbnail')?.classList.add('d-none');
+      container.querySelector('.camera-preview-placeholder')?.classList.add('d-none');
+      button.disabled = false;
+      button.innerHTML = '<i class="ti ti-player-stop-filled"></i>';
+      button.setAttribute('aria-label', 'Dừng xem trực tiếp');
+      session.iframe = iframe;
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      activePreviews.delete(index);
+      button.disabled = false;
+      button.innerHTML = '<i class="ti ti-player-play-filled"></i>';
+      const placeholder = container.querySelector('.camera-preview-placeholder span');
+      if (placeholder) placeholder.textContent = `Không mở được: ${error.message}`;
+    }
+  }
+
+  function stopCameraPreview(index) {
+    const preview = activePreviews.get(index);
+    if (!preview) return;
+    // Removing the iframe closes its MSE WebSocket and releases the decoder.
+    preview.controller.abort();
+    preview.iframe?.remove();
+    preview.button.disabled = false;
+    preview.button.innerHTML = '<i class="ti ti-player-play-filled"></i>';
+    preview.button.setAttribute('aria-label', 'Xem trực tiếp');
+    document.querySelector(`#camera-preview-${index} .camera-preview-placeholder`)?.classList.remove('d-none');
+    const thumbnail = document.querySelector(`#camera-preview-${index} .camera-thumbnail`);
+    if (thumbnail?.src) {
+      thumbnail.classList.remove('d-none');
+      document.querySelector(`#camera-preview-${index} .camera-preview-placeholder`)?.classList.add('d-none');
+    }
+    activePreviews.delete(index);
+  }
+
+  function stopAllCameraPreviews() {
+    [...activePreviews.keys()].forEach(stopCameraPreview);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopAllCameraPreviews();
+  });
+  window.addEventListener('pagehide', () => {
+    stopAllCameraPreviews();
+    clearCameraThumbnails();
+  });
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => tab.addEventListener('shown.bs.tab', event => {
+    if (event.target.getAttribute('href') !== '#tab-cameras') stopAllCameraPreviews();
+  }));
 
   function renderRecordingOptions() {
     const container = document.getElementById('recording-options');
@@ -521,7 +682,9 @@
         <div class="col-md-6 col-xl-4">
           <div class="card">
             <div class="card-body d-flex align-items-center">
-              <span class="avatar avatar-lg me-3 bg-blue-lt"><i class="ti ti-user fs-1"></i></span>
+              ${p.preview_event_id
+                ? `<img class="person-avatar me-3" data-person-image="${p.preview_event_id}" alt="${escapeHtml(p.label || t('unnamed'))}" />`
+                : `<span class="person-avatar me-3 d-flex align-items-center justify-content-center text-secondary"><i class="ti ti-user fs-1"></i></span>`}
               <div class="flex-fill">
                 <div class="fw-bold">${p.label ? escapeHtml(p.label) : `<span class="text-secondary">${t('unnamed')}</span>`}</div>
                 <div class="text-secondary small">${t('seen', { count: p.seen_count, time: escapeHtml(p.last_seen_at) })}</div>
@@ -534,6 +697,22 @@
         </div>`
       )
       .join('');
+    await Promise.all([...grid.querySelectorAll('[data-person-image]')].map(async (image) => {
+      try { await loadProtectedImage(image, `/api/events/${image.dataset.personImage}/image`); } catch { image.replaceWith(createPersonPlaceholder()); }
+    }));
+  }
+
+  async function loadProtectedImage(image, url) {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    image.src = URL.createObjectURL(await response.blob());
+  }
+
+  function createPersonPlaceholder() {
+    const placeholder = document.createElement('span');
+    placeholder.className = 'person-avatar me-3 d-flex align-items-center justify-content-center text-secondary';
+    placeholder.innerHTML = '<i class="ti ti-user fs-1"></i>';
+    return placeholder;
   }
 
   function openRename(personId, currentLabel) {

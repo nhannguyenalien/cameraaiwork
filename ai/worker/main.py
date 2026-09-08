@@ -38,7 +38,7 @@ import onnxruntime
 from fastapi import FastAPI, Request
 from insightface.app import FaceAnalysis
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="camera-ai-worker")
 
@@ -66,8 +66,9 @@ _face_app.prepare(ctx_id=0, det_size=(320, 320))  # motion snapshots are small c
 
 class DetectResult(BaseModel):
     hasPerson: bool
-    boxes: list = []  # [{x1,y1,x2,y2,confidence}, ...] in original image pixels, from YOLO
+    boxes: list = Field(default_factory=list)  # [{x1,y1,x2,y2,confidence}, ...] in original image pixels, from YOLO
     faceEmbedding: list | None = None  # 512-dim, largest face found — for clustering "who is this"
+    faceEmbeddings: list = Field(default_factory=list)  # every visible face, ordered largest first
 
 
 def _preprocess_person(image: Image.Image):
@@ -132,14 +133,25 @@ def _detect_persons(image: Image.Image):
     return _nms(boxes)
 
 
-def _largest_face_embedding(image: Image.Image):
+def _face_embeddings(image: Image.Image):
     # insightface/opencv work in BGR numpy arrays, not PIL images.
     bgr = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
     faces = _face_app.get(bgr)
     if not faces:
-        return None
-    largest = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
-    return largest.embedding.astype(float).tolist()
+        return []
+    faces = sorted(
+        faces,
+        key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]),
+        reverse=True,
+    )
+    return [
+        {
+            "embedding": face.embedding.astype(float).tolist(),
+            "box": [float(value) for value in face.bbox],
+            "confidence": float(face.det_score),
+        }
+        for face in faces
+    ]
 
 
 def detect_person(image_bytes: bytes) -> DetectResult:
@@ -147,8 +159,16 @@ def detect_person(image_bytes: bytes) -> DetectResult:
     boxes = _detect_persons(image)
     has_person = len(boxes) > 0
 
-    face_embedding = _largest_face_embedding(image) if has_person else None
-    return DetectResult(hasPerson=has_person, boxes=boxes, faceEmbedding=face_embedding)
+    face_embeddings = _face_embeddings(image) if has_person else []
+    # Keep the singular field during rollout so an older cloud backend can
+    # still identify the most prominent face.
+    face_embedding = face_embeddings[0]["embedding"] if face_embeddings else None
+    return DetectResult(
+        hasPerson=has_person,
+        boxes=boxes,
+        faceEmbedding=face_embedding,
+        faceEmbeddings=face_embeddings,
+    )
 
 
 @app.post("/detect", response_model=DetectResult)

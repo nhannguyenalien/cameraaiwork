@@ -29,6 +29,9 @@ module.exports = {
   // Cameras with broken ONVIF PullPoint support can still trigger alerts by
   // periodically running the local person detector against a snapshot.
   personPollIntervalMs: Number(process.env.PERSON_POLL_INTERVAL_MS || 5000),
+  faceBackfillIntervalMs: Number(process.env.FACE_BACKFILL_INTERVAL_MS || 60000),
+  faceBackfillBatchSize: Number(process.env.FACE_BACKFILL_BATCH_SIZE || 5),
+  faceBackfillFrameIntervalSeconds: Number(process.env.FACE_BACKFILL_FRAME_INTERVAL_SECONDS || 2),
   tapoTalkbackPassword: process.env.TAPO_TALKBACK_PASSWORD || "",
   tapoGreeting: process.env.TAPO_GREETING || "Xin chào",
   tapoGreetingCooldownMs: Number(process.env.TAPO_GREETING_COOLDOWN_MS || 60000),

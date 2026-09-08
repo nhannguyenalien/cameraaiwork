@@ -15,6 +15,11 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
   } else if (body.provider === "runpod") {
     if (!body.apiKey?.trim() || !body.endpointId?.trim()) return errorJson("Thiếu API key hoặc endpoint ID", 400);
     await setIntegration(env, data.accountId, "runpod", { apiKey: body.apiKey.trim(), endpointId: body.endpointId.trim() });
+  } else if (body.provider === "openai" || body.provider === "gemini") {
+    if (!body.apiKey?.trim()) return errorJson("Thiếu API key", 400);
+    const config = { apiKey: body.apiKey.trim() };
+    if (body.model?.trim()) config.model = body.model.trim();
+    await setIntegration(env, data.accountId, body.provider, config);
   } else {
     return errorJson("Provider không hợp lệ", 400);
   }
@@ -23,7 +28,7 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
 
 export const onRequestDelete = withErrorHandling(async ({ request, env, data }) => {
   const { provider } = await request.json().catch(() => ({}));
-  if (!['telegram', 'runpod'].includes(provider)) return errorJson("Provider không hợp lệ", 400);
+  if (!['telegram', 'runpod', 'openai', 'gemini'].includes(provider)) return errorJson("Provider không hợp lệ", 400);
   await getDb(env).execute({ sql: "DELETE FROM account_integrations WHERE account_id = ? AND provider = ?", args: [data.accountId, provider] });
   return json({ ok: true });
 });

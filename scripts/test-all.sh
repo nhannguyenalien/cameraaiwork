@@ -25,7 +25,7 @@ echo "==> Python syntax"
 python3 -m py_compile "$ROOT_DIR/ai/worker/main.py" "$ROOT_DIR/runpod/heavy-worker/handler.py"
 
 echo "==> Shell and relay JavaScript syntax"
-bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR/apps/relay/install.sh"
+bash -n "$ROOT_DIR"/scripts/*.sh "$ROOT_DIR/apps/relay/install.sh" "$ROOT_DIR/apps/relay/update.sh" "$ROOT_DIR/apps/pages/public/update.sh"
 node --check "$ROOT_DIR/apps/relay/src/index.js"
 node --check "$ROOT_DIR/apps/relay/src/live-auth.js"
 node --check "$ROOT_DIR/apps/relay/src/ptz.js"

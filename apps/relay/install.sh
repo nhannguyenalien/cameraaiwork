@@ -16,6 +16,7 @@ REPO_URL="${CAMERAAIWORK_REPO:-https://github.com/nhannguyenalien/cameraaiwork.g
 INSTALL_DIR="${CAMERAAIWORK_DIR:-$HOME/cameraaiwork}"
 API_BASE="${CAMERAAIWORK_API:-https://camera.schoolsai.work}"
 BUNDLE_URL="${CAMERAAIWORK_BUNDLE_URL:-$API_BASE/cameraaiwork-relay.tar.gz}"
+MODEL_BASE_URL="${CAMERAAIWORK_MODEL_BASE_URL:-$API_BASE/models}"
 INSTALL_TOKEN="${CAMERAAIWORK_INSTALL_TOKEN:-}"
 
 echo "=== cameraaiwork — cài đặt on-site ==="
@@ -72,6 +73,22 @@ else
   rm -rf "$bundle_dir"
 fi
 cd "$INSTALL_DIR"
+
+# Models are served separately because Cloudflare Pages limits each static file
+# to 25 MiB. Existing files are retained to avoid downloading ~28 MiB again.
+declare -a MODEL_FILES=(
+  "person_detection.onnx"
+  "cameraaiwork/face_detection.onnx"
+  "cameraaiwork/face_recognition.onnx"
+)
+for model_file in "${MODEL_FILES[@]}"; do
+  model_path="$INSTALL_DIR/ai/worker/models/$model_file"
+  if [[ ! -s "$model_path" ]]; then
+    echo "==> Tải AI model: $model_file"
+    mkdir -p "$(dirname "$model_path")"
+    curl -fsSL "$MODEL_BASE_URL/$model_file" -o "$model_path"
+  fi
+done
 
 # --- 3. Ask for install token + camera info ---
 echo

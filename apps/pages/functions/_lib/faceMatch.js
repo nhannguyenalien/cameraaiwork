@@ -31,7 +31,7 @@ function cosineSimilarity(a, b) {
 // Returns the matched/created person's id, or null if no embedding was
 // given (AI worker not deployed, or no face found in the frame).
 export async function findOrCreatePerson(env, accountId, embedding) {
-  if (!embedding) return null;
+  if (!Array.isArray(embedding) || embedding.length === 0 || embedding.some((value) => !Number.isFinite(value))) return null;
 
   const db = getDb(env);
   const existing = await db.execute({
@@ -42,7 +42,10 @@ export async function findOrCreatePerson(env, accountId, embedding) {
   let best = null;
   let bestScore = -1;
   for (const row of existing.rows) {
-    const score = cosineSimilarity(embedding, JSON.parse(row.embedding));
+    let stored;
+    try { stored = JSON.parse(row.embedding); } catch { continue; }
+    if (!Array.isArray(stored) || stored.length !== embedding.length) continue;
+    const score = cosineSimilarity(embedding, stored);
     if (score > bestScore) {
       bestScore = score;
       best = row;
