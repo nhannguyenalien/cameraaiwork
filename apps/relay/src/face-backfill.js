@@ -14,8 +14,11 @@ function addDistinct(target, embeddings, threshold = 0.7) {
   for (const item of embeddings || []) {
     const embedding = Array.isArray(item) ? item : item?.embedding;
     if (!Array.isArray(embedding) || !embedding.length) continue;
-    if (!target.some((known) => known.length === embedding.length && cosineSimilarity(known, embedding) >= threshold)) {
-      target.push(embedding);
+    if (!target.some((known) => known.embedding.length === embedding.length && cosineSimilarity(known.embedding, embedding) >= threshold)) {
+      target.push({
+        embedding,
+        box: !Array.isArray(item) && Array.isArray(item?.box) && item.box.length === 4 ? item.box : null,
+      });
     }
   }
 }
@@ -61,7 +64,12 @@ function createFaceBackfill(config, log = console) {
         await fs.writeFile(videoPath, await media(event.id, "video"));
         await extractFrames(videoPath, path.join(temp, "frame-%05d.jpg"), config.faceBackfillFrameIntervalSeconds);
         const frames = (await fs.readdir(temp)).filter((name) => name.endsWith(".jpg")).sort();
-        for (const frame of frames) addDistinct(found, await detect(await fs.readFile(path.join(temp, frame))));
+        // A box from a video frame cannot crop the event's still image. Keep
+        // the embedding but deliberately discard that frame-local box.
+        for (const frame of frames) {
+          const faces = await detect(await fs.readFile(path.join(temp, frame)));
+          addDistinct(found, faces.map((face) => Array.isArray(face) ? face : face?.embedding));
+        }
       }
       await axios.post(base, { siteId: config.siteId, eventId: event.id, faceEmbeddings: found }, { headers, timeout: 60000 });
       log.log(`👤 Đã quét event R2 #${event.id}: ${found.length} khuôn mặt`);

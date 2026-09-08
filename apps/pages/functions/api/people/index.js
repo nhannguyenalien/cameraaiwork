@@ -12,7 +12,11 @@ export const onRequestGet = withErrorHandling(async ({ env, data }) => {
                  (SELECT ep.event_id FROM event_people ep
                   JOIN events e ON e.id = ep.event_id
                   WHERE ep.person_id = people.id AND e.account_id = people.account_id AND e.image_key IS NOT NULL
-                  ORDER BY ep.event_id DESC LIMIT 1) AS preview_event_id
+                  ORDER BY (ep.face_box IS NOT NULL) DESC, ep.event_id DESC LIMIT 1) AS preview_event_id,
+                 (SELECT ep.face_box FROM event_people ep
+                  JOIN events e ON e.id = ep.event_id
+                  WHERE ep.person_id = people.id AND e.account_id = people.account_id AND e.image_key IS NOT NULL
+                  ORDER BY (ep.face_box IS NOT NULL) DESC, ep.event_id DESC LIMIT 1) AS preview_face_box
           FROM people WHERE people.account_id = ? ORDER BY people.last_seen_at DESC`,
     args: [data.accountId],
   });

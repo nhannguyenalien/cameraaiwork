@@ -16,7 +16,8 @@
   .camera-preview-placeholder .ti { font-size: 2rem; }
   .camera-preview-toggle { position: absolute; right: .65rem; bottom: .65rem; z-index: 2; }
   .camera-online-state { position: absolute; left: .65rem; top: .65rem; z-index: 2; }
-  .person-avatar { width: 5rem; height: 5rem; flex: 0 0 5rem; object-fit: cover; border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
+  .person-avatar { width: 5rem; height: 5rem; flex: 0 0 5rem; overflow: hidden; position: relative; border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
+  .person-avatar img { position: absolute; max-width: none; }
   .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
   .ptz-pad .btn { height:3.25rem; }
   .talk-button.is-recording { animation: talk-pulse 1s infinite; }
@@ -695,7 +696,7 @@
           <div class="card">
             <div class="card-body d-flex align-items-center">
               ${p.preview_event_id
-                ? `<img class="person-avatar me-3" data-person-image="${p.preview_event_id}" alt="${escapeHtml(p.label || t('unnamed'))}" />`
+                ? `<span class="person-avatar me-3"><img data-person-image="${p.preview_event_id}" data-face-box="${encodeURIComponent(p.preview_face_box || '')}" alt="${escapeHtml(p.label || t('unnamed'))}" /></span>`
                 : `<span class="person-avatar me-3 d-flex align-items-center justify-content-center text-secondary"><i class="ti ti-user fs-1"></i></span>`}
               <div class="flex-fill">
                 <div class="fw-bold">${p.label ? escapeHtml(p.label) : `<span class="text-secondary">${t('unnamed')}</span>`}</div>
@@ -712,7 +713,7 @@
     revokeBlobImages(grid);
     grid.innerHTML = markup;
     await Promise.all([...grid.querySelectorAll('[data-person-image]')].map(async (image) => {
-      try { await loadProtectedImage(image, `/api/events/${image.dataset.personImage}/image`); } catch { image.replaceWith(createPersonPlaceholder()); }
+      try { await loadProtectedImage(image, `/api/events/${image.dataset.personImage}/image`); } catch { image.parentElement?.replaceWith(createPersonPlaceholder()); }
     }));
   }
 
@@ -720,6 +721,32 @@
     const response = await fetch(url, { headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     image.src = URL.createObjectURL(await response.blob());
+    await image.decode();
+    positionFacePreview(image);
+  }
+
+  function positionFacePreview(image) {
+    let box;
+    try { box = JSON.parse(decodeURIComponent(image.dataset.faceBox || '')); } catch { box = null; }
+    const frame = image.parentElement;
+    const frameWidth = frame?.clientWidth || 80;
+    const frameHeight = frame?.clientHeight || 80;
+    if (!Array.isArray(box) || box.length !== 4 || !image.naturalWidth || !image.naturalHeight) {
+      image.style.cssText = `width:${frameWidth}px;height:${frameHeight}px;left:0;top:0;object-fit:cover;`;
+      return;
+    }
+    const [x1, y1, x2, y2] = box.map(Number);
+    if (![x1, y1, x2, y2].every(Number.isFinite) || x2 <= x1 || y2 <= y1) return;
+    const padding = 0.35;
+    const cropWidth = Math.min(image.naturalWidth, (x2 - x1) * (1 + padding * 2));
+    const cropHeight = Math.min(image.naturalHeight, (y2 - y1) * (1 + padding * 2));
+    const centerX = (x1 + x2) / 2;
+    const centerY = (y1 + y2) / 2;
+    const scale = Math.max(frameWidth / cropWidth, frameHeight / cropHeight);
+    image.style.width = `${image.naturalWidth * scale}px`;
+    image.style.height = `${image.naturalHeight * scale}px`;
+    image.style.left = `${frameWidth / 2 - centerX * scale}px`;
+    image.style.top = `${frameHeight / 2 - centerY * scale}px`;
   }
 
   function createPersonPlaceholder() {

@@ -38,19 +38,24 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   const shouldRecord = Number(cameraConfig.record_on_person ?? 1) === 1;
   const clipPromise = shouldRecord ? captureClip(site, camera) : null;
   const frame = await getFrame(env, site, camera);
-  const { hasPerson, faceEmbedding, faceEmbeddings = [] } = await detectPerson(env, site, frame);
+  const { hasPerson, faceEmbedding, faceEmbeddings = [], faceDetections = [] } = await detectPerson(env, site, frame);
 
   if (!hasPerson) {
     return json({ ok: true, alerted: false });
   }
 
-  const embeddings = faceEmbeddings.length ? faceEmbeddings : (faceEmbedding ? [faceEmbedding] : []);
+  const detections = faceDetections.length
+    ? faceDetections
+    : (faceEmbeddings.length ? faceEmbeddings : (faceEmbedding ? [faceEmbedding] : []))
+        .map((embedding) => ({ embedding, box: null }));
   const personIds = [];
+  const personBoxes = new Map();
   // Match sequentially so two very similar faces in one frame can see a row
   // created earlier in this same request instead of producing duplicates.
-  for (const embedding of embeddings) {
-    const id = await findOrCreatePerson(env, site.account_id, embedding);
+  for (const detection of detections) {
+    const id = await findOrCreatePerson(env, site.account_id, detection.embedding);
     if (id && !personIds.includes(id)) personIds.push(id);
+    if (id && detection.box && !personBoxes.has(id)) personBoxes.set(id, detection.box);
   }
   const personId = personIds[0] || null;
 
@@ -66,8 +71,8 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   const eventId = Number(inserted.lastInsertRowid);
   for (const id of personIds) {
     await db.execute({
-      sql: "INSERT INTO event_people (event_id, person_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-      args: [eventId, id],
+      sql: "INSERT INTO event_people (event_id, person_id, face_box) VALUES (?, ?, ?) ON CONFLICT (event_id, person_id) DO UPDATE SET face_box = COALESCE(event_people.face_box, EXCLUDED.face_box)",
+      args: [eventId, id, personBoxes.has(id) ? JSON.stringify(personBoxes.get(id)) : null],
     });
   }
 
