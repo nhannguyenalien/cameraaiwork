@@ -37,6 +37,7 @@ const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
 const { validateCamera, publicCamera, updateGo2rtc, persistCameras } = require("./camera-config");
 const { discoverAll, resolveRtsp } = require("./discovery");
+const { createFaceBackfill } = require("./face-backfill");
 
 const app = express();
 app.use(express.json());
@@ -428,6 +429,7 @@ if (!config.siteId) {
 }
 
 ptz.connectAll(watchMotionOnvif);
+createFaceBackfill(config).start();
 const server = app.listen(config.port, "127.0.0.1", () =>
   console.log(`🚀 Relay (${config.siteId}) chạy ở http://127.0.0.1:${config.port}`)
 );

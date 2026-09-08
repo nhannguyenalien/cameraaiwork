@@ -38,13 +38,21 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   const shouldRecord = Number(cameraConfig.record_on_person ?? 1) === 1;
   const clipPromise = shouldRecord ? captureClip(site, camera) : null;
   const frame = await getFrame(env, site, camera);
-  const { hasPerson, faceEmbedding } = await detectPerson(env, site, frame);
+  const { hasPerson, faceEmbedding, faceEmbeddings = [] } = await detectPerson(env, site, frame);
 
   if (!hasPerson) {
     return json({ ok: true, alerted: false });
   }
 
-  const personId = await findOrCreatePerson(env, site.account_id, faceEmbedding);
+  const embeddings = faceEmbeddings.length ? faceEmbeddings : (faceEmbedding ? [faceEmbedding] : []);
+  const personIds = [];
+  // Match sequentially so two very similar faces in one frame can see a row
+  // created earlier in this same request instead of producing duplicates.
+  for (const embedding of embeddings) {
+    const id = await findOrCreatePerson(env, site.account_id, embedding);
+    if (id && !personIds.includes(id)) personIds.push(id);
+  }
+  const personId = personIds[0] || null;
 
   const caption = `🔔 Phát hiện người (${site.name || site.id})!\n⏰ ${new Date().toLocaleString("vi-VN")}`;
   const telegram = await getIntegration(env, site.account_id, "telegram");
@@ -52,10 +60,16 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
 
   const db = getDb(env);
   const inserted = await db.execute({
-    sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, video_status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, video_status, face_scan_status, face_scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP) RETURNING id",
     args: [site.account_id, site.id, camera, personId, "Person", link, shouldRecord ? "recording" : "disabled"],
   });
   const eventId = Number(inserted.lastInsertRowid);
+  for (const id of personIds) {
+    await db.execute({
+      sql: "INSERT INTO event_people (event_id, person_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+      args: [eventId, id],
+    });
+  }
 
   // The event is already durable at this point. Snapshot and clip persistence
   // are independent so a broken video stream never removes the event/photo.
@@ -85,5 +99,5 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
     );
   }
 
-  return json({ ok: true, alerted: true, personId });
+  return json({ ok: true, alerted: true, personId, personIds });
 });

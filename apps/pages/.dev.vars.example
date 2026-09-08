@@ -6,8 +6,7 @@
 # here anymore — those are per-site (sites table) and per-account (api_keys
 # table) rows in Turso now, not env vars. See schema.sql.
 
-TURSO_DB_URL=libsql://your-db.turso.io
-TURSO_AUTH_TOKEN=
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 
 # Used by POST /api/sites to provision a real Cloudflare Named Tunnel per
 # site server-side (our domain, customer needs neither their own Cloudflare

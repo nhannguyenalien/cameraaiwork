@@ -8,8 +8,12 @@ import { json, withErrorHandling } from "../../_lib/http.js";
 export const onRequestGet = withErrorHandling(async ({ env, data }) => {
   const db = getDb(env);
   const result = await db.execute({
-    sql: `SELECT id, label, first_seen_at, last_seen_at, seen_count
-          FROM people WHERE account_id = ? ORDER BY last_seen_at DESC`,
+    sql: `SELECT people.id, people.label, people.first_seen_at, people.last_seen_at, people.seen_count,
+                 (SELECT ep.event_id FROM event_people ep
+                  JOIN events e ON e.id = ep.event_id
+                  WHERE ep.person_id = people.id AND e.account_id = people.account_id AND e.image_key IS NOT NULL
+                  ORDER BY ep.event_id DESC LIMIT 1) AS preview_event_id
+          FROM people WHERE people.account_id = ? ORDER BY people.last_seen_at DESC`,
     args: [data.accountId],
   });
   return json(result.rows);

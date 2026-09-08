@@ -1,5 +1,4 @@
--- Run once against your Turso DB, e.g.:
---   turso db shell <db-name> < schema.sql
+-- PostgreSQL schema for Neon.
 --
 -- Multi-tenant model: every site/camera/event belongs to an account.
 -- Each account authenticates via its own API key (see scripts/generate-api-key.js).
@@ -21,7 +20,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,               -- e.g. "acct_abc123"
     name TEXT,
     email TEXT,                        -- set for accounts created via Google Sign-In
-    created_at DATETIME DEFAULT (datetime('now')),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     plan TEXT DEFAULT 'free',
     subscription_status TEXT DEFAULT 'inactive',
     stripe_customer_id TEXT,
@@ -36,15 +35,15 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
     account_id TEXT PRIMARY KEY REFERENCES accounts(id),
     password_salt TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    updated_at DATETIME DEFAULT (datetime('now'))
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,               -- SHA-256 hash of the key, never the raw key
     account_id TEXT NOT NULL REFERENCES accounts(id),
     label TEXT,
-    created_at DATETIME DEFAULT (datetime('now')),
-    revoked_at DATETIME
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMPTZ
 );
 
 -- Short-lived, single-use credentials generated from the authenticated
@@ -53,9 +52,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE TABLE IF NOT EXISTS install_tokens (
     id TEXT PRIMARY KEY,               -- SHA-256 of the raw token
     account_id TEXT NOT NULL REFERENCES accounts(id),
-    expires_at DATETIME NOT NULL,
-    used_at DATETIME,
-    created_at DATETIME DEFAULT (datetime('now'))
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_install_tokens_account ON install_tokens(account_id);
 
@@ -63,7 +62,7 @@ CREATE TABLE IF NOT EXISTS account_integrations (
     account_id TEXT NOT NULL REFERENCES accounts(id),
     provider TEXT NOT NULL,
     encrypted_config TEXT NOT NULL,
-    updated_at DATETIME DEFAULT (datetime('now')),
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (account_id, provider)
 );
 
@@ -99,37 +98,57 @@ CREATE TABLE IF NOT EXISTS people (
     account_id TEXT NOT NULL REFERENCES accounts(id),
     label TEXT,                        -- nullable until named, e.g. "Bố"
     embedding TEXT NOT NULL,           -- JSON array of 512 floats
-    first_seen_at DATETIME DEFAULT (datetime('now','localtime')),
-    last_seen_at DATETIME DEFAULT (datetime('now','localtime')),
+    first_seen_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     seen_count INTEGER DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     account_id TEXT NOT NULL,
     site_id TEXT,
     camera TEXT,
     person_id TEXT REFERENCES people(id),  -- NULL if no face was matched (e.g. AI worker not deployed yet)
-    timestamp DATETIME DEFAULT (datetime('now','localtime')),
+    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     type TEXT,
     video_link TEXT,
     image_key TEXT,                    -- R2 snapshot captured when AI confirmed the person
     video_key TEXT,                    -- R2 object key of the motion clip (functions/_lib/r2.js)
     video_status TEXT DEFAULT 'disabled', -- disabled, recording, ready, or error
-    video_error TEXT                   -- user-visible reason when video_status=error
+    video_error TEXT,                  -- user-visible reason when video_status=error
+    face_scan_status TEXT DEFAULT 'pending', -- pending, processing, completed, or error
+    face_scan_started_at TIMESTAMPTZ,
+    face_scanned_at TIMESTAMPTZ,
+    face_scan_error TEXT
+);
+
+-- Idempotent upgrade for databases created before background R2 face scans.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scan_status TEXT DEFAULT 'pending';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scan_started_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scanned_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scan_error TEXT;
+
+-- A motion snapshot can contain several faces. Keep this many-to-many link
+-- while events.person_id remains the backwards-compatible primary face.
+CREATE TABLE IF NOT EXISTS event_people (
+    event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    person_id TEXT NOT NULL REFERENCES people(id),
+    PRIMARY KEY (event_id, person_id)
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,               -- "runpod-<runpod_job_id>" — provider-prefixed, "-" not ":"
     account_id TEXT NOT NULL REFERENCES accounts(id),
     type TEXT,
-    created_at DATETIME DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_account_time ON events(account_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_cameras_account ON cameras(account_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
 CREATE INDEX IF NOT EXISTS idx_people_account ON people(account_id);
+CREATE INDEX IF NOT EXISTS idx_event_people_person ON event_people(person_id, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_events_face_scan ON events(site_id, face_scan_status, timestamp);
 
 -- Migrating an existing DB that predates the `email` column:
 --   ALTER TABLE accounts ADD COLUMN email TEXT;
@@ -141,6 +160,8 @@ CREATE INDEX IF NOT EXISTS idx_people_account ON people(account_id);
 -- Migrating an existing DB that predates `people`/`events.person_id`:
 --   CREATE TABLE people (...); -- see above
 --   ALTER TABLE events ADD COLUMN person_id TEXT REFERENCES people(id);
+--   CREATE TABLE event_people (event_id INTEGER NOT NULL REFERENCES events(id), person_id TEXT NOT NULL REFERENCES people(id), PRIMARY KEY (event_id, person_id));
+--   CREATE INDEX idx_event_people_person ON event_people(person_id, event_id DESC);
 -- Migrating an existing DB that predates `events.video_key`:
 --   ALTER TABLE events ADD COLUMN video_key TEXT;
 --   ALTER TABLE events ADD COLUMN image_key TEXT;

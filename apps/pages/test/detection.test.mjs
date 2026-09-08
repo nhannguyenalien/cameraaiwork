@@ -23,7 +23,25 @@ test("detection falls back from a stale AI hostname to AI behind the relay", asy
     "https://old-ai.example/detect",
     "https://site-relay.example/internal/ai/detect",
   ]);
-  assert.deepEqual(result, { hasPerson: true, faceEmbedding: [0.1, 0.2] });
+  assert.deepEqual(result, {
+    hasPerson: true,
+    faceEmbedding: [0.1, 0.2],
+    faceEmbeddings: [[0.1, 0.2]],
+  });
+});
+
+test("detection keeps every face returned by the local worker", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    hasPerson: true,
+    faceEmbedding: [0.1, 0.2],
+    faceEmbeddings: [
+      { embedding: [0.1, 0.2], box: [1, 2, 3, 4] },
+      { embedding: [0.8, 0.9], box: [5, 6, 7, 8] },
+    ],
+  }), { status: 200, headers: { "content-type": "application/json" } }));
+
+  const result = await detectPerson({ AI_WORKER_URL: "http://ai.local" }, {}, new Uint8Array([1]));
+  assert.deepEqual(result.faceEmbeddings, [[0.1, 0.2], [0.8, 0.9]]);
 });
 
 test("detection endpoints are normalized and de-duplicated", () => {
