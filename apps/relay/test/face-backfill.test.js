@@ -17,3 +17,11 @@ test("addDistinct preserves the face box from the event image", () => {
   addDistinct(faces, [{ embedding: [1, 0], box: [10, 20, 50, 80] }]);
   assert.deepEqual(faces[0].box, [10, 20, 50, 80]);
 });
+
+test("addDistinct merges camera-quality samples of the same face", () => {
+  const faces = [];
+  addDistinct(faces, [{ embedding: [1, 0], box: [1, 2, 3, 4] }]);
+  addDistinct(faces, [{ embedding: [0.4, Math.sqrt(0.84)], box: [5, 6, 7, 8] }]);
+  assert.equal(faces.length, 1);
+  assert.deepEqual(faces[0].box, [1, 2, 3, 4]);
+});
