@@ -6,13 +6,11 @@
 // (buffalo_s / w600k_mbf, ArcFace-style 512-dim embeddings): two
 // different people in the same photo scored ~0.00 cosine similarity;
 // the same face under a brightness+blur perturbation scored 0.92-0.97.
-// Production camera frames are much harder than synthetic brightness/blur
-// perturbations: the same person across pose, distance and compression has
-// measured as low as 0.25 across pose, distance and compression. Production
-// data on 2026-09-09 contained 115 rows for roughly 5-6 people: at 0.35 only
-// three pairs matched, while 0.25 formed seven coherent components. Keep this
-// aligned with the relay's per-event de-duplication.
-export const SIMILARITY_THRESHOLD = 0.25;
+// Production camera frames are much harder than synthetic brightness/blur.
+// Keep matching conservative because false merges are harder to correct than
+// duplicate groups; an estimated headcount must not be used as ground truth.
+// Keep this aligned with the relay's per-event de-duplication.
+export const SIMILARITY_THRESHOLD = 0.30;
 
 import { getDb } from "./db.js";
 import { randomId } from "./ids.js";
