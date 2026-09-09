@@ -6,11 +6,11 @@
 // (buffalo_s / w600k_mbf, ArcFace-style 512-dim embeddings): two
 // different people in the same photo scored ~0.00 cosine similarity;
 // the same face under a brightness+blur perturbation scored 0.92-0.97.
-// 0.5 sits comfortably in the gap — real day-to-day lighting/angle
-// variation will pull genuine matches down from that 0.92-0.97 ceiling,
-// but nowhere near 0.5, based on that separation. Revisit if false
-// matches/splits show up in practice (see docs/PLAN.md).
-const SIMILARITY_THRESHOLD = 0.5;
+// Production camera frames are much harder than synthetic brightness/blur
+// perturbations: the same person across pose, distance and compression has
+// measured 0.35-0.49 cosine similarity. Keep this aligned with the relay's
+// per-event de-duplication so repeated video frames stay one person.
+export const SIMILARITY_THRESHOLD = 0.35;
 
 import { getDb } from "./db.js";
 import { randomId } from "./ids.js";

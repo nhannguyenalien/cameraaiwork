@@ -10,7 +10,9 @@ function cosineSimilarity(a, b) {
   return aa > 0 && bb > 0 ? dot / (Math.sqrt(aa) * Math.sqrt(bb)) : 0;
 }
 
-function addDistinct(target, embeddings, threshold = 0.7) {
+// Keep this aligned with the cloud identity threshold. A higher value here
+// turns different video frames of the same face into separate people.
+function addDistinct(target, embeddings, threshold = 0.35) {
   for (const item of embeddings || []) {
     const embedding = Array.isArray(item) ? item : item?.embedding;
     if (!Array.isArray(embedding) || !embedding.length) continue;
