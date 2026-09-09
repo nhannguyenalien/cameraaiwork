@@ -8,9 +8,11 @@
 // the same face under a brightness+blur perturbation scored 0.92-0.97.
 // Production camera frames are much harder than synthetic brightness/blur
 // perturbations: the same person across pose, distance and compression has
-// measured 0.35-0.49 cosine similarity. Keep this aligned with the relay's
-// per-event de-duplication so repeated video frames stay one person.
-export const SIMILARITY_THRESHOLD = 0.35;
+// measured as low as 0.25 across pose, distance and compression. Production
+// data on 2026-09-09 contained 115 rows for roughly 5-6 people: at 0.35 only
+// three pairs matched, while 0.25 formed seven coherent components. Keep this
+// aligned with the relay's per-event de-duplication.
+export const SIMILARITY_THRESHOLD = 0.25;
 
 import { getDb } from "./db.js";
 import { randomId } from "./ids.js";
