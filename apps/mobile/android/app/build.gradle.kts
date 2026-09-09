@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "work.schoolsai.camera_ai_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_secure_storage 11 requires Android API 37 at compile time.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
