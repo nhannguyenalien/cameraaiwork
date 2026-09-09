@@ -44,9 +44,17 @@ flutter test
 
 ## Build trên GitHub
 
-Workflow `Mobile CI` dùng Flutter 3.44.9 và Java 17 để analyze, test và build
-Android APK. Sau khi workflow chạy thành công, tải artifact
-`cameraai-android-apk` trong trang Actions của lần chạy tương ứng.
+Workflow `Mobile CI` dùng Flutter 3.44.9 để analyze, test và tạo bốn artifact:
+
+- `cameraai-android-apk`: APK cài trực tiếp trên Android.
+- `cameraai-ios-unsigned`: ứng dụng iOS chưa ký để ký lại bằng Apple Developer.
+- `cameraai-macos`: ứng dụng macOS chưa notarize.
+- `cameraai-windows`: thư mục ứng dụng Windows đã đóng gói ZIP.
+
+Tải các artifact trong trang Actions của lần chạy tương ứng. Artifact được giữ
+14 ngày.
 
 APK hiện dùng signing key debug để thử nghiệm nội bộ. Cần cấu hình release
 keystore bằng GitHub Secrets trước khi phát hành lên Google Play.
+Các bản Apple cũng cần certificate/provisioning profile và notarization phù hợp
+trước khi phân phối qua App Store hoặc cài trên thiết bị thật.
