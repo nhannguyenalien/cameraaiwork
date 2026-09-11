@@ -6,6 +6,24 @@ import { getDb } from "../../_lib/db.js";
 import { getSite } from "../../_lib/sites.js";
 import { deleteSiteTunnel } from "../../_lib/cloudflareTunnel.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
+import { validateResourceName } from "../../_lib/resourceNames.js";
+
+export const onRequestPatch = withErrorHandling(async ({ request, params, env, data }) => {
+  const site = await getSite(env, data.accountId, params.id);
+  if (!site) return errorJson("Site not found", 404);
+  const body = await request.json().catch(() => null);
+  let name;
+  try {
+    name = validateResourceName(body?.name, "site");
+  } catch (error) {
+    return errorJson(error.message, 400);
+  }
+  await getDb(env).execute({
+    sql: "UPDATE sites SET name = ? WHERE id = ? AND account_id = ?",
+    args: [name, params.id, data.accountId],
+  });
+  return json({ ok: true, name });
+});
 
 export const onRequestDelete = withErrorHandling(async ({ params, env, data }) => {
   const site = await getSite(env, data.accountId, params.id);

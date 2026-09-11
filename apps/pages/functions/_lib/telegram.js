@@ -24,3 +24,24 @@ export async function sendPhotoAlert(config, frameBuffer, caption) {
   const cleanChatId = config.chatId.toString().replace("-100", "");
   return `https://t.me/c/${cleanChatId}/${msgId}`;
 }
+
+// Plain-text message, for reports that have no single frame to attach
+// (e.g. a periodic digest summarizing several events at once).
+export async function sendTextAlert(config, text) {
+  if (!config?.botToken || !config?.chatId) {
+    console.warn("Tài khoản chưa cấu hình Telegram, bỏ qua cảnh báo.");
+    return null;
+  }
+
+  const res = await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: config.chatId, text }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(`Telegram lỗi: ${JSON.stringify(data)}`);
+
+  const msgId = data.result.message_id;
+  const cleanChatId = config.chatId.toString().replace("-100", "");
+  return `https://t.me/c/${cleanChatId}/${msgId}`;
+}

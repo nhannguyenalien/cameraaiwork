@@ -1,6 +1,8 @@
 import { getCamera, getSite } from "../../../_lib/sites.js";
 import { getDb } from "../../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../../_lib/http.js";
+import { validateResourceName } from "../../../_lib/resourceNames.js";
+import { deleteObjects } from "../../../_lib/objectStorage.js";
 
 export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
   const camera = await getCamera(env, data.accountId, params.site, params.camera);
@@ -18,8 +20,12 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
   const camera = await getCamera(env, data.accountId, params.site, params.camera);
   if (!camera) return errorJson("Camera not found", 404);
   const body = await request.json().catch(() => null);
-  const name = String(body?.name || "").trim();
-  if (!name || name.length > 120) return errorJson("Tên camera phải có từ 1 đến 120 ký tự", 400);
+  let name;
+  try {
+    name = validateResourceName(body?.name, "camera");
+  } catch (error) {
+    return errorJson(error.message, 400);
+  }
   await getDb(env).execute({
     sql: "UPDATE cameras SET name = ? WHERE id = ? AND site_id = ? AND account_id = ?",
     args: [name, camera.id, params.site, data.accountId],
@@ -40,12 +46,12 @@ export const onRequestDelete = withErrorHandling(async ({ params, env, data }) =
   }
   const db = getDb(env);
   const events = await db.execute({
-    sql: "SELECT image_key, video_key FROM events WHERE account_id = ? AND site_id = ? AND camera = ?",
+    sql: "SELECT image_key, video_key, storage_backend FROM events WHERE account_id = ? AND site_id = ? AND camera = ?",
     args: [data.accountId, params.site, camera.stream],
   });
-  if (env.EVENTS_BUCKET) {
-    const keys = events.rows.flatMap((row) => [row.image_key, row.video_key]).filter(Boolean);
-    if (keys.length) await env.EVENTS_BUCKET.delete(keys);
+  for (const backend of ["r2", "s3", "gdrive"]) {
+    const keys = events.rows.filter((row) => (row.storage_backend || "r2") === backend).flatMap((row) => [row.image_key, row.video_key]).filter(Boolean);
+    await deleteObjects(env, data.accountId, backend, keys);
   }
   await db.batch([
     {

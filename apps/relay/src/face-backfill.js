@@ -74,7 +74,7 @@ function createFaceBackfill(config, log = console) {
         }
       }
       await axios.post(base, { siteId: config.siteId, eventId: event.id, faceEmbeddings: found }, { headers, timeout: 60000 });
-      log.log(`👤 Đã quét event R2 #${event.id}: ${found.length} khuôn mặt`);
+      log.log(`👤 Đã quét local event R2 #${event.id}: ${found.length} khuôn mặt`);
     } catch (error) {
       const message = String(error.response?.data?.error || error.message || error).slice(0, 500);
       log.error(`❌ Quét khuôn mặt event #${event.id} lỗi: ${message}`);
@@ -85,7 +85,8 @@ function createFaceBackfill(config, log = console) {
   }
 
   async function run() {
-    if (running || !config.pagesApiUrl || !config.relaySecret || config.faceBackfillIntervalMs <= 0) return;
+    const interval = config.faceBackfillIntervalMs;
+    if (running || !config.pagesApiUrl || !config.relaySecret || interval <= 0) return;
     running = true;
     try {
       const response = await axios.get(base, {
@@ -93,17 +94,18 @@ function createFaceBackfill(config, log = console) {
       });
       for (const event of response.data?.events || []) await processEvent(event);
     } catch (error) {
-      log.error("❌ Lấy hàng đợi quét khuôn mặt R2 lỗi:", error.response?.data?.error || error.message || error);
+      log.error("❌ Lấy hàng đợi quét khuôn mặt local lỗi:", error.response?.data?.error || error.message || error);
     } finally { running = false; }
   }
 
   return {
     run,
     start() {
-      if (!config.pagesApiUrl || config.faceBackfillIntervalMs <= 0) return null;
-      log.log(`🔁 Worker khuôn mặt R2 chạy mỗi ${config.faceBackfillIntervalMs}ms`);
+      const interval = config.faceBackfillIntervalMs;
+      if (!config.pagesApiUrl || interval <= 0) return null;
+      log.log(`🔁 Worker khuôn mặt local chạy mỗi ${interval}ms`);
       setTimeout(run, 5000);
-      return setInterval(run, config.faceBackfillIntervalMs);
+      return setInterval(run, interval);
     },
   };
 }

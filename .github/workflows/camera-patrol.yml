@@ -1,0 +1,46 @@
+name: Camera patrol digest
+
+on:
+  schedule:
+    # Hourly "activity" digest: only messages Telegram if something happened.
+    - cron: "5 * * * *"
+    # Daily "all quiet" check-in at 21:00 Asia/Ho_Chi_Minh (UTC+7), so the
+    # homeowner gets confirmation even on days with zero events.
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "activity (only when something happened) or daily (always sends)"
+        required: false
+        default: "activity"
+
+permissions:
+  contents: read
+
+jobs:
+  patrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Determine mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 14 * * *" ]; then
+            echo "mode=daily" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=activity" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run camera digest
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          MAINTENANCE_SECRET: ${{ secrets.MAINTENANCE_SECRET }}
+        run: |
+          test -n "$DASHBOARD_URL"
+          test -n "$MAINTENANCE_SECRET"
+          curl --fail-with-body --retry 3 --retry-all-errors \
+            -X POST "${DASHBOARD_URL%/}/api/internal/patrol" \
+            -H "Authorization: Bearer $MAINTENANCE_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "{\"mode\":\"${{ steps.mode.outputs.mode }}\"}"

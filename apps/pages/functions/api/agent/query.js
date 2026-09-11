@@ -1,20 +1,10 @@
 import { getDb } from "../../_lib/db.js";
-import { getIntegration } from "../../_lib/integrations.js";
+import { loadAiCredentials } from "../../_lib/integrations.js";
+import { actionCatalog } from "../../_lib/agentActions.js";
 import { askGemini, askOpenAI, makeAgentContext, resolveTimeRange } from "../../_lib/cameraAgent.js";
 import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 
 const MAX_EVENTS = 500;
-
-async function loadCredentials(env, accountId) {
-  const [openai, gemini] = await Promise.all([
-    getIntegration(env, accountId, "openai").catch(() => null),
-    getIntegration(env, accountId, "gemini").catch(() => null),
-  ]);
-  return {
-    openai: openai || (env.OPENAI_API_KEY ? { apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL } : null),
-    gemini: gemini || (env.GEMINI_API_KEY ? { apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL } : null),
-  };
-}
 
 export const onRequestPost = withErrorHandling(async ({ request, env, data }) => {
   const body = await request.json().catch(() => null);
@@ -36,30 +26,32 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
     }),
     db.execute({
       sql: `SELECT e.id, e.site_id, e.camera, e.timestamp, e.type, e.person_id,
-                   e.image_key, e.video_status, s.name AS site_name, c.name AS camera_name,
+                   primary_person.label AS person_label, e.image_key, e.video_status,
+                   s.name AS site_name, c.name AS camera_name,
                    COALESCE(json_agg(json_build_object('id', p.id, 'label', p.label))
                      FILTER (WHERE p.id IS NOT NULL), '[]') AS people
             FROM events e
             LEFT JOIN sites s ON s.id = e.site_id
             LEFT JOIN cameras c ON c.site_id = e.site_id AND c.stream = e.camera
+            LEFT JOIN people primary_person ON primary_person.id = e.person_id AND primary_person.account_id = e.account_id
             LEFT JOIN event_people ep ON ep.event_id = e.id
             LEFT JOIN people p ON p.id = ep.person_id AND p.account_id = e.account_id
             WHERE e.account_id = ? AND e.timestamp >= ? AND e.timestamp < ?
-            GROUP BY e.id, s.name, c.name
+            GROUP BY e.id, s.name, c.name, primary_person.label
             ORDER BY e.timestamp ASC LIMIT ?`,
       args: [data.accountId, range.start.toISOString(), range.end.toISOString(), MAX_EVENTS],
     }),
   ]);
 
   const { visits, prompt } = makeAgentContext(question, range, cameraResult.rows, eventResult.rows);
-  const credentials = await loadCredentials(env, data.accountId);
+  const credentials = await loadAiCredentials(env, data.accountId);
   const order = body.provider === "openai" ? ["openai"] : body.provider === "gemini" ? ["gemini"] : ["openai", "gemini"];
   const failures = [];
   for (const provider of order) {
     if (!credentials[provider]) continue;
     try {
       const result = provider === "openai" ? await askOpenAI(credentials.openai, prompt) : await askGemini(credentials.gemini, prompt);
-      return json({ ...result, provider, range, visits, eventCount: eventResult.rows.length, truncated: eventResult.rows.length === MAX_EVENTS });
+      return json({ ...result, provider, range, visits, eventCount: eventResult.rows.length, truncated: eventResult.rows.length === MAX_EVENTS, actions: actionCatalog() });
     } catch (error) {
       failures.push(error.message);
     }

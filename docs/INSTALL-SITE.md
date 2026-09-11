@@ -10,25 +10,18 @@ Mỗi địa điểm dùng một máy luôn bật, một Named Tunnel và một 
 - Mạng cho phép outbound HTTPS/WSS tới Cloudflare, GitHub, dashboard và dịch vụ package. Không mở port inbound/router.
 - Một account CameraAI đã đăng nhập. Trong **Cấu hình → Cài relay lên VPS**, bấm tạo lệnh cài; lệnh chứa token dùng một lần, hết hạn sau 15 phút và gắn với đúng account/email đang đăng nhập.
 
-Không cần GitHub account hoặc deploy key cho lần cài đầu: script công khai tải gói relay không chứa secret từ dashboard. Nếu muốn cập nhật bằng `git pull`, có thể cấu hình deploy key chỉ-đọc:
-
-```bash
-ssh-keygen -t ed25519 -C cameraai-site -f "$HOME/.ssh/cameraai_deploy" -N ''
-cat "$HOME/.ssh/cameraai_deploy.pub"
-# Thêm public key vào GitHub repository > Settings > Deploy keys (không bật write).
-printf 'Host github.com\n  IdentityFile ~/.ssh/cameraai_deploy\n  IdentitiesOnly yes\n' >> "$HOME/.ssh/config"
-chmod 600 "$HOME/.ssh/config"
-ssh -T git@github.com
-```
+Không cần GitHub account hoặc deploy key: script công khai tải gói relay không chứa secret từ dashboard và kiểm tra SHA-256 trước khi giải nén.
 
 ## 2. Cài đặt
 
 Sao chép và chạy đúng lệnh do dashboard sinh. Dạng lệnh là:
 
 ```bash
-curl -fsSL https://camera.schoolsai.work/install.sh | \
-  sudo env CAMERAAIWORK_INSTALL_TOKEN='TOKEN_DUNG_MOT_LAN' \
-  CAMERAAIWORK_API='https://camera.schoolsai.work' bash
+curl --proto '=https' --tlsv1.2 -fsSL https://camera.schoolsai.work/install.sh -o /tmp/cameraaiwork-install.sh
+less /tmp/cameraaiwork-install.sh
+CAMERAAIWORK_INSTALL_TOKEN='TOKEN_DUNG_MOT_LAN' \
+  CAMERAAIWORK_API='https://camera.schoolsai.work' \
+  bash /tmp/cameraaiwork-install.sh
 ```
 
 Script hỏi tên site, tên/IP camera và thông tin RTSP/ONVIF; sau đó đổi token dùng một lần lấy site ID, relay secret và tunnel token, rồi cài go2rtc/relay/AI cùng service tự khởi động. Site và camera được tạo với `account_id` của email đã sinh token nên tự xuất hiện trong dashboard của email đó. VPS không đăng nhập bằng email và không giữ session/API key của người dùng.
@@ -63,10 +56,10 @@ Sau đó vào dashboard: camera phải xuất hiện, live mở được, PTZ di
 
 ```bash
 cd "$HOME/cameraaiwork"
-git pull --ff-only
-./scripts/test-all.sh
-# chạy lại installer để render config/cập nhật dependency nếu release yêu cầu
+./apps/relay/update.sh
 ```
+
+Updater chỉ chạy thủ công, kiểm tra checksum/archive, giữ nguyên `.env` và `cameras.json`, đồng thời gỡ lịch auto-update legacy nếu máy từng cài bản cũ.
 
 Không sửa file sinh ra ngoài `apps/relay/.env` và `apps/relay/cameras.json`. Sao lưu hai file này bằng kho bí mật; chúng chứa relay/tunnel/camera secrets. Khi mất máy, thu hồi tunnel token bằng cách xóa/re-provision site, đổi mật khẩu camera rồi cài lại.
 
@@ -77,6 +70,6 @@ Không sửa file sinh ra ngoài `apps/relay/.env` và `apps/relay/cameras.json`
 - PTZ lỗi nhưng live chạy: camera/profile có thể không hỗ trợ ONVIF PTZ hoặc ONVIF port khác.
 - AI không lên: kiểm tra Python/venv, dung lượng đĩa và AI log. Motion recording vẫn phải hoạt động độc lập.
 - `429`: đã đạt viewer limit của gói. Đóng tab/viewer cũ hoặc nâng gói.
-- Không clone được: deploy key chưa được gắn vào private repo hoặc SSH config chưa dùng đúng key.
+- Update lỗi checksum: dừng lại, không bypass; xác minh release và endpoint tải trước khi thử lại.
 
 Rollback an toàn: giữ checkout release trước, quay lại tag/commit đã biết, cài lại dependencies và restart ba services. Không xóa site trên dashboard để rollback vì thao tác đó xóa tunnel, camera và event metadata.

@@ -43,7 +43,27 @@ CREATE TABLE IF NOT EXISTS api_keys (
     account_id TEXT NOT NULL REFERENCES accounts(id),
     label TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    revoked_at TIMESTAMPTZ
+    revoked_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ
+);
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+-- Legacy browser tokens were created without a TTL. Bound their lifetime during migration.
+UPDATE api_keys
+SET expires_at = created_at + INTERVAL '12 hours'
+WHERE expires_at IS NULL AND label LIKE 'web %';
+-- 'full' = every endpoint (same as a browser session). 'read' = GET requests
+-- only, enforced in functions/_middleware.js. Rows with label LIKE 'web %'
+-- are browser session tokens from _lib/auth.js, always 'full' — account
+-- holders manage their own keys via functions/api/settings/api-keys.js,
+-- which excludes those rows from the list/revoke surface.
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'full' CHECK (scope IN ('full', 'read'));
+CREATE INDEX IF NOT EXISTS idx_api_keys_account ON api_keys(account_id);
+
+CREATE TABLE IF NOT EXISTS auth_rate_limits (
+    id TEXT PRIMARY KEY,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    window_started TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    blocked_until TIMESTAMPTZ
 );
 
 -- Short-lived, single-use credentials generated from the authenticated
@@ -112,14 +132,17 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     type TEXT,
     video_link TEXT,
-    image_key TEXT,                    -- R2 snapshot captured when AI confirmed the person
-    video_key TEXT,                    -- R2 object key of the motion clip (functions/_lib/r2.js)
+    image_key TEXT,                    -- object key of snapshot captured when AI confirmed the person
+    video_key TEXT,                    -- object key of the motion clip
+    storage_backend TEXT NOT NULL DEFAULT 'r2', -- r2, customer-managed s3, or Google Drive
     video_status TEXT DEFAULT 'disabled', -- disabled, recording, ready, or error
     video_error TEXT,                  -- user-visible reason when video_status=error
     face_scan_status TEXT DEFAULT 'pending', -- pending, processing, completed, or error
     face_scan_started_at TIMESTAMPTZ,
     face_scanned_at TIMESTAMPTZ,
-    face_scan_error TEXT
+    face_scan_error TEXT,
+    acknowledged INTEGER NOT NULL DEFAULT 0,
+    note TEXT
 );
 
 -- Idempotent upgrade for databases created before background R2 face scans.
@@ -127,24 +150,78 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scan_status TEXT DEFAULT 'pendi
 ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scan_started_at TIMESTAMPTZ;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scanned_at TIMESTAMPTZ;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS face_scan_error TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS storage_backend TEXT NOT NULL DEFAULT 'r2';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS acknowledged INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS note TEXT;
 
 -- A motion snapshot can contain several faces. Keep this many-to-many link
 -- while events.person_id remains the backwards-compatible primary face.
 CREATE TABLE IF NOT EXISTS event_people (
     event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     person_id TEXT NOT NULL REFERENCES people(id),
+    face_box TEXT,
     PRIMARY KEY (event_id, person_id)
 );
 
-CREATE TABLE IF NOT EXISTS jobs (
+ALTER TABLE event_people ADD COLUMN IF NOT EXISTS face_box TEXT;
+
+-- Premium/GPU face results intentionally live beside (not on top of) the
+-- local results. This lets an administrator compare both pipelines and
+-- discard/rebuild the experimental GPU grouping without touching local data.
+CREATE TABLE IF NOT EXISTS gpu_people (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id),
+    label TEXT,
+    embedding TEXT NOT NULL,
+    first_seen_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    seen_count INTEGER DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS event_gpu_people (
+    event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    person_id TEXT NOT NULL REFERENCES gpu_people(id),
     face_box TEXT,
+    PRIMARY KEY (event_id, person_id)
+);
+
+ALTER TABLE events ADD COLUMN IF NOT EXISTS gpu_face_scan_status TEXT DEFAULT 'pending';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS gpu_face_scan_started_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS gpu_face_scanned_at TIMESTAMPTZ;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS gpu_face_scan_error TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS gpu_face_scan_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS gpu_face_enabled INTEGER NOT NULL DEFAULT 0;
+
+-- Singleton lease for the scheduled GPU worker. The lease expires after a
+-- crash, so cron invocations never fan out or permanently wedge the queue.
+CREATE TABLE IF NOT EXISTS gpu_worker_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    locked_until TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO gpu_worker_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,               -- "runpod-<runpod_job_id>" — provider-prefixed, "-" not ":"
     account_id TEXT NOT NULL REFERENCES accounts(id),
     type TEXT,
-ALTER TABLE event_people ADD COLUMN IF NOT EXISTS face_box TEXT;
-
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Persisted transcript of the AI agent conversation. /api/agent/chat used to
+-- be entirely stateless (the client resent its own message array each
+-- call); this table is what lets the dashboard show history across page
+-- reloads, and is where the scheduled patrol digest
+-- (functions/api/internal/patrol.js) now lands instead of Telegram.
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id BIGSERIAL PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id),
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'chat', -- 'chat' (typed live) or 'patrol' (scheduled digest)
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_agent_messages_account ON agent_messages(account_id, id);
 
 CREATE INDEX IF NOT EXISTS idx_events_account_time ON events(account_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_cameras_account ON cameras(account_id);
@@ -152,6 +229,9 @@ CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id);
 CREATE INDEX IF NOT EXISTS idx_people_account ON people(account_id);
 CREATE INDEX IF NOT EXISTS idx_event_people_person ON event_people(person_id, event_id DESC);
 CREATE INDEX IF NOT EXISTS idx_events_face_scan ON events(site_id, face_scan_status, timestamp);
+CREATE INDEX IF NOT EXISTS idx_gpu_people_account ON gpu_people(account_id);
+CREATE INDEX IF NOT EXISTS idx_event_gpu_people_person ON event_gpu_people(person_id, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_events_gpu_face_scan ON events(site_id, gpu_face_scan_status, timestamp);
 
 -- Migrating an existing DB that predates the `email` column:
 --   ALTER TABLE accounts ADD COLUMN email TEXT;

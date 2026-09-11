@@ -38,24 +38,29 @@ docs/                  architecture + API docs.
 ### customer, not something you do for them)
 
 The repository can stay private: the dashboard hosts a secret-free relay bundle
-for first install. A read-only GitHub deploy key is optional for `git pull` updates. Full prerequisites and
+for installation and manual updates. Full prerequisites and
 verification commands are in [docs/INSTALL-SITE.md](docs/INSTALL-SITE.md).
 
 **macOS / Linux:** đăng nhập dashboard, mở **Cấu hình → Cài relay lên VPS** và chạy lệnh được sinh tại đó. Lệnh dùng token một lần gắn với account hiện tại, không dùng API key dài hạn.
+Tải script ra file, đọc/kiểm tra nội dung rồi mới chạy; không pipe nội dung mạng trực tiếp vào shell.
+
 ```bash
-curl -fsSL https://camera.schoolsai.work/install.sh | sudo env CAMERAAIWORK_INSTALL_TOKEN='...' CAMERAAIWORK_API='https://camera.schoolsai.work' bash
+curl --proto '=https' --tlsv1.2 -fsSL https://camera.schoolsai.work/install.sh -o /tmp/cameraaiwork-install.sh
+less /tmp/cameraaiwork-install.sh
+CAMERAAIWORK_INSTALL_TOKEN='...' CAMERAAIWORK_API='https://camera.schoolsai.work' bash /tmp/cameraaiwork-install.sh
 ```
 
 Máy đã cài chỉ cần cập nhật bằng lệnh dưới đây. Updater không claim lại site và giữ nguyên `.env`/camera:
 
 ```bash
-curl -fsSL https://camera.schoolsai.work/update.sh | bash
+cd "$HOME/cameraaiwork"
+./apps/relay/update.sh
 ```
 
 Nếu lúc cài đã dùng thư mục khác `$HOME/cameraaiwork`, truyền lại đúng đường dẫn:
 
 ```bash
-curl -fsSL https://camera.schoolsai.work/update.sh | env CAMERAAIWORK_DIR='/duong/dan/cameraaiwork' bash
+CAMERAAIWORK_DIR='/duong/dan/cameraaiwork' /duong/dan/cameraaiwork/apps/relay/update.sh
 ```
 
 **Windows** (PowerShell, as Administrator — required to install a service):
@@ -110,6 +115,54 @@ generates a command from their own dashboard.
 - **Heavier GPU tasks**: implement a `task` branch in
   `runpod/heavy-worker/handler.py`, deploy as a RunPod Serverless endpoint,
   dispatch via `POST /api/jobs`.
+- **Camera Q&A agent**: store an OpenAI or Gemini key with
+  `PUT /api/settings/integrations`, then call `POST /api/agent/query` with a
+  question such as `Hôm nay có ai đến, là ai, đến và đi lúc nào?`. Provider
+  `auto` prefers OpenAI and falls back to Gemini. The agent receives camera and
+  event metadata only, never face embeddings or raw images. A departure time is
+  explicitly reported as an estimate from the final observed event.
+
+```bash
+curl -X PUT "$API/api/settings/integrations" -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"openai","apiKey":"...","model":"gpt-5-mini"}'
+
+curl -X POST "$API/api/agent/query" -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Hôm nay có ai đến, là ai, đến và đi lúc nào?","provider":"auto","timezoneOffsetMinutes":420}'
+```
+
+Agent cũng có một lớp action dùng chung cho dashboard, OpenAI function calling
+hoặc Gemini tools. `GET /api/agent/actions` trả về catalog và định nghĩa tham số. Gửi
+`POST /api/agent/actions` để đọc trạng thái, tìm event/người, lấy live/snapshot;
+các lệnh thay đổi trạng thái (thêm camera, PTZ, đặt tên người, ghi hình, cấu hình camera) bắt
+buộc gửi lại đúng proposal với `confirmed: true`. API cố ý không cho agent xoá
+event.
+
+Dashboard có tab **AI Agent** để khách chat trực tiếp. Endpoint
+`POST /api/agent/chat` dùng OpenAI Responses API hoặc Gemini function calling,
+tự chạy các tool đọc như liệt kê site/camera, quét ONVIF và tìm event. Tool ghi
+chỉ trả về `proposals`; giao diện hiển thị nút xác nhận riêng. Khi thêm camera,
+agent nhận IP/tài khoản camera từ khách và gửi `autoConfigure: true` để relay tự
+dò RTSP/ONVIF. Mật khẩu camera và API key không được hiển thị lại trong chat.
+
+```bash
+curl -X POST "$API/api/agent/chat" -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"auto","messages":[{"role":"user","content":"Quét camera tại site st-example và giúp tôi thêm camera cổng"}]}'
+```
+
+```bash
+# Đọc: chạy ngay
+curl -X POST "$API/api/agent/actions" -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"camera_status","args":{"siteId":"st-example","cameraId":"cam-example"}}'
+
+# Ghi: lần đầu trả HTTP 428 + proposal; chỉ thực thi sau xác nhận rõ ràng
+curl -X POST "$API/api/agent/actions" -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"move_camera","args":{"siteId":"st-example","cameraId":"cam-example","command":"left","durationMs":500},"confirmed":true}'
+```
 
 ## Notes
 

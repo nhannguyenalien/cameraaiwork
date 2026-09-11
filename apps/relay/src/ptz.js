@@ -46,11 +46,11 @@ function remove(cameraId) {
   try { old?.removeAllListeners(); } catch {}
 }
 
-function move(cameraId, x, y) {
+function move(cameraId, x, y, zoom = 0, durationMs = 500) {
   const cam = connections.get(cameraId);
   if (!cam) return false;
-  cam.continuousMove({ x, y, zoom: 0 });
-  setTimeout(() => cam.stop(), 500);
+  cam.continuousMove({ x, y, zoom });
+  setTimeout(() => cam.stop(), durationMs);
   return true;
 }
 
@@ -85,4 +85,22 @@ function setLight(cameraId, enabled) {
   });
 }
 
-module.exports = { connectAll, reconnect, remove, move, stop, capabilities, setLight };
+function home(cameraId) {
+  const cam = connections.get(cameraId);
+  if (!cam || typeof cam.gotoHomePosition !== "function") return Promise.resolve(false);
+  return new Promise((resolve) => cam.gotoHomePosition({}, (err) => resolve(!err)));
+}
+
+function gotoPreset(cameraId, preset) {
+  const cam = connections.get(cameraId);
+  if (!cam || typeof cam.gotoPreset !== "function" || !preset) return Promise.resolve(false);
+  return new Promise((resolve) => cam.gotoPreset({ preset: String(preset) }, (err) => resolve(!err)));
+}
+
+function setPreset(cameraId, name) {
+  const cam = connections.get(cameraId);
+  if (!cam || typeof cam.setPreset !== "function" || !name) return Promise.resolve(false);
+  return new Promise((resolve) => cam.setPreset({ presetName: String(name).slice(0, 80) }, (err, result) => resolve(err ? false : (result?.presetToken || true))));
+}
+
+module.exports = { connectAll, reconnect, remove, move, stop, capabilities, setLight, home, gotoPreset, setPreset };

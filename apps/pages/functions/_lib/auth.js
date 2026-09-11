@@ -4,6 +4,8 @@ import { randomId, randomSecret, sha256Hex } from "./ids.js";
 const encoder = new TextEncoder();
 // Cloudflare Workers rejects PBKDF2 iteration counts above 100,000.
 const PASSWORD_PBKDF2_ITERATIONS = 100000;
+const DUMMY_PASSWORD_SALT = "00000000000000000000000000000000";
+const DUMMY_PASSWORD_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 
 function bytesToHex(bytes) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -98,7 +100,7 @@ export async function createAccount(env, input) {
   await db.batch([
     { sql: "INSERT INTO accounts (id, name, email, plan, subscription_status) VALUES (?, ?, ?, 'free', 'inactive')", args: [accountId, normalizedName || normalizedEmail, normalizedEmail] },
     { sql: "INSERT INTO auth_credentials (account_id, password_salt, password_hash) VALUES (?, ?, ?)", args: [accountId, salt, passwordHash] },
-    { sql: "INSERT INTO api_keys (id, account_id, label) VALUES (?, ?, 'web signup')", args: [await sha256Hex(apiKey), accountId] },
+    { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web signup', CURRENT_TIMESTAMP + INTERVAL '12 hours')", args: [await sha256Hex(apiKey), accountId] },
   ]);
   return { accountId, apiKey };
 }
@@ -111,8 +113,13 @@ export async function login(env, { email, password }) {
     args: [email.trim().toLowerCase()],
   });
   const row = result.rows[0];
-  if (!row || !constantTimeEqual(await derivePassword(password, row.password_salt), row.password_hash)) return null;
+  const candidateHash = await derivePassword(password, row?.password_salt || DUMMY_PASSWORD_SALT);
+  if (!row || !constantTimeEqual(candidateHash, row?.password_hash || DUMMY_PASSWORD_HASH)) return null;
   const apiKey = randomSecret();
-  await db.execute({ sql: "INSERT INTO api_keys (id, account_id, label) VALUES (?, ?, 'web login')", args: [await sha256Hex(apiKey), row.id] });
+  await db.batch([
+    { sql: "UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = ? AND label LIKE 'web %' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at < CURRENT_TIMESTAMP)", args: [row.id] },
+    { sql: "DELETE FROM api_keys WHERE account_id = ? AND label LIKE 'web %' AND ((revoked_at IS NOT NULL AND revoked_at < CURRENT_TIMESTAMP - INTERVAL '30 days') OR expires_at < CURRENT_TIMESTAMP - INTERVAL '30 days')", args: [row.id] },
+    { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web login', CURRENT_TIMESTAMP + INTERVAL '12 hours')", args: [await sha256Hex(apiKey), row.id] },
+  ]);
   return { accountId: row.id, apiKey };
 }

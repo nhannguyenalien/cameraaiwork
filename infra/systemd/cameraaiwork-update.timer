@@ -1,11 +1,8 @@
 [Unit]
-Description=Check CameraAIWork updates every six hours
+Description=CameraAIWork legacy updater timer (intentionally disabled)
 
 [Timer]
-OnBootSec=15min
-OnUnitActiveSec=6h
-RandomizedDelaySec=15min
-Persistent=true
+OnActiveSec=0
 
 [Install]
-WantedBy=timers.target
+# Kept only so old deployments have an inert migration target.

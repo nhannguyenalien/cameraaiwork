@@ -12,4 +12,4 @@ export DASHBOARD_API_KEY
 UPGRADE_SITE_ID="${UPGRADE_SITE_ID:-st-nhachinh01}" "$ROOT_DIR/scripts/e2e-check.sh"
 
 unset DASHBOARD_API_KEY
-echo "Hoàn tất setup cloud + E2E. Bước cuối trên máy camera: git pull và chạy apps/relay/install.sh."
+echo "Hoàn tất setup cloud + E2E. Bước cuối trên máy camera: tải, kiểm tra rồi chạy installer từ dashboard."

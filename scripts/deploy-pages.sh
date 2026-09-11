@@ -13,6 +13,13 @@ fi
 echo "==> Kiểm tra code"
 "$ROOT_DIR/scripts/test-all.sh"
 
+echo "==> Tạo bundle relay có checksum"
+"$ROOT_DIR/scripts/build-relay-bundle.sh"
+
+echo "==> Đồng bộ installer đã kiểm tra vào public artifact"
+cp "$ROOT_DIR/apps/relay/install.sh" "$ROOT_DIR/apps/pages/public/install.sh"
+cp "$ROOT_DIR/apps/relay/update.sh" "$ROOT_DIR/apps/pages/public/update.sh"
+
 echo "==> Xuất OpenAPI public cho agent"
 cp "$ROOT_DIR/docs/openapi.yaml" "$ROOT_DIR/apps/pages/public/openapi.yaml"
 
@@ -42,10 +49,6 @@ if ! (cd "$ROOT_DIR/apps/pages" && npx wrangler pages secret list --project-name
 else
   echo "= CUSTOMER_SECRETS_KEY đã tồn tại, giữ nguyên để đọc được dữ liệu đã mã hóa"
 fi
-
-put_secret STRIPE_SECRET_KEY "Stripe secret key" true
-put_secret STRIPE_WEBHOOK_SECRET "Stripe webhook signing secret" true
-put_secret STRIPE_PRICE_ID "Stripe recurring Price ID" true
 
 echo "==> Deploy Cloudflare Pages"
 (cd "$ROOT_DIR/apps/pages" && npx wrangler pages deploy public --project-name "$PROJECT_NAME")

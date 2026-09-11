@@ -23,11 +23,10 @@ export const onRequestPost = withErrorHandling(async ({ params, env, data }) => 
   const nonce = randomId("lv");
   const token = await signLiveToken(site.relay_secret, site.id, camera.stream, expiresAt, viewerLimit, nonce);
   const base = site.relay_url.replace(/\/$/, "");
-  // WebRTC advertises the relay's LAN/UDP candidates (for example
-  // 192.168.x.x:8555), which are unreachable for viewers on another
-  // network. MSE carries the video over the already-authenticated WebSocket
-  // endpoint, so both signalling and media stay inside the HTTPS tunnel.
-  const url = `${base}/live/${token}/stream.html?src=${encodeURIComponent(camera.stream)}&mode=mse`;
+  // Prefer low-latency WebRTC. go2rtc first tries direct ICE candidates, then
+  // the shared TURN service configured at the site. MSE remains the browser
+  // fallback if WebRTC negotiation is unavailable.
+  const url = `${base}/live/${token}/stream.html?src=${encodeURIComponent(camera.stream)}&mode=webrtc%2Cmse`;
 
   return json({ url, expiresAt, viewerLimit });
 });
