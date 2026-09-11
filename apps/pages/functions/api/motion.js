@@ -11,6 +11,8 @@ import { sendPhotoAlert } from "../_lib/telegram.js";
 import { captureClip, uploadClip, uploadSnapshot } from "../_lib/r2.js";
 import { getIntegration } from "../_lib/integrations.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
+import { triggerGpuScan } from "../_lib/gpuWorker.js";
+import { storageChoice } from "../_lib/objectStorage.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil }) => {
   let body;
@@ -20,7 +22,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
     return errorJson("Invalid JSON body", 400);
   }
 
-  const { siteId, camera } = body;
+  const { siteId, camera, trusted } = body;
   if (!siteId || !camera) {
     return errorJson("siteId và camera là bắt buộc", 400);
   }
@@ -38,7 +40,15 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   const shouldRecord = Number(cameraConfig.record_on_person ?? 1) === 1;
   const clipPromise = shouldRecord ? captureClip(site, camera) : null;
   const frame = await getFrame(env, site, camera);
-  const { hasPerson, faceEmbedding, faceEmbeddings = [], faceDetections = [] } = await detectPerson(env, site, frame);
+  // A camera the relay marked onvifMotionTrusted already made the person
+  // call itself (reliable ONVIF motion feed, see apps/relay/src/index.js).
+  // Skip the AI round trip — it's what actually runs the local PC's AI
+  // worker — instead of re-confirming a decision that camera already made.
+  // Trade-off: no face embedding is produced, so these events won't be
+  // matched to a known person (personId stays null).
+  const { hasPerson, faceEmbedding, faceEmbeddings = [], faceDetections = [] } = trusted === true
+    ? { hasPerson: true, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] }
+    : await detectPerson(env, site, frame);
 
   if (!hasPerson) {
     return json({ ok: true, alerted: false });
@@ -62,11 +72,12 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   const caption = `🔔 Phát hiện người (${site.name || site.id})!\n⏰ ${new Date().toLocaleString("vi-VN")}`;
   const telegram = await getIntegration(env, site.account_id, "telegram");
   const link = await sendPhotoAlert(telegram, frame, caption);
+  const { backend } = await storageChoice(env, site.account_id);
 
   const db = getDb(env);
   const inserted = await db.execute({
-    sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, video_status, face_scan_status, face_scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP) RETURNING id",
-    args: [site.account_id, site.id, camera, personId, "Person", link, shouldRecord ? "recording" : "disabled"],
+    sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, storage_backend, video_status, face_scan_status, face_scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP) RETURNING id",
+    args: [site.account_id, site.id, camera, personId, "Person", link, backend, shouldRecord ? "recording" : "disabled"],
   });
   const eventId = Number(inserted.lastInsertRowid);
   for (const id of personIds) {
@@ -79,8 +90,11 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   // The event is already durable at this point. Snapshot and clip persistence
   // are independent so a broken video stream never removes the event/photo.
   waitUntil(
-    uploadSnapshot(env, frame, `${site.account_id}/${eventId}.jpg`)
-      .then((key) => db.execute({ sql: "UPDATE events SET image_key = ? WHERE id = ?", args: [key, eventId] }))
+    uploadSnapshot(env, site.account_id, backend, frame, `${site.account_id}/${eventId}.jpg`)
+      .then(async (key) => {
+        await db.execute({ sql: "UPDATE events SET image_key = ? WHERE id = ?", args: [key, eventId] });
+        if (backend === "r2") await triggerGpuScan(env, eventId);
+      })
       .catch((err) => console.error(`Upload snapshot thất bại (${eventId}):`, err.message || err))
   );
 
@@ -88,7 +102,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   // recording and uploading the finite clip takes several seconds.
   if (shouldRecord) {
     waitUntil(
-      uploadClip(env, clipPromise, `${site.account_id}/${eventId}.mp4`)
+      uploadClip(env, site.account_id, backend, clipPromise, `${site.account_id}/${eventId}.mp4`)
         .then((key) => db.execute({
           sql: "UPDATE events SET video_key = ?, video_status = 'ready', video_error = NULL WHERE id = ?",
           args: [key, eventId],

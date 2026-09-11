@@ -18,7 +18,8 @@ export function withErrorHandling(handler) {
       return await handler(context);
     } catch (err) {
       console.error(err);
-      return errorJson(err.message || "Internal error", err.status || 500);
+      const status = Number.isInteger(err.status) ? err.status : 500;
+      return errorJson(status < 500 ? (err.message || "Invalid request") : "Internal server error", status);
     }
   };
 }

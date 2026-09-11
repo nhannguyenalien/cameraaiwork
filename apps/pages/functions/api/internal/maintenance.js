@@ -1,6 +1,7 @@
 import { getDb } from "../../_lib/db.js";
 import { cleanupOrphanTunnels, managedInfrastructure } from "../../_lib/cloudflareTunnel.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
+import { triggerGpuScan } from "../../_lib/gpuWorker.js";
 
 function positiveInt(value, fallback) {
   const parsed = Number(value);
@@ -29,6 +30,10 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const warnings = [];
   if (managed.tunnels >= thresholds.managedTunnels) warnings.push("managed_tunnel_threshold");
   if (managed.dnsRecords >= thresholds.managedDns) warnings.push("managed_dns_threshold");
+  const gpuBackfillQueued = await triggerGpuScan(env).catch((error) => {
+    console.error("GPU backfill dispatch failed:", error.message || error);
+    return false;
+  });
 
   return json({
     ok: warnings.length === 0,
@@ -38,5 +43,6 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
     thresholds,
     orphanTunnelsDeleted: deleted,
     warnings,
+    gpuBackfillQueued,
   }, { status: warnings.length ? 503 : 200 });
 });

@@ -3,33 +3,256 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CameraAIWork Dashboard</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+<title>CameraAIWork — An ninh thông minh, vận hành nhẹ nhàng</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/css/tabler.min.css" integrity="sha384-s6jIUOfpdN5ZKclSXm2VjCKXnJm2aYIXViXVju6qlb+XXkyE6yQvCikVSV5D2+2B" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.46.0/dist/tabler-icons.min.css" integrity="sha384-ND+q1IVc0KDElX60dZaqKc7Xl9cdxd2PpU2JfVUHcurCkFVtVLFdt9vJfxtHSL3p" crossorigin="anonymous" />
 <style>
+  :root { --cai-ink:#11231f; --cai-mint:#d9f5df; --cai-lime:#c8f15a; --cai-orange:#ff6b35; --cai-paper:#f7f7f2; }
+  html { scroll-behavior:smooth; }
+  html { min-height:100%; overflow-x:clip; overflow-y:auto; }
+  body { display:block; min-height:100%; height:auto; background:var(--cai-paper); color:var(--cai-ink); overflow-x:clip; overflow-y:visible; }
+  body.login-modal-open { overflow-y:hidden; }
+  .landing-shell { width:100%; min-height:100vh; overflow-x:clip; overflow-y:visible; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .landing-nav { position:relative; z-index:5; padding:1rem 0; background:rgba(247,247,242,.9); backdrop-filter:blur(18px); border-bottom:1px solid rgba(17,35,31,.09); }
+  .brand-mark { display:inline-flex; align-items:center; gap:.65rem; color:var(--cai-ink); font-weight:800; letter-spacing:-.04em; font-size:1.2rem; text-decoration:none; }
+  .brand-dot { width:2.1rem; height:2.1rem; border-radius:50%; display:grid; place-items:center; color:white; background:var(--cai-ink); box-shadow:inset 0 0 0 5px var(--cai-lime); }
+  .landing-navlinks { display:flex; align-items:center; gap:1.75rem; }
+  .landing-navlinks a { color:#51605c; text-decoration:none; font-size:.9rem; font-weight:600; }
+  .landing-navlinks a:hover { color:var(--cai-ink); }
+  .landing-btn { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; border-radius:999px; padding:.8rem 1.15rem; border:1px solid var(--cai-ink); background:var(--cai-ink); color:white!important; font-weight:700!important; text-decoration:none; transition:.2s ease; }
+  .landing-btn:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(17,35,31,.18); }
+  .landing-btn.light { background:white; color:var(--cai-ink)!important; border-color:rgba(17,35,31,.15); }
+  .landing-hero { padding:5.5rem 0 4rem; position:relative; }
+  .hero-kicker { display:inline-flex; align-items:center; gap:.5rem; font-size:.75rem; text-transform:uppercase; letter-spacing:.12em; font-weight:800; }
+  .hero-kicker:before { content:""; width:2.25rem; height:2px; background:var(--cai-orange); }
+  .landing-hero h2 { max-width:850px; margin:1.25rem 0; font-size:clamp(3.4rem,7.5vw,7.5rem); line-height:.9; letter-spacing:-.075em; font-weight:850; }
+  .landing-hero h2 em { display:block; color:var(--cai-orange); font-family:Georgia,serif; font-weight:400; }
+  .hero-copy { max-width:570px; font-size:1.16rem; line-height:1.7; color:#586863; }
+  .hero-actions { display:flex; flex-wrap:wrap; gap:.8rem; margin-top:2rem; }
+  .hero-visual { position:relative; margin-top:4rem; min-height:570px; border-radius:2.25rem; overflow:hidden; background:#142720; }
+  .hero-visual>img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.82; }
+  .hero-visual:after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,rgba(13,29,24,.65),transparent 60%),linear-gradient(0deg,rgba(13,29,24,.4),transparent 50%); }
+  .live-pill { position:absolute; z-index:2; top:1.5rem; left:1.5rem; display:flex; align-items:center; gap:.5rem; padding:.55rem .8rem; border-radius:999px; background:rgba(255,255,255,.94); font-weight:800; font-size:.75rem; }
+  .live-pill i { width:.55rem; height:.55rem; border-radius:50%; background:#20b66c; box-shadow:0 0 0 4px rgba(32,182,108,.18); }
+  .vision-box { position:absolute; z-index:2; width:17%; height:44%; left:59%; top:23%; border:2px solid var(--cai-lime); border-radius:.5rem; }
+  .vision-box span { position:absolute; left:-2px; bottom:100%; color:#183229; background:var(--cai-lime); padding:.3rem .5rem; font-size:.68rem; font-weight:800; }
+  .hero-stat { position:absolute; z-index:3; right:1.5rem; bottom:1.5rem; width:min(360px,calc(100% - 3rem)); padding:1.3rem; border-radius:1.25rem; color:white; background:rgba(12,27,22,.78); backdrop-filter:blur(18px); }
+  .hero-stat strong { display:block; font-size:2.5rem; line-height:1; color:var(--cai-lime); }
+  .marquee { padding:1.2rem 0; background:var(--cai-lime); overflow:hidden; white-space:nowrap; font-size:.78rem; font-weight:900; letter-spacing:.15em; text-transform:uppercase; transform:rotate(-1deg) scale(1.02); }
+  .marquee-track { display:flex; width:max-content; animation:news-ticker 24s linear infinite; will-change:transform; }
+  .marquee-group { flex:none; padding-right:3rem; }
+  @keyframes news-ticker { to { transform:translateX(-50%); } }
+  @media (prefers-reduced-motion:reduce) { .marquee-track { animation-play-state:paused; } }
+  .section-pad { padding:8rem 0; }
+  .section-eyebrow { color:var(--cai-orange); font-size:.75rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+  .section-title { max-width:780px; margin:.9rem 0 3rem; font-size:clamp(2.5rem,5vw,5rem); line-height:.98; letter-spacing:-.06em; font-weight:820; }
+  .feature-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:1rem; }
+  .feature-card { position:relative; min-height:420px; overflow:hidden; border-radius:1.75rem; background:white; border:1px solid rgba(17,35,31,.09); }
+  .feature-card.tall { grid-row:span 2; min-height:856px; }
+  .feature-card img { width:100%; height:100%; position:absolute; inset:0; object-fit:cover; }
+  .feature-card:after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,rgba(9,24,19,.88),transparent 68%); }
+  .feature-content { position:absolute; z-index:2; inset:auto 1.6rem 1.6rem; color:white; }
+  .feature-content .num { display:block; margin-bottom:.55rem; color:var(--cai-lime); font-size:.75rem; font-weight:900; letter-spacing:.12em; }
+  .feature-content h3 { font-size:clamp(1.7rem,3vw,3rem); letter-spacing:-.045em; margin:0 0 .5rem; }
+  .feature-content p { max-width:500px; margin:0; color:rgba(255,255,255,.75); }
+  .video-stage { border-radius:2rem; background:var(--cai-ink); color:white; padding:1.25rem; }
+  .video-frame { position:relative; aspect-ratio:16/8.5; border-radius:1.25rem; overflow:hidden; background:#000; }
+  .video-frame img { width:100%; height:100%; object-fit:cover; opacity:.68; }
+  .play-button { position:absolute; inset:50% auto auto 50%; transform:translate(-50%,-50%); width:5.4rem; height:5.4rem; display:grid; place-items:center; border:0; border-radius:50%; color:var(--cai-ink); background:var(--cai-lime); font-size:1.65rem; box-shadow:0 0 0 14px rgba(200,241,90,.15); }
+  .video-caption { display:flex; justify-content:space-between; gap:2rem; padding:1.5rem .5rem .4rem; }
+  .video-caption h3 { font-size:1.65rem; letter-spacing:-.035em; margin:0; }
+  .video-caption p { max-width:520px; color:rgba(255,255,255,.64); margin:0; }
+  .benefit-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; margin-top:5rem; background:rgba(17,35,31,.12); border:1px solid rgba(17,35,31,.12); border-radius:1.5rem; overflow:hidden; }
+  .benefit { padding:2rem; background:var(--cai-paper); }
+  .benefit i { font-size:1.8rem; color:var(--cai-orange); }
+  .benefit h4 { margin:1.2rem 0 .5rem; font-size:1.05rem; }
+  .benefit p { color:#697670; font-size:.9rem; margin:0; }
+  .story-grid { display:grid; grid-template-columns:1.15fr .85fr; grid-template-rows:repeat(2,minmax(260px,1fr)); gap:1rem; }
+  .story-card { position:relative; min-height:280px; overflow:hidden; border-radius:1.75rem; background:#183229; color:white; }
+  .story-card.story-video { grid-row:span 2; min-height:620px; }
+  .story-card img,.story-card video { width:100%; height:100%; object-fit:cover; }
+  .story-card video { position:absolute; inset:0; }
+  .story-card:after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(0deg,rgba(5,18,14,.78),transparent 62%); }
+  .story-label { position:absolute; z-index:2; left:1.5rem; right:1.5rem; bottom:1.5rem; pointer-events:none; }
+  .story-label small { color:var(--cai-lime); font-weight:900; letter-spacing:.12em; }
+  .story-label h3 { margin:.4rem 0 0; font-size:clamp(1.5rem,3vw,2.7rem); letter-spacing:-.045em; }
+  .visual-gallery { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:110px; gap:1rem; }
+  .visual-tile { position:relative; grid-column:span 4; grid-row:span 3; min-height:280px; overflow:hidden; border-radius:1.5rem; background:#19342b; }
+  .visual-tile.wide { grid-column:span 8; }
+  .visual-tile.tall { grid-row:span 5; }
+  .visual-tile img { width:100%; height:100%; object-fit:cover; transition:transform .6s cubic-bezier(.2,.8,.2,1); }
+  .visual-tile:hover img { transform:scale(1.045); }
+  .visual-tile:after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,rgba(7,22,17,.84),transparent 60%); }
+  .visual-tile-copy { position:absolute; z-index:2; left:1.35rem; right:1.35rem; bottom:1.35rem; color:white; }
+  .visual-tile-copy span { color:var(--cai-lime); font-size:.67rem; font-weight:900; letter-spacing:.13em; }
+  .visual-tile-copy h3 { margin:.35rem 0 0; font-size:clamp(1.25rem,2.3vw,2rem); line-height:1.05; letter-spacing:-.035em; }
+  .free-plan { display:grid; grid-template-columns:1.05fr .95fr; border-radius:2rem; overflow:hidden; background:var(--cai-ink); color:white; }
+  .free-plan-copy { padding:clamp(2.5rem,6vw,5.5rem); }
+  .free-badge { display:inline-flex; padding:.55rem .8rem; border-radius:999px; color:var(--cai-ink); background:var(--cai-lime); font-size:.72rem; font-weight:900; letter-spacing:.1em; }
+  .free-plan h2 { margin:1.25rem 0 .8rem; font-size:clamp(3rem,6vw,6rem); line-height:.9; letter-spacing:-.07em; }
+  .free-plan-copy>p { max-width:560px; color:rgba(255,255,255,.68); font-size:1.05rem; }
+  .plan-limits { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; margin:2rem 0; }
+  .plan-limit { padding:1.25rem; border-radius:1rem; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); }
+  .plan-limit strong { display:block; color:var(--cai-lime); font-size:2rem; line-height:1; }
+  .plan-limit span { display:block; margin-top:.45rem; color:rgba(255,255,255,.68); font-size:.78rem; }
+  .free-plan-visual { position:relative; min-height:620px; }
+  .free-plan-visual img { width:100%; height:100%; object-fit:cover; }
+  .free-plan-visual:after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,var(--cai-ink),transparent 38%); }
+  .download-panel { padding:2rem; border-radius:2rem; color:white; background:var(--cai-ink); }
+  .download-heading { display:flex; align-items:end; justify-content:space-between; gap:2rem; margin-bottom:2rem; }
+  .download-heading h2 { max-width:680px; margin:.7rem 0 0; font-size:clamp(2.4rem,5vw,4.8rem); line-height:.98; letter-spacing:-.055em; }
+  .download-heading p { max-width:420px; margin:0; color:rgba(255,255,255,.65); }
+  .download-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.85rem; }
+  .download-card { display:flex; min-height:190px; flex-direction:column; align-items:flex-start; padding:1.35rem; border:1px solid rgba(255,255,255,.14); border-radius:1.25rem; color:white; background:rgba(255,255,255,.06); text-decoration:none; transition:.2s ease; }
+  .download-card:hover { transform:translateY(-4px); border-color:var(--cai-lime); color:white; background:rgba(255,255,255,.1); }
+  .download-card>i { font-size:2rem; color:var(--cai-lime); }
+  .download-card strong { margin-top:1.4rem; font-size:1.15rem; }
+  .download-card span { margin-top:.25rem; color:rgba(255,255,255,.58); font-size:.82rem; }
+  .download-card .download-action { display:flex; align-items:center; gap:.35rem; margin-top:auto; color:var(--cai-lime); font-weight:800; font-size:.82rem; }
+  .download-note { margin:.9rem .25rem 0; color:rgba(255,255,255,.48); font-size:.78rem; }
+  .landing-cta { margin-bottom:5rem; padding:5rem; border-radius:2rem; color:white; background:var(--cai-orange); position:relative; overflow:hidden; }
+  .landing-cta:after { content:"AI"; position:absolute; right:-1rem; bottom:-4rem; font-size:16rem; line-height:1; font-weight:900; color:rgba(255,255,255,.1); }
+  .landing-cta h3 { max-width:700px; font-size:clamp(2.8rem,5vw,5.5rem); line-height:.95; letter-spacing:-.06em; }
+  body:not(.is-authenticated) .page-wrapper { min-height:0; }
+  body:not(.is-authenticated) .page-body { margin:0; }
+  #login-card.login-modal { position:fixed; inset:0; z-index:1080; margin:0; padding:1.25rem; align-items:center; justify-content:center; background:rgba(7,19,15,.68); backdrop-filter:blur(10px); }
+  #login-card.login-modal:not(.d-none) { display:flex; }
+  #login-card.login-modal>div { width:min(100%,480px); }
+  #login-card.login-modal .card { position:relative; border:0; border-radius:1.5rem; box-shadow:0 30px 100px rgba(0,0,0,.3); }
+  .login-modal-close { position:absolute; z-index:2; top:1rem; right:1rem; width:2.35rem; height:2.35rem; display:grid; place-items:center; padding:0; border:0; border-radius:50%; color:var(--cai-ink); background:#edf1ed; font-size:1.1rem; }
+  .landing-footer { padding:2rem 0; border-top:1px solid rgba(17,35,31,.12); color:#66736f; font-size:.85rem; }
+  .landing-hidden { display:none!important; }
+  @media(max-width:991px) { .landing-navlinks>a:not(.landing-btn){display:none}.feature-grid,.story-grid,.free-plan{grid-template-columns:1fr}.feature-card.tall{grid-row:auto;min-height:520px}.story-card.story-video{grid-row:auto;min-height:480px}.visual-tile,.visual-tile.wide{grid-column:span 6}.benefit-row{grid-template-columns:1fr 1fr}.download-grid{grid-template-columns:1fr 1fr}.download-heading{display:block}.download-heading p{margin-top:1rem}.hero-visual{min-height:480px}.free-plan-visual{min-height:420px}.landing-cta{padding:3.5rem 2rem} }
+  @media(max-width:575px) { .landing-hero{padding-top:3.5rem}.landing-hero h2{font-size:3.65rem}.hero-visual{min-height:430px;border-radius:1.5rem}.vision-box{width:28%;left:52%}.section-pad{padding:5rem 0}.benefit-row,.download-grid,.plan-limits{grid-template-columns:1fr}.story-card.story-video{min-height:380px}.visual-gallery{display:block}.visual-tile,.visual-tile.wide,.visual-tile.tall{min-height:330px;margin-bottom:1rem}.free-plan-visual{min-height:300px}.download-panel{padding:1.25rem}.download-card{min-height:150px}.video-caption{display:block}.video-caption p{margin-top:.8rem}.play-button{width:4rem;height:4rem}.landing-cta{margin-bottom:2rem}.landing-nav .language-home{display:none} }
   .camera-card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
   .camera-card:hover, .camera-card:focus-within { transform: translateY(-2px); box-shadow: var(--tblr-box-shadow-lg); }
   .camera-preview { position: relative; overflow: hidden; }
   .camera-preview iframe { pointer-events: none; }
-  .camera-thumbnail { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .58; visibility: visible; filter: brightness(.72); transition: none; }
+  .camera-thumbnail { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; opacity: 1; visibility: visible; filter: brightness(.58); transition: none; }
+  .local-ai-camera { display: flex; align-items: center; gap: .75rem; min-height: 82px; padding: .75rem; border: 1px solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); }
+  .local-ai-thumbnail-wrap { position: relative; flex: 0 0 112px; width: 112px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: .375rem; background: var(--tblr-bg-surface-secondary); }
+  .local-ai-thumbnail { width: 100%; height: 100%; object-fit: cover; }
+  .local-ai-thumbnail-placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--tblr-secondary); font-size: 1.5rem; }
   .camera-preview-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; color: rgba(255,255,255,.85); background: #182433; }
   .camera-preview-placeholder .ti { font-size: 2rem; }
-  .camera-preview-toggle { position: absolute; right: .65rem; bottom: .65rem; z-index: 2; }
-  .camera-online-state { position: absolute; left: .65rem; top: .65rem; z-index: 2; }
-  .person-avatar { width: 5rem; height: 5rem; flex: 0 0 5rem; overflow: hidden; position: relative; border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); }
+  .camera-preview-toggle { position: absolute; inset: auto .65rem .65rem auto; width: auto; height: auto; z-index: 2; }
+  .camera-online-state { position: absolute; inset: .65rem auto auto .65rem; width: auto; height: auto; z-index: 2; }
+  .people-toolbar { position: sticky; top: .5rem; z-index: 5; }
+  .person-card { height: 100%; transition: border-color .15s ease, box-shadow .15s ease; }
+  .person-card:focus-within { border-color: var(--tblr-primary); box-shadow: 0 0 0 .2rem rgba(var(--tblr-primary-rgb), .1); }
+  .person-avatar { width: 7rem; height: 7rem; flex: 0 0 7rem; overflow: hidden; position: relative; border-radius: var(--tblr-border-radius-lg); background: var(--tblr-bg-surface-secondary); }
   .person-avatar img { position: absolute; max-width: none; }
+  .person-name-input { font-weight: 600; }
+  .people-summary-item { min-width: 6rem; }
+  @media (max-width: 575.98px) {
+    .people-toolbar { position: static; }
+    .person-avatar { width: 6rem; height: 6rem; flex-basis: 6rem; }
+  }
   .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
   .ptz-pad .btn { height:3.25rem; }
   .talk-button.is-recording { animation: talk-pulse 1s infinite; }
+  .agent-chat { height:min(62vh, 620px); overflow-y:auto; background:var(--tblr-bg-surface-secondary); }
+  .agent-message { max-width:85%; white-space:pre-wrap; }
+  .agent-message.user { margin-left:auto; background:var(--tblr-primary); color:white; }
+  .agent-message.assistant { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); }
+  .agent-message.assistant.patrol { border-left:3px solid var(--tblr-warning); background:var(--tblr-bg-surface-tertiary, var(--tblr-bg-surface)); }
+  .agent-media-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.5rem; margin-top:.75rem; }
+  .agent-media-grid img, .agent-media-grid video { display:block; width:100%; max-height:260px; object-fit:cover; border-radius:var(--tblr-border-radius); background:#111; }
+  .agent-provider-card { padding:.75rem; background:var(--tblr-bg-surface); }
+  .agent-provider-card .form-label { margin-bottom:.25rem; font-size:.75rem; }
+  .agent-provider-card .form-hint { font-size:.7rem; line-height:1.25; }
+  .agent-key-state { display:inline-flex; align-items:center; gap:.25rem; font-weight:600; }
+  .agent-key-state.is-configured { color:var(--tblr-success); }
+  .agent-key-state.is-missing { color:var(--tblr-secondary); }
   @keyframes talk-pulse { 50% { box-shadow:0 0 0 .4rem rgba(214,57,57,.18); } }
 </style>
 </head>
-<body class="border-top-wide border-primary d-flex flex-column">
-  <header class="navbar navbar-expand-md navbar-light d-print-none">
+<body>
+  <div id="landing-shell" class="landing-shell">
+    <nav class="landing-nav">
+      <div class="container-xl d-flex align-items-center justify-content-between">
+        <a class="brand-mark" href="#top"><span class="brand-dot"><i class="ti ti-focus-2"></i></span>CameraAIWork</a>
+        <div class="landing-navlinks">
+          <a href="#features">Tính năng</a><a href="#demo">Demo</a><a href="#free">Gói miễn phí</a><a href="#downloads">Tải ứng dụng</a><a href="/docs/">Tài liệu</a>
+          <select class="form-select form-select-sm language-home" data-language-select aria-label="Ngôn ngữ" style="width:auto"><option value="vi">VI</option><option value="en">EN</option><option value="ja">JA</option><option value="fr">FR</option><option value="ko">KO</option><option value="es">ES</option></select>
+          <a class="landing-btn" href="#login" onclick="openLoginModal(event)">Bắt đầu ngay <i class="ti ti-arrow-up-right"></i></a>
+        </div>
+      </div>
+    </nav>
+    <main id="top">
+      <section class="landing-hero"><div class="container-xl">
+        <span class="hero-kicker">An ninh thông minh cho mọi không gian</span>
+        <h2>Quan sát ít hơn.<em>Biết nhiều hơn.</em></h2>
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
+          <p class="hero-copy">CameraAIWork biến hệ thống camera sẵn có thành một trợ lý an ninh chủ động — nhận diện người, hiểu sự kiện và thông báo đúng lúc.</p>
+          <div class="hero-actions"><a class="landing-btn" href="#login" onclick="openLoginModal(event)">Dùng thử miễn phí</a><a class="landing-btn light" href="#demo"><i class="ti ti-player-play-filled"></i> Xem cách hoạt động</a></div>
+        </div>
+        <div class="hero-visual">
+          <img src="https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1800&q=88" alt="Không gian nhà hiện đại được bảo vệ bởi CameraAIWork" />
+          <div class="live-pill"><i></i> LIVE · PHÒNG KHÁCH</div><div class="vision-box"><span>ĐÃ NHẬN DIỆN · AN</span></div>
+          <div class="hero-stat"><small>Độ chính xác nhận diện</small><strong>98.7%</strong><span>Phân tích tại chỗ, phản hồi theo thời gian thực</span></div>
+        </div>
+      </div></section>
+      <div class="marquee" aria-label="Các tính năng nổi bật">
+        <div class="marquee-track">
+          <span class="marquee-group">Nhận diện khuôn mặt &nbsp;✦&nbsp; Phát hiện chuyển động &nbsp;✦&nbsp; Cảnh báo tức thì &nbsp;✦&nbsp; AI Agent &nbsp;✦&nbsp; Xem trực tiếp mọi nơi &nbsp;✦&nbsp; Bảo mật riêng tư &nbsp;✦&nbsp;</span>
+          <span class="marquee-group" aria-hidden="true">Nhận diện khuôn mặt &nbsp;✦&nbsp; Phát hiện chuyển động &nbsp;✦&nbsp; Cảnh báo tức thì &nbsp;✦&nbsp; AI Agent &nbsp;✦&nbsp; Xem trực tiếp mọi nơi &nbsp;✦&nbsp; Bảo mật riêng tư &nbsp;✦&nbsp;</span>
+        </div>
+      </div>
+      <section id="features" class="section-pad"><div class="container-xl">
+        <span class="section-eyebrow">Một hệ thống. Toàn bộ bức tranh.</span><h2 class="section-title">Camera không chỉ ghi hình. Camera hiểu điều đang xảy ra.</h2>
+        <div class="feature-grid">
+          <article class="feature-card tall"><img src="https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1200&q=85" alt="Không gian phòng khách được giám sát thông minh"/><div class="feature-content"><span class="num">01 · NHẬN DIỆN THÔNG MINH</span><h3>Biết ai đang ở đó.</h3><p>Tự động gom nhóm khuôn mặt, đặt tên người quen và tra cứu lịch sử xuất hiện chỉ trong vài giây.</p></div></article>
+          <article class="feature-card"><img src="https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=1100&q=85" alt="Camera an ninh gắn trong nhà"/><div class="feature-content"><span class="num">02 · CẢNH BÁO CHỦ ĐỘNG</span><h3>Đúng người. Đúng lúc.</h3><p>Lọc chuyển động quan trọng và gửi cảnh báo Telegram ngay khi cần.</p></div></article>
+          <article class="feature-card"><img src="https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?auto=format&fit=crop&w=1100&q=85" alt="Màn hình điều khiển camera tập trung"/><div class="feature-content"><span class="num">03 · ĐIỀU KHIỂN TẬP TRUNG</span><h3>Mọi camera, một nơi.</h3><p>Xem trực tiếp, xoay PTZ, đàm thoại và quản lý nhiều địa điểm từ một giao diện.</p></div></article>
+        </div>
+        <div class="benefit-row"><div class="benefit"><i class="ti ti-brain"></i><h4>AI Agent hiểu ngữ cảnh</h4><p>Hỏi “Hôm nay ai đến?” và nhận câu trả lời từ chính dữ liệu camera.</p></div><div class="benefit"><i class="ti ti-shield-lock"></i><h4>Dữ liệu riêng tư</h4><p>Kết nối bảo mật, phân quyền theo tài khoản và lưu trữ có kiểm soát.</p></div><div class="benefit"><i class="ti ti-plug-connected"></i><h4>Tận dụng camera cũ</h4><p>Hỗ trợ RTSP, ONVIF và nhiều dòng camera IP phổ biến hiện nay.</p></div><div class="benefit"><i class="ti ti-device-mobile"></i><h4>Mọi thiết bị</h4><p>Giao diện linh hoạt trên desktop, tablet và điện thoại.</p></div></div>
+      </div></section>
+      <section class="section-pad pt-0"><div class="container-xl">
+        <span class="section-eyebrow">Nhìn thấy hệ thống trong thực tế</span><h2 class="section-title">Từ cửa chính đến cửa hàng — mọi khoảnh khắc đều trong tầm mắt.</h2>
+        <div class="story-grid">
+          <article class="story-card story-video"><video controls muted loop playsinline poster="https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=1400&q=85"><source src="https://videos.pexels.com/video-files/3209828/3209828-hd_1920_1080_25fps.mp4" type="video/mp4"></video><div class="story-label"><small>VIDEO TRỰC TIẾP</small><h3>Theo dõi không gian theo thời gian thực.</h3></div></article>
+          <article class="story-card"><img loading="lazy" src="https://images.unsplash.com/photo-1560185008-b033106af5c3?auto=format&fit=crop&w=1100&q=85" alt="CameraAIWork bảo vệ cửa hàng"/><div class="story-label"><small>NHIỀU ĐỊA ĐIỂM</small><h3>Nhà và cửa hàng trên cùng màn hình.</h3></div></article>
+          <article class="story-card"><img loading="lazy" src="https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1100&q=85" alt="Nhóm vận hành xem cảnh báo camera"/><div class="story-label"><small>PHỐI HỢP NHANH</small><h3>Chia sẻ sự kiện cho đúng người phụ trách.</h3></div></article>
+        </div>
+      </div></section>
+      <section class="section-pad pt-0"><div class="container-xl">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-5"><div><span class="section-eyebrow">CameraAIWork trong từng không gian</span><h2 class="section-title mb-0">Một góc nhìn rõ ràng cho mọi nơi bạn quan tâm.</h2></div><p class="hero-copy mb-0">Quan sát nhà ở, văn phòng, cửa hàng, kho và khu vực ngoài trời trong cùng một trải nghiệm thống nhất.</p></div>
+        <div class="visual-gallery">
+          <article class="visual-tile wide tall"><img loading="lazy" src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1500&q=86" alt="Giám sát ngôi nhà hiện đại"/><div class="visual-tile-copy"><span>NHÀ Ở</span><h3>An tâm dù bạn đang ở bất cứ đâu.</h3></div></article>
+          <article class="visual-tile"><img loading="lazy" src="https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=900&q=86" alt="Giám sát quầy thu ngân cửa hàng"/><div class="visual-tile-copy"><span>CỬA HÀNG</span><h3>Theo dõi quầy thu ngân và lượng khách.</h3></div></article>
+          <article class="visual-tile"><img loading="lazy" src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=86" alt="Không gian văn phòng hiện đại"/><div class="visual-tile-copy"><span>VĂN PHÒNG</span><h3>Vận hành an toàn ngoài giờ làm việc.</h3></div></article>
+          <article class="visual-tile tall"><img loading="lazy" src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=900&q=86" alt="Kho hàng được giám sát bằng camera"/><div class="visual-tile-copy"><span>KHO HÀNG</span><h3>Kiểm soát lối vào và khu vực lưu trữ.</h3></div></article>
+          <article class="visual-tile wide"><img loading="lazy" src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=86" alt="Khu vực ngoài trời quanh ngôi nhà"/><div class="visual-tile-copy"><span>NGOÀI TRỜI</span><h3>Phát hiện chuyển động trước khi có rủi ro.</h3></div></article>
+          <article class="visual-tile"><img loading="lazy" src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=900&q=86" alt="Đội ngũ quản lý nhiều địa điểm"/><div class="visual-tile-copy"><span>ĐỘI NHÓM</span><h3>Chia sẻ quyền xem theo từng vai trò.</h3></div></article>
+          <article class="visual-tile wide"><img loading="lazy" src="https://images.unsplash.com/photo-1555421689-491a97ff2040?auto=format&fit=crop&w=1400&q=86" alt="Theo dõi camera trên máy tính"/><div class="visual-tile-copy"><span>TRUNG TÂM ĐIỀU KHIỂN</span><h3>Mười camera, một giao diện trực quan.</h3></div></article>
+        </div>
+      </div></section>
+      <section id="demo" class="section-pad pt-0"><div class="container-xl"><div class="video-stage"><div class="video-frame"><img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1800&q=85" alt="Video giới thiệu trải nghiệm CameraAIWork"/><button class="play-button" type="button" aria-label="Phát video giới thiệu" onclick="this.innerHTML='<i class=&quot;ti ti-player-pause-filled&quot;></i>'"><i class="ti ti-player-play-filled"></i></button></div><div class="video-caption"><h3>60 giây để thấy mọi thứ rõ ràng hơn.</h3><p>Từ khoảnh khắc camera phát hiện chuyển động đến lúc bạn xem lại đoạn ghi hình và hỏi AI — tất cả nằm trong một luồng liền mạch.</p></div></div></div></section>
+      <section id="free" class="section-pad pt-0"><div class="container-xl"><div class="free-plan">
+        <div class="free-plan-copy"><span class="free-badge">MIỄN PHÍ · KHÔNG CẦN THẺ</span><h2>Free để bắt đầu.</h2><p>Đủ cho gia đình, cửa hàng nhỏ hoặc để bạn trải nghiệm toàn bộ luồng vận hành thông minh của CameraAIWork.</p><div class="plan-limits"><div class="plan-limit"><strong>2</strong><span>NHÀ / ĐỊA ĐIỂM</span></div><div class="plan-limit"><strong>10</strong><span>CAMERA KẾT NỐI</span></div><div class="plan-limit"><strong>1 GB</strong><span>DUNG LƯỢNG LƯU TRỮ</span></div></div><a class="landing-btn" style="background:var(--cai-lime);color:var(--cai-ink)!important;border-color:var(--cai-lime)" href="#login" onclick="openLoginModal(event)">Tạo tài khoản miễn phí <i class="ti ti-arrow-up-right"></i></a></div>
+        <div class="free-plan-visual"><img loading="lazy" src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=88" alt="Ngôi nhà hiện đại sử dụng gói CameraAIWork miễn phí"/></div>
+      </div></div></section>
+      <section id="downloads" class="section-pad pt-0"><div class="container-xl"><div class="download-panel">
+        <div class="download-heading"><div><span class="section-eyebrow">Bản thử nghiệm đa nền tảng</span><h2>Tải CameraAIWork trên thiết bị của bạn.</h2></div><p>Bốn bản build mới nhất từ cùng một mã nguồn Flutter, kết nối chung API và cơ sở dữ liệu CameraAIWork.</p></div>
+        <div class="download-grid">
+          <a class="download-card" href="https://github.com/nhannguyenalien/cameraaiwork/releases/download/v0.1.0-beta.1/app-release.apk"><i class="ti ti-brand-android"></i><strong>Android</strong><span>APK · Ứng dụng di động</span><span class="download-action">Tải bản build <i class="ti ti-download"></i></span></a>
+          <a class="download-card" href="https://github.com/nhannguyenalien/cameraaiwork/releases/download/v0.1.0-beta.1/cameraai-ios-unsigned.zip"><i class="ti ti-brand-apple"></i><strong>iOS</strong><span>Ứng dụng chưa ký chứng chỉ</span><span class="download-action">Tải bản build <i class="ti ti-download"></i></span></a>
+          <a class="download-card" href="https://github.com/nhannguyenalien/cameraaiwork/releases/download/v0.1.0-beta.1/cameraai-macos.zip"><i class="ti ti-brand-apple"></i><strong>macOS</strong><span>Ứng dụng desktop chưa notarize</span><span class="download-action">Tải bản build <i class="ti ti-download"></i></span></a>
+          <a class="download-card" href="https://github.com/nhannguyenalien/cameraaiwork/releases/download/v0.1.0-beta.1/cameraai-windows.zip"><i class="ti ti-brand-windows"></i><strong>Windows</strong><span>ZIP · Ứng dụng desktop</span><span class="download-action">Tải bản build <i class="ti ti-download"></i></span></a>
+        </div>
+        <p class="download-note">Bản thử nghiệm Beta 1 được phát hành công khai trên GitHub, không cần đăng nhập để tải xuống.</p>
+      </div></div></section>
+      <section><div class="container-xl"><div class="landing-cta"><span class="section-eyebrow" style="color:white">Bắt đầu trong vài phút</span><h3>Biến camera hiện có thành hệ thống an ninh biết suy nghĩ.</h3><a class="landing-btn light mt-4" href="#login" onclick="openLoginModal(event)">Tạo tài khoản miễn phí <i class="ti ti-arrow-right"></i></a></div></div></section>
+    </main>
+    <footer class="landing-footer"><div class="container-xl d-flex flex-wrap justify-content-between gap-2"><span>© 2026 CameraAIWork</span><span>An ninh thông minh · Vận hành riêng tư</span></div></footer>
+  </div>
+
+  <header id="app-header" class="navbar navbar-expand-md navbar-light d-print-none d-none">
     <div class="container-xl">
       <h1 class="navbar-brand navbar-brand-autodark">CameraAIWork</h1>
       <div class="navbar-nav flex-row order-md-last">
-        <select id="language-select" class="form-select form-select-sm me-2" style="width:auto" aria-label="Language">
+        <select id="language-select" class="form-select form-select-sm me-2" data-language-select style="width:auto" aria-label="Language">
           <option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option>
           <option value="fr">Français</option><option value="ko">한국어</option><option value="es">Español</option>
         </select>
@@ -44,11 +267,12 @@
       <div class="container-xl">
 
         <!-- Customer login. The server issues a scoped session API key after auth. -->
-        <div id="login-card" class="row justify-content-center">
+        <div id="login-card" class="row justify-content-center login-modal d-none" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
           <div class="col-md-5">
             <form id="login-form" class="card card-md">
+              <button class="login-modal-close" type="button" aria-label="Đóng cửa sổ đăng nhập" onclick="closeLoginModal()"><i class="ti ti-x"></i></button>
               <div class="card-body">
-                <h2 class="card-title" data-i18n="login">Đăng nhập</h2>
+                <h2 id="login-modal-title" class="card-title" data-i18n="login">Đăng nhập</h2>
                 <p class="text-secondary" data-i18n="login_intro">Đăng nhập hoặc tạo tài khoản để quản lý hệ thống camera.</p>
                 <div class="mb-2"><input id="email-input" type="email" class="form-control" autocomplete="username" placeholder="Email" /></div>
                 <div class="mb-2"><input id="password-input" type="password" class="form-control" autocomplete="current-password" data-i18n-placeholder="password_placeholder" placeholder="Mật khẩu (ít nhất 10 ký tự)" /></div>
@@ -76,13 +300,14 @@
               <a href="#tab-events" class="nav-link" data-bs-toggle="tab"><i class="ti ti-bell me-1"></i><span data-i18n="events">Sự kiện</span></a>
             </li>
             <li class="nav-item">
+              <a href="#tab-agent" class="nav-link" data-bs-toggle="tab"><i class="ti ti-sparkles me-1"></i>AI Agent</a>
+            </li>
+            <li class="nav-item">
               <a href="#tab-settings" class="nav-link" data-bs-toggle="tab"><i class="ti ti-settings me-1"></i><span data-i18n="settings">Cài đặt</span></a>
             </li>
           </ul>
           <div class="d-flex justify-content-end gap-2 mb-3">
             <span id="plan-badge" class="badge bg-secondary-lt align-self-center" data-i18n="loading_plan">Đang tải gói…</span>
-            <button id="subscribe-btn" class="btn btn-primary btn-sm" data-i18n="upgrade">Nâng cấp Pro</button>
-            <button id="billing-btn" class="btn btn-outline-secondary btn-sm" data-i18n="billing">Quản lý thanh toán</button>
           </div>
 
           <div class="tab-content">
@@ -124,7 +349,46 @@
 
             <!-- People: grid of clustered faces, rename inline -->
             <div class="tab-pane" id="tab-people">
+              <div class="card people-toolbar mb-3">
+                <div class="card-body py-3">
+                  <div class="row g-2 align-items-center">
+                    <div class="col-12 col-sm-auto">
+                      <div id="people-source" class="btn-group w-100" role="group" aria-label="Nguồn nhận diện khuôn mặt">
+                        <button class="btn btn-outline-primary active" type="button" data-people-source="local"><i class="ti ti-device-desktop me-1"></i>Local</button>
+                        <button class="btn btn-outline-primary" type="button" data-people-source="gpu"><i class="ti ti-bolt me-1"></i>GPU thử nghiệm</button>
+                      </div>
+                    </div>
+                    <div class="col-12 col-lg">
+                      <div class="input-icon">
+                        <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                        <input id="people-search" class="form-control" type="search" placeholder="Tìm theo tên người…" autocomplete="off" />
+                      </div>
+                    </div>
+                    <div class="col-12 col-sm-auto">
+                      <div id="people-filter" class="btn-group w-100" role="group" aria-label="Lọc nhóm người">
+                        <button class="btn btn-outline-secondary active" type="button" data-people-filter="all">Tất cả</button>
+                        <button class="btn btn-outline-secondary" type="button" data-people-filter="unnamed">Chưa đặt tên</button>
+                        <button class="btn btn-outline-secondary" type="button" data-people-filter="named">Đã đặt tên</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="d-flex flex-wrap gap-3 mt-3 text-secondary small">
+                    <span class="people-summary-item"><strong id="people-total" class="text-body">0</strong> nhóm</span>
+                    <span class="people-summary-item"><strong id="people-unnamed" class="text-warning">0</strong> cần nhập tên</span>
+                    <span id="people-source-note">Kết quả nhận diện trên máy local.</span>
+                    <span>Nhập tên ngay trên thẻ rồi nhấn <strong>Lưu</strong>.</span>
+                  </div>
+                </div>
+              </div>
               <div id="people-grid" class="row row-cards"></div>
+              <div id="people-filter-empty" class="text-secondary text-center py-5 d-none">Không tìm thấy nhóm phù hợp.</div>
+              <div id="people-pagination" class="d-flex justify-content-between align-items-center mt-3 d-none">
+                <span id="people-page-info" class="text-secondary small"></span>
+                <div class="btn-group">
+                  <button id="people-prev" class="btn btn-outline-secondary" type="button"><i class="ti ti-chevron-left me-1"></i>Trước</button>
+                  <button id="people-next" class="btn btn-outline-secondary" type="button">Sau<i class="ti ti-chevron-right ms-1"></i></button>
+                </div>
+              </div>
               <div id="people-empty" class="text-secondary text-center py-5 d-none" data-i18n="no_people">
                 Chưa có ai được ghi nhận — cần kết nối AI worker cho site để nhận diện khuôn mặt.
               </div>
@@ -138,12 +402,55 @@
                     <thead>
                       <tr>
                         <th data-i18n="time">Thời gian</th><th>Camera</th>
-                        <th data-i18n="person">Người</th><th data-i18n="media">Ảnh</th>
+                        <th data-i18n="person">Người</th><th>Lưu tại</th><th data-i18n="media">Ảnh</th>
                       </tr>
                     </thead>
                     <tbody id="events-body"></tbody>
                   </table>
                 </div>
+                <div id="events-pagination" class="card-footer d-flex justify-content-between align-items-center d-none">
+                  <span id="events-page-info" class="text-secondary small"></span>
+                  <div class="btn-group">
+                    <button id="events-prev" class="btn btn-outline-secondary" type="button"><i class="ti ti-chevron-left me-1"></i>Trước</button>
+                    <button id="events-next" class="btn btn-outline-secondary" type="button">Sau<i class="ti ti-chevron-right ms-1"></i></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane" id="tab-agent">
+              <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <div><h3 class="card-title"><i class="ti ti-message-chatbot me-2"></i>Trợ lý CameraAIWork</h3><div class="text-secondary small">Hỏi camera, sự kiện và điều khiển hệ thống.</div></div>
+                  <select id="agent-provider" class="form-select form-select-sm" style="width:auto"><option value="auto">Tự chọn AI</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select>
+                </div>
+                <div class="card-body border-bottom bg-light-subtle">
+                  <div id="agent-config-message" class="alert d-none" role="alert"></div>
+                  <div class="row g-2">
+                    <div class="col-lg-6">
+                      <form id="openai-form" class="agent-provider-card border rounded h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2"><div class="fw-bold">OpenAI</div><div id="openai-status" class="agent-key-state is-missing"><i class="ti ti-key-off"></i><span>Chưa có key</span></div></div>
+                        <div class="mb-2"><label class="form-label">API key</label><input id="openai-key" type="password" class="form-control form-control-sm" maxlength="4096" autocomplete="new-password" placeholder="sk-…" required /><div id="openai-model-note" class="form-hint">Nhập key để tự tải model.</div></div>
+                        <div class="mb-2"><label class="form-label">Model</label><select id="openai-model" class="form-select form-select-sm" required><option value="gpt-5-mini">gpt-5-mini</option><option value="gpt-5">gpt-5</option><option value="gpt-4.1-mini">gpt-4.1-mini</option><option value="gpt-4.1">gpt-4.1</option></select></div>
+                        <div class="d-flex gap-2"><button class="btn btn-primary btn-sm" type="submit">Lưu / đổi key</button><button class="btn btn-ghost-danger btn-sm" type="button" onclick="removeIntegration('openai', true)">Xóa</button></div>
+                      </form>
+                    </div>
+                    <div class="col-lg-6">
+                      <form id="gemini-form" class="agent-provider-card border rounded h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2"><div class="fw-bold">Google Gemini</div><div id="gemini-status" class="agent-key-state is-missing"><i class="ti ti-key-off"></i><span>Chưa có key</span></div></div>
+                        <div class="mb-2"><label class="form-label">API key</label><input id="gemini-key" type="password" class="form-control form-control-sm" maxlength="4096" autocomplete="new-password" placeholder="AIza…" required /><div id="gemini-model-note" class="form-hint">Nhập key để tự tải model.</div></div>
+                        <div class="mb-2"><label class="form-label">Model</label><select id="gemini-model" class="form-select form-select-sm" required><option value="gemini-2.5-flash">gemini-2.5-flash</option><option value="gemini-2.5-pro">gemini-2.5-pro</option></select></div>
+                        <div class="d-flex gap-2"><button class="btn btn-primary btn-sm" type="submit">Lưu / đổi key</button><button class="btn btn-ghost-danger btn-sm" type="button" onclick="removeIntegration('gemini', true)">Xóa</button></div>
+                      </form>
+                    </div>
+                  </div>
+                  <div class="form-hint mt-2"><i class="ti ti-lock me-1"></i>Key được mã hóa và không hiển thị lại. Ảnh: OpenAI/Gemini · video ≤15MB: Gemini.</div>
+                </div>
+                <div id="agent-chat" class="agent-chat card-body"><div class="agent-message assistant rounded p-3">Xin chào! Bạn có thể nói: “Hôm nay ai đến?”, “Liệt kê camera offline”, hoặc “Quét camera ở Nhà chính”.</div></div>
+                <form id="agent-form" class="card-footer d-flex gap-2">
+                  <input id="agent-input" class="form-control" maxlength="4000" autocomplete="off" placeholder="Nhập yêu cầu cho AI Agent…" required />
+                  <button id="agent-send" class="btn btn-primary" type="submit"><i class="ti ti-send me-1"></i>Gửi</button>
+                </form>
               </div>
             </div>
 
@@ -152,12 +459,12 @@
               <div class="row row-cards">
                 <div class="col-12">
                   <div class="card">
-                    <div class="card-header"><h3 class="card-title"><i class="ti ti-terminal-2 me-2"></i>Cài relay lên VPS</h3></div>
+                    <div class="card-header"><h3 class="card-title"><i class="ti ti-terminal-2 me-2"></i><span data-i18n="relay_install">Cài relay lên VPS</span></h3></div>
                     <div class="card-body">
-                      <p class="text-secondary">Tạo lệnh cài dùng một lần. Site và camera được gắn thẳng vào tài khoản/email đang đăng nhập; mã tự hết hạn sau 15 phút.</p>
+                      <p class="text-secondary" data-i18n="relay_install_note">Tạo lệnh cài dùng một lần. Site và camera được gắn thẳng vào tài khoản/email đang đăng nhập; mã tự hết hạn sau 15 phút.</p>
                       <div class="d-flex gap-2 mb-3">
-                        <button id="create-install-command" class="btn btn-primary" type="button"><i class="ti ti-key me-1"></i>Tạo lệnh cài</button>
-                        <button id="copy-install-command" class="btn btn-outline-secondary d-none" type="button"><i class="ti ti-copy me-1"></i>Sao chép</button>
+                        <button id="create-install-command" class="btn btn-primary" type="button"><i class="ti ti-key me-1"></i><span data-i18n="create_install_command">Tạo lệnh cài</span></button>
+                        <button id="copy-install-command" class="btn btn-outline-secondary d-none" type="button"><i class="ti ti-copy me-1"></i><span data-i18n="copy">Sao chép</span></button>
                       </div>
                       <textarea id="install-command" class="form-control font-monospace d-none" rows="4" readonly spellcheck="false"></textarea>
                       <div id="install-command-note" class="form-hint"></div>
@@ -166,18 +473,90 @@
                 </div>
                 <div class="col-12">
                   <div class="card">
+                    <div class="card-header"><h3 class="card-title"><i class="ti ti-key me-2"></i>API key</h3></div>
+                    <div class="card-body">
+                      <p class="text-secondary">Tạo key riêng cho script hoặc ứng dụng bên ngoài, tách biệt với phiên đăng nhập trên trình duyệt. Key "Chỉ đọc" chỉ gọi được API lấy dữ liệu (GET); key "Toàn quyền" dùng được mọi API như chính bạn đang đăng nhập.</p>
+                      <div id="api-key-created" class="alert alert-success d-none" role="alert"></div>
+                      <form id="api-key-form" class="row g-2 align-items-end mb-3">
+                        <div class="col-md-4">
+                          <label class="form-label">Tên key</label>
+                          <input id="api-key-label" class="form-control" maxlength="100" placeholder="VD: Script sao lưu" required />
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Quyền</label>
+                          <select id="api-key-scope" class="form-select">
+                            <option value="read">Chỉ đọc (an toàn hơn)</option>
+                            <option value="full">Toàn quyền</option>
+                          </select>
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Hết hạn</label>
+                          <select id="api-key-expiry" class="form-select">
+                            <option value="">Không hết hạn</option>
+                            <option value="30">30 ngày</option>
+                            <option value="90">90 ngày</option>
+                            <option value="365">365 ngày</option>
+                          </select>
+                        </div>
+                        <div class="col-md-2">
+                          <button class="btn btn-primary w-100" type="submit">Tạo key</button>
+                        </div>
+                        <div id="api-key-form-note" class="col-12 form-hint"></div>
+                      </form>
+                      <div class="table-responsive">
+                        <table class="table card-table table-vcenter">
+                          <thead><tr><th>Tên</th><th>Quyền</th><th>Tạo lúc</th><th>Hết hạn</th><th></th></tr></thead>
+                          <tbody id="api-keys-body"><tr><td colspan="5" class="text-secondary">Đang tải…</td></tr></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <form id="storage-config-form" class="card">
+                    <div class="card-header"><h3 class="card-title"><i class="ti ti-cloud-upload me-2"></i>Nơi lưu ảnh và video sự kiện</h3></div>
+                    <div class="card-body">
+                      <p class="text-secondary">Chọn đúng một nơi lưu. Event mới chỉ được upload lên R2, S3 hoặc Google Drive đã chọn.</p>
+                      <div class="mb-3"><label class="form-label">Dịch vụ lưu trữ</label><select id="storage-backend" class="form-select"><option value="r2">Cloudflare R2 của hệ thống</option><option value="s3">S3 của khách hàng / dịch vụ tương thích S3</option><option value="gdrive">Google Drive của khách hàng</option></select></div>
+                      <div id="s3-config-fields" class="d-none">
+                        <div class="row g-3">
+                          <div class="col-md-6"><label class="form-label">Endpoint HTTPS</label><input id="s3-endpoint" class="form-control" placeholder="https://s3.ap-southeast-1.amazonaws.com" /></div>
+                          <div class="col-md-3"><label class="form-label">Region</label><input id="s3-region" class="form-control" placeholder="ap-southeast-1" /></div>
+                          <div class="col-md-3"><label class="form-label">Bucket</label><input id="s3-bucket" class="form-control" /></div>
+                          <div class="col-md-6"><label class="form-label">Access key ID</label><input id="s3-access-key" class="form-control" autocomplete="new-password" /></div>
+                          <div class="col-md-6"><label class="form-label">Secret access key</label><input id="s3-secret-key" type="password" class="form-control" autocomplete="new-password" /></div>
+                          <div class="col-md-6"><label class="form-label">Session token (không bắt buộc)</label><input id="s3-session-token" type="password" class="form-control" autocomplete="new-password" /></div>
+                          <div class="col-md-6 d-flex align-items-end"><label class="form-check mb-2"><input id="s3-path-style" class="form-check-input" type="checkbox" checked /><span class="form-check-label">Dùng path-style (phù hợp đa số dịch vụ S3 ngoài)</span></label></div>
+                        </div>
+                        <div id="s3-saved-note" class="form-hint mt-2"></div>
+                      </div>
+                      <div id="gdrive-config-fields" class="d-none">
+                        <div class="row g-3">
+                          <div class="col-md-6"><label class="form-label">Google OAuth access token</label><input id="gdrive-access-token" type="password" class="form-control" autocomplete="new-password" placeholder="ya29..." /></div>
+                          <div class="col-md-6"><label class="form-label">Google Drive Folder ID</label><input id="gdrive-folder-id" class="form-control" placeholder="ID trong URL thư mục Drive" /></div>
+                        </div>
+                        <div class="form-hint mt-2">Hãy bật Google Drive API và cấp cho token quyền <code>drive.file</code> hoặc <code>drive</code>. Access token Google thường hết hạn; khi đó cần nhập token mới.</div>
+                        <div id="gdrive-saved-note" class="form-hint mt-1"></div>
+                      </div>
+                    </div>
+                    <div class="card-footer"><button id="save-storage-config" class="btn btn-primary" type="submit">Kiểm tra kết nối và lưu</button></div>
+                  </form>
+                </div>
+                <div class="col-12">
+                  <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                      <div><h3 class="card-title"><i class="ti ti-database me-2"></i>Dung lượng lưu trữ R2</h3><div class="text-secondary small">Thống kê thực tế, hiện chưa áp giới hạn.</div></div>
-                      <button id="refresh-storage" type="button" class="btn btn-outline-secondary btn-sm">Làm mới</button>
+                      <div><h3 class="card-title"><i class="ti ti-database me-2"></i>Dung lượng lưu trữ</h3><div class="text-secondary small">Tổng hợp toàn bộ lịch sử trên R2, S3 và Google Drive, không phụ thuộc nơi đang được chọn.</div></div>
+                      <button id="refresh-storage" type="button" class="btn btn-outline-secondary btn-sm" data-i18n="refresh">Làm mới</button>
                     </div>
                     <div class="card-body">
-                      <div id="storage-loading" class="text-secondary">Đang đo dung lượng…</div>
+                      <div id="storage-loading" class="text-secondary" data-i18n="measuring_storage">Đang đo dung lượng…</div>
                       <div id="storage-summary" class="row g-3 d-none"></div>
+                      <div id="storage-backends" class="row g-3 mt-1 d-none"></div>
                       <div id="storage-warning" class="alert alert-warning mt-3 mb-0 d-none"></div>
                     </div>
                     <div class="table-responsive">
                       <table class="table card-table table-vcenter">
-                        <thead><tr><th>Site / Camera</th><th>Event</th><th>Ảnh</th><th>Video</th><th>Tổng</th></tr></thead>
+                        <thead><tr><th data-i18n="site_camera">Site / Camera</th><th data-i18n="event">Event</th><th data-i18n="images">Ảnh</th><th data-i18n="video">Video</th><th data-i18n="total">Tổng</th></tr></thead>
                         <tbody id="storage-cameras"></tbody>
                       </table>
                     </div>
@@ -190,9 +569,18 @@
                       <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadSites()" data-i18n="refresh">Làm mới</button>
                     </div>
                     <div class="table-responsive">
-                      <table class="table card-table table-vcenter"><thead><tr><th data-i18n="name">Tên</th><th>Camera</th><th data-i18n="relay_address">Địa chỉ relay</th><th></th></tr></thead><tbody id="sites-body"></tbody></table>
+                      <table class="table card-table table-vcenter"><thead><tr><th data-i18n="name">Tên</th><th data-i18n="cameras">Camera</th><th data-i18n="relay_address">Địa chỉ relay</th><th></th></tr></thead><tbody id="sites-body"></tbody></table>
                     </div>
                     <div id="sites-empty" class="card-body text-secondary d-none" data-i18n="no_sites">Chưa có site. Chạy bộ cài relay tại máy ở địa điểm cần kết nối.</div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="card">
+                    <div class="card-header"><h3 class="card-title"><i class="ti ti-cpu me-2"></i>AI local theo camera</h3></div>
+                    <div class="card-body">
+                      <p class="text-secondary">Chọn cách từng camera phát hiện người. "AI local xác nhận" là mặc định an toàn. "Tin ONVIF motion" bỏ qua AI, lưu ngay khi camera tự báo động — nhẹ máy tại site hơn nhưng chỉ nên dùng cho camera ít báo giả (đèn/gió), và sự kiện đó sẽ không nhận diện được khuôn mặt.</p>
+                      <div id="local-ai-options" class="row g-3"></div>
+                    </div>
                   </div>
                 </div>
                 <div class="col-12">
@@ -231,8 +619,8 @@
                     <div class="card-header"><h3 class="card-title" data-i18n="telegram_alerts">Telegram cảnh báo</h3></div>
                     <div class="card-body">
                       <p id="telegram-status" class="text-secondary" data-i18n="not_configured">Chưa cấu hình</p>
-                      <div class="mb-3"><label class="form-label">Bot token</label><input id="telegram-token" type="password" class="form-control" autocomplete="off" required /></div>
-                      <div><label class="form-label">Chat ID</label><input id="telegram-chat" class="form-control" autocomplete="off" required /></div>
+                      <div class="mb-3"><label class="form-label" data-i18n="bot_token">Bot token</label><input id="telegram-token" type="password" class="form-control" autocomplete="off" required /></div>
+                      <div><label class="form-label" data-i18n="chat_id">Chat ID</label><input id="telegram-chat" class="form-control" autocomplete="off" required /></div>
                     </div>
                     <div class="card-footer d-flex gap-2"><button class="btn btn-primary" type="submit" data-i18n="save_telegram">Lưu Telegram</button><button class="btn btn-outline-danger" type="button" onclick="removeIntegration('telegram')" data-i18n="remove_config">Xóa cấu hình</button></div>
                   </form>
@@ -242,8 +630,8 @@
                     <div class="card-header"><h3 class="card-title" data-i18n="runpod_ai">RunPod AI nâng cao</h3></div>
                     <div class="card-body">
                       <p id="runpod-status" class="text-secondary" data-i18n="not_configured">Chưa cấu hình</p>
-                      <div class="mb-3"><label class="form-label">API key</label><input id="runpod-key" type="password" class="form-control" autocomplete="off" required /></div>
-                      <div><label class="form-label">Endpoint ID</label><input id="runpod-endpoint" class="form-control" autocomplete="off" required /></div>
+                      <div class="mb-3"><label class="form-label" data-i18n="api_key">API key</label><input id="runpod-key" type="password" class="form-control" autocomplete="off" required /></div>
+                      <div><label class="form-label" data-i18n="endpoint_id">Endpoint ID</label><input id="runpod-endpoint" class="form-control" autocomplete="off" required /></div>
                     </div>
                     <div class="card-footer d-flex gap-2"><button class="btn btn-primary" type="submit" data-i18n="save_runpod">Lưu RunPod</button><button class="btn btn-outline-danger" type="button" onclick="removeIntegration('runpod')" data-i18n="remove_config">Xóa cấu hình</button></div>
                   </form>
@@ -299,6 +687,21 @@
     </div>
   </div>
 
+  <!-- Rename camera/site modal -->
+  <div class="modal" id="resource-rename-modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <form id="resource-rename-form">
+        <div class="modal-header"><h5 id="resource-rename-title" class="modal-title">Đổi tên</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <label class="form-label" data-i18n="name">Tên</label>
+          <input id="resource-rename-input" type="text" class="form-control" maxlength="120" required />
+          <div id="resource-rename-status" class="text-danger small mt-2" role="alert"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn" data-bs-dismiss="modal" data-i18n="cancel">Huỷ</button><button id="resource-rename-save" type="submit" class="btn btn-primary" data-i18n="save">Lưu</button></div>
+      </form>
+    </div></div>
+  </div>
+
   <!-- Rename person modal -->
   <div class="modal" id="rename-modal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -321,24 +724,45 @@
     </div>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/js/tabler.min.js"></script>
-<script src="/dashboard-i18n.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/js/tabler.min.js" integrity="sha384-fSOug2E78eoy8fAFcDbY60mgZb6eboMDErIUzTF1UWHQCmmN7LcTyt+uzxH8upW+" crossorigin="anonymous"></script>
+<script src="/dashboard-i18n.js?v=20260910-6"></script>
+<script src="/ui-i18n-fallback.js?v=20260910-6"></script>
 <script>
-  const API_KEY_STORAGE = 'cameraaiwork_api_key';
+  function resourceText(key) {
+    const language = document.documentElement.lang || 'vi';
+    const copy = {
+      vi: { rename_camera: 'Đổi tên camera', rename_site: 'Đổi tên site', name_required: 'Tên không được để trống' },
+      en: { rename_camera: 'Rename camera', rename_site: 'Rename site', name_required: 'Name is required' },
+      ja: { rename_camera: 'カメラ名を変更', rename_site: 'サイト名を変更', name_required: '名前は必須です' },
+      fr: { rename_camera: 'Renommer la caméra', rename_site: 'Renommer le site', name_required: 'Le nom est obligatoire' },
+      ko: { rename_camera: '카메라 이름 변경', rename_site: '사이트 이름 변경', name_required: '이름은 필수입니다' },
+      es: { rename_camera: 'Renombrar cámara', rename_site: 'Renombrar sitio', name_required: 'El nombre es obligatorio' },
+    };
+    return (copy[language] || copy.en)[key] || key;
+  }
+  const API_KEY_STORAGE = 'cameraaiwork_logged_in';
   let cameras = [];
   let selectedCamera = null;
   let renamingPersonId = null;
+  let renamingResource = null;
   let accountSummary = null;
   let sites = [];
+  const agentMessages = [];
+  const agentProposals = new Map();
+  let agentConversationContext = null;
+  let lastAgentMessageId = 0;
+  let agentHistoryLoaded = false;
 
   const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
-  const setApiKey = (k) => localStorage.setItem(API_KEY_STORAGE, k);
+  localStorage.removeItem('cameraaiwork_api_key');
+  const setApiKey = () => localStorage.setItem(API_KEY_STORAGE, '1');
   const clearApiKey = () => localStorage.removeItem(API_KEY_STORAGE);
 
   async function api(path, options = {}) {
     const res = await fetch(path, {
       ...options,
+      credentials: 'same-origin',
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
         ...(options.headers || {}),
@@ -359,9 +783,17 @@
     return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  function safeHttpUrl(value) {
+    try {
+      const url = new URL(String(value), location.origin);
+      return url.protocol === 'https:' || url.protocol === 'http:' ? escapeHtml(url.href) : '';
+    } catch (_) { return ''; }
+  }
+
   // --- Cameras grid ---
   const activePreviews = new Map();
   const cameraThumbnailUrls = new Map();
+  const cameraThumbnailRetries = new Map();
   const visibleCameraThumbnails = new Set();
   let cameraThumbnailObserver;
   const MAX_ACTIVE_PREVIEWS = window.matchMedia('(max-width: 767px)').matches ? 1 : 2;
@@ -373,6 +805,7 @@
     const grid = document.getElementById('camera-grid');
     document.getElementById('camera-empty').classList.toggle('d-none', cameras.length > 0);
     renderRecordingOptions();
+    void renderLocalAiOptions();
     grid.innerHTML = cameras
       .map(
         (c, i) => `
@@ -391,12 +824,17 @@
             </div>
             <div class="card-body d-flex align-items-center justify-content-between py-2">
               <div>
-                <div class="fw-bold">${escapeHtml(c.cameraName || c.cameraId)}</div>
-                <div class="text-secondary small">${escapeHtml(c.siteName || c.siteId)}</div>
+                <div class="fw-bold d-flex align-items-center gap-1">
+                  <span>${escapeHtml(c.cameraName || c.cameraId)}</span>
+                  <button class="btn btn-ghost-secondary btn-sm p-0" type="button" onclick="event.stopPropagation(); openResourceRename('camera', ${i})" title="${resourceText('rename_camera')}" aria-label="${resourceText('rename_camera')}"><i class="ti ti-pencil"></i></button>
+                </div>
+                <div class="text-secondary small d-flex align-items-center gap-1">
+                  <span>${escapeHtml(c.siteName || c.siteId)}</span>
+                  <button class="btn btn-ghost-secondary btn-sm p-0" type="button" data-site-id="${escapeHtml(c.siteId)}" onclick="event.stopPropagation(); openResourceRename('site', this.dataset.siteId)" title="${resourceText('rename_site')}" aria-label="${resourceText('rename_site')}"><i class="ti ti-pencil"></i></button>
+                </div>
+                <div class="text-secondary small camera-diagnostic" id="camera-diagnostic-${i}">Đang kiểm tra kết nối…</div>
               </div>
-              <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); openCamera(${i})" title="${t('control')}">
-                <i class="ti ti-adjustments-horizontal me-1"></i>${t('control')}
-              </button>
+              <button class="btn btn-sm btn-primary" type="button" onclick="event.stopPropagation(); openCamera(${i})" title="${t('control')}"><i class="ti ti-adjustments-horizontal me-1"></i>${t('control')}</button>
             </div>
           </div>
         </div>`
@@ -433,27 +871,82 @@
     const container = document.getElementById(`camera-preview-${index}`);
     const image = container?.querySelector('.camera-thumbnail');
     const badge = container?.querySelector('.camera-online-state');
+    const diagnostic = document.getElementById(`camera-diagnostic-${index}`);
     if (!camera || !image || !badge || image.dataset.loading === 'true') return;
     image.dataset.loading = 'true';
     try {
       const response = await fetch(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/snapshot`, {
         headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store'
       });
-      if (!response.ok) throw new Error('offline');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        const error = new Error(detail.error || `HTTP ${response.status}`);
+        error.code = detail.code || `http_${response.status}`;
+        throw error;
+      }
       const objectUrl = URL.createObjectURL(await response.blob());
       const previousUrl = cameraThumbnailUrls.get(index);
       if (previousUrl) URL.revokeObjectURL(previousUrl);
       cameraThumbnailUrls.set(index, objectUrl);
       image.src = objectUrl;
+      syncLocalAiThumbnail(index, objectUrl);
       image.classList.toggle('d-none', Boolean(activePreviews.get(index)?.iframe));
       container.querySelector('.camera-preview-placeholder')?.classList.add('d-none');
       badge.className = 'badge bg-green-lt camera-online-state';
       badge.textContent = 'Online';
-    } catch (_) {
-      badge.className = 'badge bg-red-lt camera-online-state';
-      badge.textContent = 'Offline';
+      if (diagnostic) {
+        diagnostic.className = 'text-green small camera-diagnostic';
+        diagnostic.textContent = 'Camera và relay hoạt động bình thường';
+      }
+    } catch (error) {
+      // A snapshot is a separate, relatively expensive RTSP operation. Its
+      // timeout must not mark a camera offline while WebRTC can still play.
+      let status;
+      try {
+        const response = await fetch(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/status`, {
+          headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store'
+        });
+        status = await response.json().catch(() => null);
+      } catch (_) {}
       const message = container.querySelector('.camera-preview-placeholder span');
-      if (!image.src && message) message.textContent = 'Camera đang ngoại tuyến';
+      const labels = {
+        relay_not_configured: 'Site chưa cấu hình máy relay',
+        relay_timeout: 'Máy relay phản hồi quá chậm',
+        relay_unreachable: 'Máy relay hoặc Cloudflare Tunnel đang offline',
+        relay_auth_error: 'Sai khóa xác thực giữa cloud và relay',
+        camera_not_configured: 'Camera không tồn tại trong cấu hình relay',
+        go2rtc_unavailable: 'Dịch vụ video go2rtc trên máy relay đang lỗi',
+        camera_unreachable: 'Camera đang tắt, mất mạng hoặc RTSP không kết nối được',
+        invalid_snapshot: 'Luồng camera trả về ảnh không hợp lệ',
+        http_401: 'Phiên đăng nhập/API key không hợp lệ',
+      };
+      const online = status?.cameraOnline === true;
+      // controls.online reflects ONVIF control discovery, not the RTSP/WebRTC
+      // video path. In particular, a camera can play normally while ONVIF is
+      // temporarily unavailable. Only call it offline when the snapshot path
+      // itself confirms an unreachable camera, or configuration/auth is bad.
+      const definitelyOffline = ['camera_not_configured', 'relay_not_configured', 'relay_auth_error'].includes(status?.status || error.code)
+        || (error.code === 'camera_unreachable' && status?.status === 'camera_unreachable');
+      const reason = online
+        ? 'Camera đang online, ảnh xem trước phản hồi chậm'
+        : (status?.message || labels[error.code] || error.message || 'Không xác định được trạng thái camera');
+      badge.className = online ? 'badge bg-green-lt camera-online-state' : definitelyOffline ? 'badge bg-red-lt camera-online-state' : 'badge bg-yellow-lt camera-online-state';
+      badge.textContent = online ? 'Online' : definitelyOffline ? 'Offline' : 'Kết nối chậm';
+      if (!image.src && message) message.textContent = reason;
+      if (diagnostic) {
+        diagnostic.className = `${online ? 'text-yellow' : definitelyOffline ? 'text-red' : 'text-yellow'} small camera-diagnostic`;
+        diagnostic.textContent = reason;
+        diagnostic.title = `Mã lỗi thumbnail: ${error.code || 'unknown'}${status?.status ? `; trạng thái: ${status.status}` : ''}`;
+      }
+      // Retry a slow thumbnail soon; the regular one-minute refresh remains
+      // the fallback. Keep only one timer per card.
+      if (!definitelyOffline && !cameraThumbnailRetries.has(index)) {
+        const timer = setTimeout(() => {
+          cameraThumbnailRetries.delete(index);
+          if (visibleCameraThumbnails.has(index)) loadCameraThumbnail(index);
+        }, 5000);
+        cameraThumbnailRetries.set(index, timer);
+      }
     } finally {
       delete image.dataset.loading;
     }
@@ -464,6 +957,8 @@
     visibleCameraThumbnails.clear();
     cameraThumbnailUrls.forEach(url => URL.revokeObjectURL(url));
     cameraThumbnailUrls.clear();
+    cameraThumbnailRetries.forEach(timer => clearTimeout(timer));
+    cameraThumbnailRetries.clear();
   }
 
   setInterval(() => {
@@ -565,6 +1060,88 @@
         <span class="form-check-label"><strong>${escapeHtml(camera.cameraName || camera.cameraId)}</strong><br><span class="text-secondary">${t('record_when_person')}</span></span>
       </label>
     </div>`).join('');
+  }
+
+  async function renderLocalAiOptions() {
+    const container = document.getElementById('local-ai-options');
+    if (!container) return;
+    if (!cameras.length) {
+      container.innerHTML = '<div class="text-secondary">Chưa có camera nào.</div>';
+      return;
+    }
+    container.innerHTML = '<div class="text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải trạng thái phát hiện…</div>';
+    const options = await Promise.all(cameras.map(async (camera, index) => {
+      try {
+        const config = await api(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/config`);
+        camera.localAiEnabled = config.localAiEnabled !== false;
+        camera.onvifMotionTrusted = config.onvifMotionTrusted === true;
+        // Three real-world modes, one control — avoids exposing the two
+        // underlying switches independently, which lets users pick
+        // combinations (e.g. AI off + ONVIF untrusted = no detection at all)
+        // that don't correspond to an intentional choice.
+        const mode = camera.onvifMotionTrusted ? 'onvif' : (camera.localAiEnabled ? 'ai' : 'off');
+        return `<div class="col-md-6">
+          <div class="local-ai-camera">
+            <div class="local-ai-thumbnail-wrap">
+              <div class="local-ai-thumbnail-placeholder"><i class="ti ti-camera"></i></div>
+              <img id="local-ai-thumbnail-${index}" class="local-ai-thumbnail d-none" alt="Ảnh xem trước ${escapeHtml(camera.cameraName || camera.cameraId)}" />
+            </div>
+            <div class="flex-fill min-w-0">
+              <strong class="d-block text-truncate">${escapeHtml(camera.cameraName || camera.cameraId)}</strong>
+              <span class="text-secondary small d-block text-truncate">${escapeHtml(camera.siteName || camera.siteId)}</span>
+            </div>
+            <select class="form-select form-select-sm w-auto" title="Cách camera này phát hiện người"
+              onchange="setDetectionMode(${index}, this.value, this)">
+              <option value="ai" ${mode === 'ai' ? 'selected' : ''}>AI local xác nhận (mặc định)</option>
+              <option value="onvif" ${mode === 'onvif' ? 'selected' : ''}>Tin ONVIF motion — lưu ngay</option>
+              <option value="off" ${mode === 'off' ? 'selected' : ''}>Tắt phát hiện</option>
+            </select>
+          </div>
+        </div>`;
+      } catch (error) {
+        return `<div class="col-md-6"><div class="text-secondary"><strong>${escapeHtml(camera.cameraName || camera.cameraId)}</strong><br><span class="text-danger small">Không tải được trạng thái: ${escapeHtml(error.message)}</span></div></div>`;
+      }
+    }));
+    container.innerHTML = options.join('');
+    cameraThumbnailUrls.forEach((url, index) => syncLocalAiThumbnail(index, url));
+  }
+
+  function syncLocalAiThumbnail(index, url) {
+    const image = document.getElementById(`local-ai-thumbnail-${index}`);
+    if (!image || !url) return;
+    image.src = url;
+    image.classList.remove('d-none');
+    image.previousElementSibling?.classList.add('d-none');
+  }
+
+  const DETECTION_MODES = {
+    ai: { localAiEnabled: true, onvifMotionTrusted: false, label: 'AI local xác nhận trước khi lưu' },
+    onvif: { localAiEnabled: true, onvifMotionTrusted: true, label: 'tin ONVIF motion, lưu ngay không chạy AI' },
+    off: { localAiEnabled: false, onvifMotionTrusted: false, label: 'tắt phát hiện' },
+  };
+
+  async function setDetectionMode(index, mode, select) {
+    const camera = cameras[index];
+    const target = DETECTION_MODES[mode];
+    if (!camera || !target) return;
+    const previous = select.dataset.previous || (camera.onvifMotionTrusted ? 'onvif' : (camera.localAiEnabled ? 'ai' : 'off'));
+    select.disabled = true;
+    try {
+      const saved = await api(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/config`, {
+        method: 'PUT',
+        body: JSON.stringify({ localAiEnabled: target.localAiEnabled, onvifMotionTrusted: target.onvifMotionTrusted }),
+      });
+      if (saved.localAiEnabled !== target.localAiEnabled || saved.onvifMotionTrusted !== target.onvifMotionTrusted) {
+        throw new Error('Máy relay tại site đang dùng phiên bản cũ. Hãy cập nhật relay rồi thử lại.');
+      }
+      camera.localAiEnabled = target.localAiEnabled;
+      camera.onvifMotionTrusted = target.onvifMotionTrusted;
+      select.dataset.previous = mode;
+      showSettingsMessage(`Đã đặt ${camera.cameraName || camera.cameraId}: ${target.label}.`);
+    } catch (error) {
+      select.value = previous;
+      showSettingsMessage(error.message, false);
+    } finally { select.disabled = false; }
   }
 
   async function setRecordOnPerson(siteId, cameraId, enabled, checkbox) {
@@ -676,35 +1253,68 @@
 
   // --- People grid ---
   let peopleRenderSignature = '';
+  let peopleItems = [];
+  let peopleSource = 'local';
+  let peopleFilter = 'all';
+  let peoplePage = 1;
+  const PEOPLE_PAGE_SIZE = 12;
   let eventsRenderSignature = '';
+  let eventsPage = 1;
+  const EVENTS_PAGE_SIZE = 20;
 
   function revokeBlobImages(container) {
     container.querySelectorAll('img[src^="blob:"]').forEach((image) => URL.revokeObjectURL(image.src));
   }
 
   async function loadPeople() {
-    const people = await api('/api/people');
-    const grid = document.getElementById('people-grid');
+    const people = await api(`/api/people?source=${peopleSource}`);
     document.getElementById('people-empty').classList.toggle('d-none', people.length > 0);
-    const signature = JSON.stringify([document.documentElement.lang, people]);
+    const signature = JSON.stringify([document.documentElement.lang, peopleSource, people]);
     if (signature === peopleRenderSignature) return;
     peopleRenderSignature = signature;
-    const markup = people
+    peopleItems = people;
+    document.getElementById('people-total').textContent = people.length;
+    document.getElementById('people-unnamed').textContent = people.filter((person) => !person.label?.trim()).length;
+    await renderPeople();
+  }
+
+  async function renderPeople() {
+    const grid = document.getElementById('people-grid');
+    const query = document.getElementById('people-search').value.trim().toLocaleLowerCase();
+    const filtered = peopleItems.filter((person) => {
+      const hasName = Boolean(person.label?.trim());
+      if (peopleFilter === 'named' && !hasName) return false;
+      if (peopleFilter === 'unnamed' && hasName) return false;
+      return !query || (person.label || '').toLocaleLowerCase().includes(query);
+    });
+    const pageCount = Math.max(1, Math.ceil(filtered.length / PEOPLE_PAGE_SIZE));
+    peoplePage = Math.min(peoplePage, pageCount);
+    const start = (peoplePage - 1) * PEOPLE_PAGE_SIZE;
+    const visiblePeople = filtered.slice(start, start + PEOPLE_PAGE_SIZE);
+    const markup = visiblePeople
       .map(
         (p) => `
-        <div class="col-md-6 col-xl-4">
-          <div class="card">
-            <div class="card-body d-flex align-items-center">
+        <div class="col-12 col-xl-6">
+          <div class="card person-card" data-person-card="${escapeHtml(p.id)}">
+            <div class="card-body">
+              <div class="d-flex align-items-start">
               ${p.preview_event_id
                 ? `<span class="person-avatar me-3"><img data-person-image="${p.preview_event_id}" data-face-box="${encodeURIComponent(p.preview_face_box || '')}" alt="${escapeHtml(p.label || t('unnamed'))}" /></span>`
                 : `<span class="person-avatar me-3 d-flex align-items-center justify-content-center text-secondary"><i class="ti ti-user fs-1"></i></span>`}
-              <div class="flex-fill">
-                <div class="fw-bold">${p.label ? escapeHtml(p.label) : `<span class="text-secondary">${t('unnamed')}</span>`}</div>
-                <div class="text-secondary small">${t('seen', { count: p.seen_count, time: escapeHtml(p.last_seen_at) })}</div>
+              <div class="flex-fill min-w-0">
+                <div class="d-flex justify-content-between gap-2 mb-2">
+                  <span class="badge ${p.label ? 'bg-green-lt' : 'bg-yellow-lt'}">${p.label ? 'Đã đặt tên' : 'Chưa đặt tên'}</span>
+                  <span class="text-secondary small"><i class="ti ti-photo me-1"></i>${Number(p.seen_count) || 0} lần xuất hiện</span>
+                </div>
+                <label class="form-label small mb-1" for="person-name-${escapeHtml(p.id)}">Tên / thông tin nhóm</label>
+                <div class="input-group">
+                  <input id="person-name-${escapeHtml(p.id)}" class="form-control person-name-input" data-person-name type="text" maxlength="120" value="${escapeHtml(p.label || '')}" placeholder="Ví dụ: Bố, Mẹ, Nhân viên A…" />
+                  <button class="btn btn-primary" type="button" data-save-person="${escapeHtml(p.id)}"><i class="ti ti-device-floppy me-1"></i>Lưu</button>
+                </div>
+                <div class="text-secondary small mt-2"><i class="ti ti-clock me-1"></i>Lần gần nhất: ${escapeHtml(p.last_seen_at || '—')}</div>
               </div>
-              <button class="btn btn-sm btn-icon" onclick="openRename('${p.id}', ${JSON.stringify(p.label || '')})" title="${t('rename')}">
-                <i class="ti ti-edit"></i>
-              </button>
+              </div>
+              <div class="person-save-status small mt-2" aria-live="polite"></div>
             </div>
           </div>
         </div>`
@@ -712,10 +1322,71 @@
       .join('');
     revokeBlobImages(grid);
     grid.innerHTML = markup;
+    document.getElementById('people-filter-empty').classList.toggle('d-none', filtered.length > 0 || peopleItems.length === 0);
+    const pagination = document.getElementById('people-pagination');
+    pagination.classList.toggle('d-none', filtered.length <= PEOPLE_PAGE_SIZE);
+    document.getElementById('people-page-info').textContent = filtered.length ? `Hiển thị ${start + 1}–${Math.min(start + PEOPLE_PAGE_SIZE, filtered.length)} / ${filtered.length} nhóm` : '';
+    document.getElementById('people-prev').disabled = peoplePage <= 1;
+    document.getElementById('people-next').disabled = peoplePage >= pageCount;
     await Promise.all([...grid.querySelectorAll('[data-person-image]')].map(async (image) => {
       try { await loadProtectedImage(image, `/api/events/${image.dataset.personImage}/image`); } catch { image.parentElement?.replaceWith(createPersonPlaceholder()); }
     }));
   }
+
+  async function savePersonCard(button) {
+    const card = button.closest('[data-person-card]');
+    const input = card.querySelector('[data-person-name]');
+    const status = card.querySelector('.person-save-status');
+    const label = input.value.trim();
+    button.disabled = true;
+    status.className = 'person-save-status small mt-2 text-secondary';
+    status.textContent = 'Đang lưu…';
+    try {
+      await api(`/api/people/${encodeURIComponent(button.dataset.savePerson)}?source=${peopleSource}`, { method: 'PATCH', body: JSON.stringify({ label }) });
+      status.className = 'person-save-status small mt-2 text-success';
+      status.textContent = 'Đã lưu thông tin nhóm.';
+      peopleRenderSignature = '';
+      await loadPeople();
+    } catch (error) {
+      status.className = 'person-save-status small mt-2 text-danger';
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById('people-grid').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-save-person]');
+    if (button) savePersonCard(button);
+  });
+  document.getElementById('people-grid').addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || !event.target.matches('[data-person-name]')) return;
+    event.preventDefault();
+    event.target.closest('[data-person-card]').querySelector('[data-save-person]').click();
+  });
+  document.getElementById('people-source').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-people-source]');
+    if (!button || button.dataset.peopleSource === peopleSource) return;
+    peopleSource = button.dataset.peopleSource;
+    peoplePage = 1;
+    peopleRenderSignature = '';
+    document.querySelectorAll('[data-people-source]').forEach((item) => item.classList.toggle('active', item === button));
+    document.getElementById('people-source-note').textContent = peopleSource === 'gpu'
+      ? 'Kết quả GPU buffalo_l chạy song song, không ảnh hưởng dữ liệu local.'
+      : 'Kết quả nhận diện trên máy local.';
+    loadPeople().catch((error) => showToast(error.message, 'danger'));
+  });
+  document.getElementById('people-search').addEventListener('input', () => { peoplePage = 1; renderPeople(); });
+  document.getElementById('people-filter').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-people-filter]');
+    if (!button) return;
+    peopleFilter = button.dataset.peopleFilter;
+    peoplePage = 1;
+    document.querySelectorAll('[data-people-filter]').forEach((item) => item.classList.toggle('active', item === button));
+    renderPeople();
+  });
+  document.getElementById('people-prev').addEventListener('click', () => { if (peoplePage > 1) { peoplePage -= 1; renderPeople(); } });
+  document.getElementById('people-next').addEventListener('click', () => { peoplePage += 1; renderPeople(); });
 
   async function loadProtectedImage(image, url) {
     const response = await fetch(url, { headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store' });
@@ -770,6 +1441,50 @@
     loadPeople().catch(() => {});
   });
 
+  function openResourceRename(type, identifier) {
+    const resource = type === 'camera'
+      ? cameras[Number(identifier)]
+      : (sites.find(site => site.id === identifier) || (() => {
+          const camera = cameras.find(item => item.siteId === identifier);
+          return camera ? { id: camera.siteId, name: camera.siteName || camera.siteId } : null;
+        })());
+    if (!resource) return;
+    renamingResource = type === 'camera'
+      ? { type, siteId: resource.siteId, cameraId: resource.cameraId }
+      : { type, siteId: resource.id };
+    const input = document.getElementById('resource-rename-input');
+    input.value = type === 'camera' ? (resource.cameraName || resource.cameraId) : resource.name;
+    document.getElementById('resource-rename-title').textContent = resourceText(type === 'camera' ? 'rename_camera' : 'rename_site');
+    document.getElementById('resource-rename-status').textContent = '';
+    const modalElement = document.getElementById('resource-rename-modal');
+    new bootstrap.Modal(modalElement).show();
+    modalElement.addEventListener('shown.bs.modal', () => input.select(), { once: true });
+  }
+
+  document.getElementById('resource-rename-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!renamingResource) return;
+    const input = document.getElementById('resource-rename-input');
+    const button = document.getElementById('resource-rename-save');
+    const status = document.getElementById('resource-rename-status');
+    const name = input.value.trim();
+    if (!name) { status.textContent = resourceText('name_required'); return; }
+    button.disabled = true;
+    status.textContent = '';
+    try {
+      const path = renamingResource.type === 'camera'
+        ? `/api/cameras/${encodeURIComponent(renamingResource.siteId)}/${encodeURIComponent(renamingResource.cameraId)}`
+        : `/api/sites/${encodeURIComponent(renamingResource.siteId)}`;
+      await api(path, { method: 'PATCH', body: JSON.stringify({ name }) });
+      bootstrap.Modal.getInstance(document.getElementById('resource-rename-modal')).hide();
+      await Promise.all([loadCameras(), loadSites(), loadEvents()]);
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   // --- Events table ---
   function cameraDisplayName(siteId, cameraStream) {
     const c = cameras.find((c) => c.siteId === siteId && c.stream === cameraStream);
@@ -777,9 +1492,25 @@
   }
 
   async function loadEvents() {
-    const events = await api('/api/events?limit=20');
+    const response = await fetch(`/api/events?limit=${EVENTS_PAGE_SIZE}&page=${eventsPage}`, {
+      credentials: 'same-origin',
+      headers: { Authorization: `Bearer ${getApiKey()}` },
+    });
+    if (response.status === 401) { clearApiKey(); render(); throw new Error('Unauthorized'); }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const events = Array.isArray(payload) ? payload : [];
+    const total = Number(response.headers.get('X-Total-Count') || events.length);
+    const totalPages = Math.max(1, Number(response.headers.get('X-Total-Pages') || 1));
+    if (eventsPage > totalPages) { eventsPage = totalPages; return loadEvents(); }
+    const pagination = document.getElementById('events-pagination');
+    pagination.classList.toggle('d-none', total <= EVENTS_PAGE_SIZE);
+    const start = total ? (eventsPage - 1) * EVENTS_PAGE_SIZE + 1 : 0;
+    document.getElementById('events-page-info').textContent = `Hiển thị ${start}–${Math.min(eventsPage * EVENTS_PAGE_SIZE, total)} / ${total} event · Trang ${eventsPage}/${totalPages}`;
+    document.getElementById('events-prev').disabled = eventsPage <= 1;
+    document.getElementById('events-next').disabled = eventsPage >= totalPages;
     const body = document.getElementById('events-body');
-    const signature = JSON.stringify([document.documentElement.lang, events, cameras.map((camera) => [camera.siteId, camera.stream, camera.cameraName, camera.cameraId])]);
+    const signature = JSON.stringify([document.documentElement.lang, eventsPage, total, events, cameras.map((camera) => [camera.siteId, camera.stream, camera.cameraName, camera.cameraId])]);
     if (signature === eventsRenderSignature) return;
     eventsRenderSignature = signature;
     const markup = events
@@ -788,6 +1519,7 @@
           <td>${escapeHtml(e.timestamp)}</td>
           <td>${escapeHtml(cameraDisplayName(e.site_id, e.camera))}</td>
           <td>${e.person_label ? escapeHtml(e.person_label) : `<span class="text-secondary">${t('unknown')}</span>`}</td>
+          <td>${storageBackendBadge(e.storage_backend)}</td>
           <td>
             <div class="d-flex align-items-center gap-2 flex-wrap">
               ${e.image_key ? `<img data-event-image="${e.id}" alt="Event ${e.id}" width="96" height="54" class="rounded object-fit-cover bg-secondary-lt" />` : ''}
@@ -798,8 +1530,8 @@
                   ? `<span class="text-secondary">${t('saving_clip')}</span>`
                   : e.video_status === 'error'
                   ? `<span class="text-danger" title="${escapeHtml(e.video_error || '')}">${t('clip_error')}: ${escapeHtml(e.video_error || '')}</span>`
-                  : e.video_link
-                  ? `<a href="${e.video_link}" target="_blank">${t('view')}</a>`
+                  : safeHttpUrl(e.video_link)
+                  ? `<a href="${safeHttpUrl(e.video_link)}" target="_blank" rel="noopener noreferrer">${t('view')}</a>`
                   : ''
               }</div>
             </div>
@@ -809,7 +1541,41 @@
       .join('');
     revokeBlobImages(body);
     body.innerHTML = markup;
+    hydrateCameraFallbacks(events);
     hydrateEventImages();
+  }
+
+  function storageBackendBadge(backend) {
+    const normalized = backend || 'r2';
+    const labels = { r2: 'Mặc định (R2)', s3: 'S3', gdrive: 'Google Drive' };
+    const colors = { r2: 'bg-blue-lt', s3: 'bg-azure-lt', gdrive: 'bg-green-lt' };
+    return `<span class="badge ${colors[normalized] || 'bg-secondary-lt'}">${labels[normalized] || escapeHtml(normalized)}</span>`;
+  }
+
+  document.getElementById('events-prev').addEventListener('click', () => {
+    if (eventsPage > 1) { eventsPage -= 1; eventsRenderSignature = ''; loadEvents().catch(() => {}); }
+  });
+  document.getElementById('events-next').addEventListener('click', () => {
+    eventsPage += 1; eventsRenderSignature = ''; loadEvents().catch(() => {});
+  });
+
+  async function hydrateCameraFallbacks(events) {
+    await Promise.all(cameras.map(async (camera, index) => {
+      const image = document.querySelector(`#camera-preview-${index} .camera-thumbnail`);
+      if (!image || image.src) return;
+      const recent = events.find(event => event.site_id === camera.siteId && event.camera === camera.stream && event.image_key);
+      if (!recent) return;
+      const response = await fetch(`/api/events/${recent.id}/image`, {
+        headers: { Authorization: `Bearer ${getApiKey()}` },
+      });
+      if (!response.ok || image.src) return;
+      const objectUrl = URL.createObjectURL(await response.blob());
+      cameraThumbnailUrls.set(index, objectUrl);
+      image.src = objectUrl;
+      image.classList.remove('d-none');
+      image.closest('.camera-preview')?.querySelector('.camera-preview-placeholder')?.classList.add('d-none');
+      image.title = 'Ảnh gần nhất từ camera; hệ thống đang thử lấy ảnh mới';
+    }));
   }
 
   async function hydrateEventImages() {
@@ -836,7 +1602,13 @@
 
   function render() {
     const hasKey = !!getApiKey();
-    document.getElementById('login-card').classList.toggle('d-none', hasKey);
+    document.body.classList.toggle('is-authenticated', hasKey);
+    document.getElementById('landing-shell').classList.toggle('landing-hidden', hasKey);
+    document.getElementById('app-header').classList.toggle('d-none', !hasKey);
+    document.getElementById('login-card').classList.add('d-none');
+    document.body.classList.remove('login-modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.overflow = '';
     document.getElementById('dashboard').classList.toggle('d-none', !hasKey);
     document.getElementById('logout-btn').classList.toggle('d-none', !hasKey);
     if (hasKey) {
@@ -845,9 +1617,33 @@
       loadIntegrations().catch(() => {});
       loadAccount().catch(() => {});
       loadSites().catch(() => {});
+      loadStorageConfig().catch(() => {});
       loadStorageUsage().catch(() => {});
+      loadApiKeys().catch(() => {});
+      loadAgentMessages().catch(() => {});
     }
   }
+
+  function openLoginModal(event) {
+    event?.preventDefault();
+    const modal = document.getElementById('login-card');
+    modal.classList.remove('d-none');
+    document.body.classList.add('login-modal-open');
+    setTimeout(() => document.getElementById('email-input').focus(), 50);
+  }
+
+  function closeLoginModal() {
+    document.getElementById('login-card').classList.add('d-none');
+    document.body.classList.remove('login-modal-open');
+    document.body.style.removeProperty('overflow');
+  }
+
+  document.getElementById('login-card').addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeLoginModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeLoginModal();
+  });
 
   document.getElementById('login-form').addEventListener('submit', (e) => { e.preventDefault(); emailAuth('/api/auth/login'); });
 
@@ -859,20 +1655,44 @@
 
   async function loadIntegrations() {
     const status = await api('/api/settings/integrations');
-    for (const provider of ['telegram', 'runpod']) {
+    for (const provider of ['telegram', 'runpod', 'openai', 'gemini']) {
       const configured = !!status[provider]?.configured;
-      document.getElementById(`${provider}-status`).textContent = configured
-        ? t('configured', { time: status[provider].updatedAt })
-        : t('not_configured');
+      const statusElement = document.getElementById(`${provider}-status`);
+      if (!statusElement) continue;
+      if (provider === 'openai' || provider === 'gemini') {
+        statusElement.className = `agent-key-state ${configured ? 'is-configured' : 'is-missing'}`;
+        statusElement.replaceChildren();
+        const icon = document.createElement('i');
+        icon.className = `ti ${configured ? 'ti-circle-check-filled' : 'ti-key-off'}`;
+        const label = document.createElement('span');
+        label.textContent = configured ? 'Đã lưu key' : 'Chưa có key';
+        statusElement.append(icon, label);
+        statusElement.title = configured ? `Cập nhật: ${status[provider].updatedAt}` : '';
+        const keyElement = document.getElementById(`${provider}-key`);
+        const noteElement = document.getElementById(`${provider}-model-note`);
+        keyElement.placeholder = configured ? '••••••••  (đã lưu — nhập để thay)' : (provider === 'openai' ? 'sk-…' : 'AIza…');
+        if (!keyElement.value) noteElement.textContent = configured
+          ? `Đang dùng key đã lưu${status[provider].model ? ` · ${status[provider].model}` : ''}.`
+          : 'Nhập key để tự tải model.';
+      } else {
+        statusElement.textContent = configured
+          ? `${t('configured', { time: status[provider].updatedAt })}${status[provider].model ? ` · ${status[provider].model}` : ''}`
+          : t('not_configured');
+      }
+      const modelElement = document.getElementById(`${provider}-model`);
+      if (configured && status[provider].model && modelElement) {
+        if (![...modelElement.options].some((option) => option.value === status[provider].model)) modelElement.add(new Option(status[provider].model, status[provider].model));
+        modelElement.value = status[provider].model;
+      }
     }
   }
 
   async function loadAccount() {
     accountSummary = await api('/api/settings/account');
     const { plan, usage, limits } = accountSummary;
-    const cameraLimit = limits.cameras === null ? 'không giới hạn' : limits.cameras;
-    document.getElementById('plan-badge').textContent = `${plan.toUpperCase()} · ${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${cameraLimit} camera · ${limits.viewersPerCamera} ${t('viewer')}`;
-    document.getElementById('site-usage').textContent = `${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${cameraLimit} camera`;
+    const cameraLimit = limits.cameras === null ? t('unlimited') : limits.cameras;
+    document.getElementById('plan-badge').textContent = `${plan.toUpperCase()} · ${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${cameraLimit} ${t('camera_unit')} · ${limits.viewersPerCamera} ${t('viewer')}`;
+    document.getElementById('site-usage').textContent = `${usage.sites}/${limits.sites} ${t('site')} · ${usage.cameras}/${cameraLimit} ${t('camera_unit')}`;
     document.getElementById('account-email').value = accountSummary.email || '';
     document.getElementById('account-email').readOnly = !!accountSummary.email;
     document.getElementById('account-email').required = !accountSummary.email;
@@ -890,30 +1710,88 @@
     return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${units[unit]}`;
   }
 
+  function toggleStorageFields() {
+    const backend = document.getElementById('storage-backend').value;
+    document.getElementById('s3-config-fields').classList.toggle('d-none', backend !== 's3');
+    document.getElementById('gdrive-config-fields').classList.toggle('d-none', backend !== 'gdrive');
+  }
+
+  async function loadStorageConfig() {
+    const config = await api('/api/settings/storage-config');
+    document.getElementById('storage-backend').value = config.backend || 'r2';
+    document.getElementById('s3-endpoint').value = config.endpoint || '';
+    document.getElementById('s3-region').value = config.region || '';
+    document.getElementById('s3-bucket').value = config.bucket || '';
+    document.getElementById('s3-path-style').checked = config.forcePathStyle !== false;
+    document.getElementById('s3-access-key').placeholder = config.accessKeyHint || '';
+    document.getElementById('s3-saved-note').textContent = config.configured && config.backend === 's3' ? 'Thông tin bí mật đã được mã hóa. Muốn tiếp tục dùng S3, hãy nhập lại access key và secret key khi lưu thay đổi.' : '';
+    document.getElementById('gdrive-folder-id').value = config.folderId || '';
+    document.getElementById('gdrive-access-token').placeholder = config.tokenHint || 'ya29...';
+    document.getElementById('gdrive-saved-note').textContent = config.configured && config.backend === 'gdrive' ? 'Token đã được mã hóa và không hiển thị lại. Nhập token mới khi cần cập nhật hoặc khi token hết hạn.' : '';
+    toggleStorageFields();
+  }
+
+  document.getElementById('storage-backend').addEventListener('change', toggleStorageFields);
+  document.getElementById('storage-config-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('save-storage-config');
+    const backend = document.getElementById('storage-backend').value;
+    button.disabled = true;
+    try {
+      const payload = backend === 'r2' ? { backend } : backend === 'gdrive' ? {
+        backend,
+        accessToken: document.getElementById('gdrive-access-token').value,
+        folderId: document.getElementById('gdrive-folder-id').value,
+      } : {
+        backend,
+        endpoint: document.getElementById('s3-endpoint').value,
+        region: document.getElementById('s3-region').value,
+        bucket: document.getElementById('s3-bucket').value,
+        accessKeyId: document.getElementById('s3-access-key').value,
+        secretAccessKey: document.getElementById('s3-secret-key').value,
+        sessionToken: document.getElementById('s3-session-token').value,
+        forcePathStyle: document.getElementById('s3-path-style').checked,
+      };
+      await api('/api/settings/storage-config', { method: 'PUT', body: JSON.stringify(payload) });
+      document.getElementById('s3-access-key').value = '';
+      document.getElementById('s3-secret-key').value = '';
+      document.getElementById('s3-session-token').value = '';
+      document.getElementById('gdrive-access-token').value = '';
+      showSettingsMessage(backend === 's3' ? 'Đã kiểm tra và chuyển lưu trữ sang S3.' : backend === 'gdrive' ? 'Đã kiểm tra và chuyển lưu trữ sang Google Drive.' : 'Đã chuyển lưu trữ sang Cloudflare R2.');
+      await loadStorageConfig();
+    } catch (error) { showSettingsMessage(error.message, false); }
+    finally { button.disabled = false; }
+  });
+
   async function loadStorageUsage() {
     const loading = document.getElementById('storage-loading');
     const summaryElement = document.getElementById('storage-summary');
     const warning = document.getElementById('storage-warning');
     loading.classList.remove('d-none');
-    loading.textContent = 'Đang đo dung lượng thực tế trên R2…';
+    loading.textContent = 'Đang đo dung lượng thực tế…';
     try {
       const storage = await api('/api/settings/storage');
       const cards = [
-        ['Tổng lưu trữ', formatBytes(storage.totalBytes), `${storage.objectCount} file`],
-        ['Ảnh sự kiện', formatBytes(storage.imageBytes), `${storage.imageCount} ảnh`],
-        ['Video sự kiện', formatBytes(storage.videoBytes), `${storage.videoCount} clip`],
-        ['Event', Number(storage.eventCount).toLocaleString(), `${storage.videoErrorCount} lỗi · ${storage.recordingCount} đang ghi`],
+        [t('total_storage'), formatBytes(storage.totalBytes), `${storage.objectCount} ${t('files')}`],
+        [t('event_images'), formatBytes(storage.imageBytes), `${storage.imageCount} ${t('images').toLocaleLowerCase()}`],
+        [t('event_videos'), formatBytes(storage.videoBytes), `${storage.videoCount} ${t('clips')}`],
+        [t('event'), Number(storage.eventCount).toLocaleString(), t('errors_recording', { errors: storage.videoErrorCount, recording: storage.recordingCount })],
       ];
       summaryElement.innerHTML = cards.map(([label, value, note]) => `<div class="col-sm-6 col-xl-3"><div class="border rounded p-3 h-100"><div class="text-secondary small">${label}</div><div class="h2 mb-1">${value}</div><div class="text-secondary small">${note}</div></div></div>`).join('');
       summaryElement.classList.remove('d-none');
+      const backendLabels = { r2: 'Mặc định (R2)', s3: 'S3', gdrive: 'Google Drive' };
+      const backendElement = document.getElementById('storage-backends');
+      backendElement.innerHTML = (storage.backends || []).map(item => `<div class="col-sm-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between"><strong>${backendLabels[item.backend] || escapeHtml(item.backend)}</strong>${item.unavailable ? '<span class="badge bg-warning-lt">Chưa đo được</span>' : ''}</div><div class="h3 my-2">${formatBytes(item.totalBytes)}</div><div class="text-secondary small">${Number(item.eventCount).toLocaleString()} event · ${Number(item.objectCount).toLocaleString()} file đã đo</div>${item.unavailable ? `<div class="text-warning small mt-1">Credential hết hạn hoặc kho không truy cập được.${item.error ? ` (${escapeHtml(item.error)})` : ''}</div>` : ''}</div></div>`).join('');
+      backendElement.classList.remove('d-none');
       document.getElementById('storage-cameras').innerHTML = storage.cameras.map(camera => {
         const total = Number(camera.imageBytes) + Number(camera.videoBytes);
         return `<tr><td><div class="fw-bold">${escapeHtml(camera.siteName)}</div><div class="text-secondary small">${escapeHtml(camera.cameraName)}</div></td><td>${camera.events}</td><td>${camera.images} · ${formatBytes(camera.imageBytes)}</td><td>${camera.videos} · ${formatBytes(camera.videoBytes)}</td><td>${formatBytes(total)}</td></tr>`;
       }).join('') || '<tr><td colspan="5" class="text-secondary">Chưa có dữ liệu lưu trữ.</td></tr>';
       const issues = [];
-      if (storage.missingObjects) issues.push(`${storage.missingObjects} file được DB tham chiếu nhưng không còn trên R2`);
+      if (storage.missingObjects) issues.push(`${storage.missingObjects} file được DB tham chiếu nhưng không còn trong kho lưu trữ`);
       if (storage.orphanCount) issues.push(`${storage.orphanCount} file mồ côi (${formatBytes(storage.orphanBytes)})`);
       if (storage.truncated) issues.push('Số liệu bị rút gọn vì tài khoản có trên 100.000 file');
+      (storage.backends || []).filter(item => item.unavailable).forEach(item => issues.push(`Không đo được dung lượng ${backendLabels[item.backend] || item.backend}; số event lịch sử vẫn được giữ`));
       warning.textContent = issues.join(' · ');
       warning.classList.toggle('d-none', issues.length === 0);
       loading.classList.add('d-none');
@@ -932,13 +1810,17 @@
     document.getElementById('sites-body').innerHTML = sites.map((site) => `<tr>
       <td><div class="fw-bold">${escapeHtml(site.name)}</div><div class="text-secondary small">${escapeHtml(site.id)}</div></td>
       <td>${Number(site.camera_count || 0)}</td>
-      <td>${site.relay_url ? '<span class="badge bg-green-lt">Named Tunnel</span>' : `<span class="text-secondary">${t('tunnel_pending')}</span>`}</td>
-      <td class="text-end"><button class="btn btn-outline-danger btn-sm" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name)}" onclick="deleteSite(this.dataset.siteId, this.dataset.siteName)">${t('delete')}</button></td>
+      <td>${site.relay_url ? `<span class="badge bg-green-lt">${t('named_tunnel')}</span>` : `<span class="text-secondary">${t('tunnel_pending')}</span>`}</td>
+      <td class="text-end"><div class="d-flex gap-1 justify-content-end">
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-site-id="${escapeHtml(site.id)}" onclick="openResourceRename('site', this.dataset.siteId)" title="${resourceText('rename_site')}" aria-label="${resourceText('rename_site')}"><i class="ti ti-pencil"></i></button>
+        <button class="btn btn-outline-danger btn-sm" type="button" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name)}" onclick="deleteSite(this.dataset.siteId, this.dataset.siteName)">${t('delete')}</button>
+      </div></td>
     </tr>`).join('');
   }
 
   document.getElementById('add-camera-form').addEventListener('submit', async event => {
     event.preventDefault();
+    const form = event.currentTarget;
     const button = document.getElementById('add-camera-button');
     const status = document.getElementById('add-camera-status');
     const siteId = document.getElementById('add-camera-site').value;
@@ -956,7 +1838,7 @@
     };
     try {
       await api(`/api/sites/${encodeURIComponent(siteId)}/cameras`, {method:'POST', body:JSON.stringify(payload)});
-      event.currentTarget.reset();
+      form.reset();
       delete document.getElementById('add-camera-ip').dataset.discovered;
       document.getElementById('add-camera-rtsp-port').value = 554;
       document.getElementById('add-camera-onvif-port').value = 2020;
@@ -1000,6 +1882,118 @@
     document.getElementById('discovered-cameras').classList.add('d-none');
   });
 
+  async function appendAgentMedia(wrapper, toolResults = [], attachments = []) {
+    const inspected = toolResults
+      .filter(item => item.action === 'inspect_event_media' && item.result?.mediaAttached && item.result?.source?.eventId)
+      .map(item => ({ eventId: item.result.source.eventId, kind: item.result.kind }));
+    const media = [...attachments, ...inspected]
+      .filter((item, index, all) => item?.eventId && all.findIndex(other => String(other.eventId) === String(item.eventId) && other.kind === item.kind) === index)
+      .slice(0, 12);
+    if (!media.length) return;
+    const grid = document.createElement('div');
+    grid.className = 'agent-media-grid';
+    wrapper.appendChild(grid);
+    await Promise.all(media.map(async (item) => {
+      const eventId = encodeURIComponent(item.eventId);
+      const kind = item.kind === 'video' ? 'video' : 'image';
+      const response = await fetch(`/api/events/${eventId}/${kind}`, { headers: { Authorization: `Bearer ${getApiKey()}` } });
+      if (!response.ok) return;
+      const url = URL.createObjectURL(await response.blob());
+      const element = document.createElement(kind === 'video' ? 'video' : 'img');
+      element.src = url;
+      element.alt = kind === 'video' ? 'Video event camera' : 'Ảnh event camera';
+      if (kind === 'video') { element.controls = true; element.preload = 'metadata'; }
+      else element.loading = 'lazy';
+      grid.appendChild(element);
+      document.getElementById('agent-chat').scrollTop = document.getElementById('agent-chat').scrollHeight;
+    }));
+  }
+
+  function appendAgentMessage(role, content, proposals = [], toolResults = [], attachments = [], conversationContext = agentConversationContext, source = 'chat') {
+    const chat = document.getElementById('agent-chat');
+    const wrapper = document.createElement('div');
+    wrapper.className = `agent-message ${role} rounded p-3 mt-3${source === 'patrol' ? ' patrol' : ''}`;
+    const text = document.createElement('div');
+    text.textContent = content;
+    wrapper.appendChild(text);
+    proposals.forEach((proposal) => {
+      const id = crypto.randomUUID();
+      agentProposals.set(id, { proposal, conversationContext });
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-warning btn-sm mt-2 me-2';
+      button.textContent = `Xác nhận: ${proposal.action}`;
+      button.addEventListener('click', () => confirmAgentAction(id, button));
+      wrapper.appendChild(button);
+    });
+    chat.appendChild(wrapper);
+    appendAgentMedia(wrapper, toolResults, attachments).catch(() => {});
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function confirmAgentAction(id, button) {
+    const pending = agentProposals.get(id);
+    if (!pending) return;
+    button.disabled = true;
+    try {
+      const result = await api('/api/agent/chat', { method: 'POST', body: JSON.stringify({ confirmedAction: pending.proposal, conversationContext: pending.conversationContext }) });
+      agentConversationContext = result.conversationContext || null;
+      appendAgentMessage('assistant', result.answer, result.proposals || [], result.toolResults || [], result.attachments || [], agentConversationContext);
+      agentProposals.delete(id);
+      button.remove();
+      await Promise.all([loadCameras(), loadSites(), loadEvents()]);
+    } catch (error) {
+      appendAgentMessage('assistant', `Không thực hiện được: ${error.message}`);
+      button.disabled = false;
+    }
+  }
+
+  // First call hydrates the whole persisted history (and drops the static
+  // greeting bubble once real history exists); every call after that only
+  // asks for rows newer than the last one seen. On a poll, only 'patrol'
+  // rows are rendered — interactive chat already renders itself optimistically
+  // right after its own POST response, so re-rendering it here would duplicate it.
+  async function loadAgentMessages() {
+    try {
+      const isPoll = agentHistoryLoaded;
+      const query = isPoll ? `?since=${lastAgentMessageId}` : '?limit=100';
+      const { messages } = await api(`/api/agent/chat${query}`);
+      if (!Array.isArray(messages) || !messages.length) { agentHistoryLoaded = true; return; }
+      if (!isPoll) document.getElementById('agent-chat').innerHTML = '';
+      for (const message of messages) {
+        lastAgentMessageId = Math.max(lastAgentMessageId, Number(message.id) || 0);
+        if (isPoll && message.source !== 'patrol') continue;
+        agentMessages.push({ role: message.role, content: message.content });
+        appendAgentMessage(message.role, message.content, [], [], [], null, message.source);
+      }
+      agentHistoryLoaded = true;
+    } catch (_) { /* chat history is a convenience; a failed fetch just leaves the greeting/current session as-is */ }
+  }
+
+  document.getElementById('agent-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('agent-input');
+    const send = document.getElementById('agent-send');
+    const content = input.value.trim();
+    if (!content) return;
+    agentMessages.push({ role: 'user', content });
+    appendAgentMessage('user', content);
+    input.value = '';
+    send.disabled = true;
+    try {
+      const result = await api('/api/agent/chat', { method: 'POST', body: JSON.stringify({
+        messages: agentMessages.slice(-20),
+        provider: document.getElementById('agent-provider').value,
+        timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        conversationContext: agentConversationContext,
+      }) });
+      agentConversationContext = result.conversationContext || null;
+      agentMessages.push({ role: 'assistant', content: result.answer });
+      appendAgentMessage('assistant', result.answer, result.proposals || [], result.toolResults || [], result.attachments || [], agentConversationContext);
+    } catch (error) { appendAgentMessage('assistant', `Lỗi: ${error.message}`); }
+    finally { send.disabled = false; input.focus(); }
+  });
+
   function bindInstallCommand(prefix = '') {
     const createButton = document.getElementById(`${prefix}create-install-command`);
     const copyButton = document.getElementById(`${prefix}copy-install-command`);
@@ -1012,7 +2006,7 @@
       try {
         const result = await api('/api/install-tokens', { method: 'POST' });
         const origin = location.origin;
-        output.value = `curl -fsSL '${origin}/install.sh' | sudo env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash`;
+        output.value = `curl --fail --show-error --location --proto '=https' --tlsv1.2 '${origin}/install.sh' --output cameraaiwork-install.sh && less cameraaiwork-install.sh && env CAMERAAIWORK_INSTALL_TOKEN='${result.token}' CAMERAAIWORK_API='${origin}' bash cameraaiwork-install.sh`;
         output.classList.remove('d-none');
         copyButton.classList.remove('d-none');
         note.textContent = `Lệnh này thuộc ${accountSummary?.email || 'tài khoản hiện tại'} và chỉ dùng được một lần trong 15 phút.`;
@@ -1031,29 +2025,141 @@
   bindInstallCommand();
   bindInstallCommand('home-');
 
+  const SCOPE_LABELS = { full: 'Toàn quyền', read: 'Chỉ đọc' };
+
+  function renderApiKeys(keys) {
+    const body = document.getElementById('api-keys-body');
+    if (!keys.length) {
+      body.innerHTML = '<tr><td colspan="5" class="text-secondary">Chưa có key nào.</td></tr>';
+      return;
+    }
+    body.innerHTML = keys.map((key) => `<tr>
+      <td>${escapeHtml(key.label)}</td>
+      <td><span class="badge ${key.scope === 'full' ? 'bg-orange-lt' : 'bg-green-lt'}">${SCOPE_LABELS[key.scope] || key.scope}</span></td>
+      <td class="text-secondary">${new Date(key.createdAt).toLocaleString('vi-VN')}</td>
+      <td class="text-secondary">${key.expiresAt ? new Date(key.expiresAt).toLocaleString('vi-VN') : 'Không hết hạn'}</td>
+      <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="revokeApiKey('${key.id}', '${escapeHtml(key.label).replace(/'/g, "\\'")}')">Thu hồi</button></td>
+    </tr>`).join('');
+  }
+
+  async function loadApiKeys() {
+    try {
+      renderApiKeys(await api('/api/settings/api-keys'));
+    } catch (error) {
+      document.getElementById('api-keys-body').innerHTML = `<tr><td colspan="5" class="text-danger">${escapeHtml(error.message)}</td></tr>`;
+    }
+  }
+
+  async function revokeApiKey(id, label) {
+    if (!confirm(`Thu hồi key "${label}"? Mọi request dùng key này sẽ ngừng hoạt động ngay.`)) return;
+    try {
+      await api(`/api/settings/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await loadApiKeys();
+    } catch (error) { showSettingsMessage(error.message, false); }
+  }
+
+  document.getElementById('api-key-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.target.querySelector('button[type="submit"]');
+    const note = document.getElementById('api-key-form-note');
+    const label = document.getElementById('api-key-label').value.trim();
+    const scope = document.getElementById('api-key-scope').value;
+    const expiresInDays = document.getElementById('api-key-expiry').value || undefined;
+    button.disabled = true;
+    note.textContent = '';
+    note.classList.remove('text-danger');
+    try {
+      const created = await api('/api/settings/api-keys', {
+        method: 'POST', body: JSON.stringify({ label, scope, ...(expiresInDays ? { expiresInDays: Number(expiresInDays) } : {}) }),
+      });
+      const box = document.getElementById('api-key-created');
+      box.classList.remove('d-none');
+      box.innerHTML = `Key <strong>${escapeHtml(created.label)}</strong> đã tạo — chỉ hiển thị một lần, hãy lưu lại ngay:<br>
+        <code id="api-key-created-value" class="d-block my-2 p-2 bg-dark-lt rounded text-break">${escapeHtml(created.apiKey)}</code>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText(document.getElementById('api-key-created-value').textContent)"><i class="ti ti-copy me-1"></i>Sao chép</button>`;
+      event.target.reset();
+      await loadApiKeys();
+    } catch (error) {
+      note.textContent = error.message;
+      note.classList.add('text-danger');
+    } finally { button.disabled = false; }
+  });
+
   async function deleteSite(siteId, name) {
     if (!confirm(t('delete_confirm', { name }))) return;
     try {
       await api(`/api/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
       showSettingsMessage(t('site_deleted', { name }));
-      await Promise.all([loadSites(), loadAccount(), loadCameras(), loadEvents(), loadStorageUsage()]);
+      await Promise.all([loadSites(), loadAccount(), loadCameras(), loadEvents(), loadStorageConfig(), loadStorageUsage()]);
     } catch (error) { showSettingsMessage(error.message, false); }
   }
 
   async function saveIntegration(provider, config) {
     try {
       await api('/api/settings/integrations', { method: 'PUT', body: JSON.stringify({ provider, ...config }) });
-      showSettingsMessage(t('config_saved', { provider }));
+      if (provider === 'openai' || provider === 'gemini') showAgentConfigMessage(`Đã lưu ${provider === 'openai' ? 'OpenAI' : 'Gemini'} và model ${config.model}.`);
+      else showSettingsMessage(t('config_saved', { provider }));
       await loadIntegrations();
-    } catch (error) { showSettingsMessage(error.message, false); }
+      return true;
+    } catch (error) {
+      if (provider === 'openai' || provider === 'gemini') showAgentConfigMessage(error.message, false);
+      else showSettingsMessage(error.message, false);
+      return false;
+    }
   }
 
-  async function removeIntegration(provider) {
+  function showAgentConfigMessage(message, success = true) {
+    const element = document.getElementById('agent-config-message');
+    element.textContent = message;
+    element.className = `alert ${success ? 'alert-success' : 'alert-danger'}`;
+  }
+
+  const modelLoadTimers = {};
+  async function loadProviderModels(provider) {
+    const keyElement = document.getElementById(`${provider}-key`);
+    const select = document.getElementById(`${provider}-model`);
+    const note = document.getElementById(`${provider}-model-note`);
+    const apiKey = keyElement.value.trim();
+    if (apiKey.length < 10) { note.textContent = 'Nhập key để tự tải model.'; return; }
+    note.textContent = 'Đang kiểm tra key và tải model…';
+    select.disabled = true;
+    try {
+      const result = await api('/api/settings/integrations/models', { method: 'POST', body: JSON.stringify({ provider, apiKey }) });
+      if (keyElement.value.trim() !== apiKey) return;
+      const current = select.value;
+      select.replaceChildren(...result.models.map((model) => new Option(model, model)));
+      if (result.models.includes(current)) select.value = current;
+      note.textContent = result.models.length ? `Đã tải ${result.models.length} model từ ${provider === 'openai' ? 'OpenAI' : 'Gemini'}.` : 'Key hợp lệ nhưng không tìm thấy model phù hợp.';
+    } catch (error) {
+      if (keyElement.value.trim() === apiKey) note.textContent = `Không tải được model: ${error.message}`;
+    } finally {
+      if (keyElement.value.trim() === apiKey) select.disabled = false;
+    }
+  }
+
+  async function removeIntegration(provider, fromAgent = false) {
     try {
       await api('/api/settings/integrations', { method: 'DELETE', body: JSON.stringify({ provider }) });
-      showSettingsMessage(t('config_removed', { provider }));
+      if (fromAgent) showAgentConfigMessage(`Đã xóa cấu hình ${provider === 'openai' ? 'OpenAI' : 'Gemini'}.`);
+      else showSettingsMessage(t('config_removed', { provider }));
       await loadIntegrations();
-    } catch (error) { showSettingsMessage(error.message, false); }
+    } catch (error) {
+      if (fromAgent) showAgentConfigMessage(error.message, false);
+      else showSettingsMessage(error.message, false);
+    }
+  }
+
+  for (const provider of ['openai', 'gemini']) {
+    document.getElementById(`${provider}-key`).addEventListener('input', () => {
+      clearTimeout(modelLoadTimers[provider]);
+      modelLoadTimers[provider] = setTimeout(() => loadProviderModels(provider), 700);
+    });
+    document.getElementById(`${provider}-form`).addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const apiKey = document.getElementById(`${provider}-key`);
+      const model = document.getElementById(`${provider}-model`).value.trim();
+      if (await saveIntegration(provider, { apiKey: apiKey.value, model })) apiKey.value = '';
+    });
   }
 
   document.getElementById('telegram-form').addEventListener('submit', async (e) => {
@@ -1089,13 +2195,14 @@
     try {
       const res = await fetch(path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CameraAI-Client': 'web' },
         body: JSON.stringify({ email: document.getElementById('email-input').value, password: document.getElementById('password-input').value }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { error.textContent = data.error || `${t('login_failed')} (HTTP ${res.status})`; return; }
-      if (!data.apiKey) { error.textContent = t('login_failed'); return; }
-      setApiKey(data.apiKey);
+      if (!data.accountId) { error.textContent = t('login_failed'); return; }
+      setApiKey();
       render();
     } catch (requestError) {
       error.textContent = requestError.message || t('login_failed');
@@ -1104,14 +2211,6 @@
 
   document.getElementById('email-login-btn').addEventListener('click', () => emailAuth('/api/auth/login'));
   document.getElementById('signup-btn').addEventListener('click', () => emailAuth('/api/auth/signup'));
-  document.getElementById('subscribe-btn').addEventListener('click', async () => {
-    const data = await api('/api/billing/checkout', { method: 'POST' });
-    if (data.url) location.href = data.url;
-  });
-  document.getElementById('billing-btn').addEventListener('click', async () => {
-    const data = await api('/api/billing/portal', { method: 'POST' });
-    if (data.url) location.href = data.url;
-  });
 
   document.getElementById('logout-btn').addEventListener('click', async () => {
     try { await api('/api/auth/logout', { method: 'POST' }); } catch (_) {}
@@ -1125,6 +2224,7 @@
     const activeTab = document.querySelector('[data-bs-toggle="tab"].active')?.getAttribute('href');
     if (activeTab === '#tab-events') loadEvents().catch(() => {});
     if (activeTab === '#tab-people') loadPeople().catch(() => {});
+    if (activeTab === '#tab-agent') loadAgentMessages().catch(() => {});
   }, 5000);
 </script>
 </body>

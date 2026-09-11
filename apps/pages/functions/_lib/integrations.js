@@ -51,11 +51,33 @@ export async function getIntegration(env, accountId, provider) {
   return result.rows[0] ? decryptConfig(env, result.rows[0].encrypted_config) : null;
 }
 
+// Shared by every caller that needs an LLM to answer/summarize camera data
+// (the on-demand agent and the periodic patrol digest): prefer the
+// customer's own BYOK integration, fall back to the platform's own key.
+export async function loadAiCredentials(env, accountId) {
+  const [openai, gemini] = await Promise.all([
+    getIntegration(env, accountId, "openai").catch(() => null),
+    getIntegration(env, accountId, "gemini").catch(() => null),
+  ]);
+  return {
+    openai: openai || (env.OPENAI_API_KEY ? { apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL } : null),
+    gemini: gemini || (env.GEMINI_API_KEY ? { apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL } : null),
+  };
+}
+
 export async function integrationStatus(env, accountId) {
   const db = getDb(env);
   const result = await db.execute({
-    sql: "SELECT provider, updated_at FROM account_integrations WHERE account_id = ?",
+    sql: "SELECT provider, encrypted_config, updated_at FROM account_integrations WHERE account_id = ?",
     args: [accountId],
   });
-  return Object.fromEntries(result.rows.map((row) => [row.provider, { configured: true, updatedAt: row.updated_at }]));
+  const entries = await Promise.all(result.rows.map(async (row) => {
+    const status = { configured: true, updatedAt: row.updated_at };
+    if (row.provider === "openai" || row.provider === "gemini") {
+      const config = await decryptConfig(env, row.encrypted_config);
+      status.model = config.model || (row.provider === "openai" ? "gpt-5-mini" : "gemini-2.5-flash");
+    }
+    return [row.provider, status];
+  }));
+  return Object.fromEntries(entries);
 }
