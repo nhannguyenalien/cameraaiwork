@@ -33,8 +33,24 @@ export async function putObject(env, accountId, backend, key, body, contentType)
 
 export async function headObject(env, accountId, backend, key) {
   if (backend === "s3") {
-    const response = await headS3(await s3Config(env, accountId), key);
-    return response && { size: Number(response.headers.get("content-length") || 0), contentType: response.headers.get("content-type") };
+    const config = await s3Config(env, accountId);
+    try {
+      const response = await headS3(config, key);
+      return response && { size: Number(response.headers.get("content-length") || 0), contentType: response.headers.get("content-type") };
+    } catch {
+      // Some S3-compatible providers reject signed HEAD requests (403) even
+      // though the identical signing works fine for GET. Fall back to a
+      // 1-byte ranged GET and read the real size from Content-Range so
+      // event video playback (which needs headObject for Range support)
+      // still works against those providers.
+      const response = await getS3(config, key, "bytes=0-0");
+      if (!response) return null;
+      const contentRange = response.headers.get("content-range");
+      const size = contentRange
+        ? Number(contentRange.split("/")[1])
+        : Number(response.headers.get("content-length") || 0);
+      return { size, contentType: response.headers.get("content-type") };
+    }
   }
   if (backend === "gdrive") {
     const file = await headGoogleDrive(await googleDriveConfig(env, accountId), key);
