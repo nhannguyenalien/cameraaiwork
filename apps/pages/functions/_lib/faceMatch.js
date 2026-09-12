@@ -6,11 +6,11 @@
 // (buffalo_s / w600k_mbf, ArcFace-style 512-dim embeddings): two
 // different people in the same photo scored ~0.00 cosine similarity;
 // the same face under a brightness+blur perturbation scored 0.92-0.97.
-// Production camera frames are much harder than synthetic brightness/blur
-// perturbations: the same person across pose, distance and compression has
-// measured 0.35-0.49 cosine similarity. Keep this aligned with the relay's
-// per-event de-duplication so repeated video frames stay one person.
-export const SIMILARITY_THRESHOLD = 0.35;
+// Production camera frames are much harder than synthetic brightness/blur.
+// Keep matching conservative because false merges are harder to correct than
+// duplicate groups; an estimated headcount must not be used as ground truth.
+// Keep this aligned with the relay's per-event de-duplication.
+export const SIMILARITY_THRESHOLD = 0.30;
 
 import { getDb } from "./db.js";
 import { randomId } from "./ids.js";
@@ -30,12 +30,14 @@ function cosineSimilarity(a, b) {
 
 // Returns the matched/created person's id, or null if no embedding was
 // given (AI worker not deployed, or no face found in the frame).
-export async function findOrCreatePerson(env, accountId, embedding) {
+export async function findOrCreatePerson(env, accountId, embedding, source = "local") {
   if (!Array.isArray(embedding) || embedding.length === 0 || embedding.some((value) => !Number.isFinite(value))) return null;
+
+  const table = source === "gpu" ? "gpu_people" : "people";
 
   const db = getDb(env);
   const existing = await db.execute({
-    sql: "SELECT id, embedding FROM people WHERE account_id = ?",
+    sql: `SELECT id, embedding FROM ${table} WHERE account_id = ?`,
     args: [accountId],
   });
 
@@ -54,7 +56,7 @@ export async function findOrCreatePerson(env, accountId, embedding) {
 
   if (best && bestScore >= SIMILARITY_THRESHOLD) {
     await db.execute({
-      sql: "UPDATE people SET last_seen_at = datetime('now','localtime'), seen_count = seen_count + 1 WHERE id = ?",
+      sql: `UPDATE ${table} SET last_seen_at = datetime('now','localtime'), seen_count = seen_count + 1 WHERE id = ?`,
       args: [best.id],
     });
     return best.id;
@@ -62,7 +64,7 @@ export async function findOrCreatePerson(env, accountId, embedding) {
 
   const personId = randomId("person");
   await db.execute({
-    sql: "INSERT INTO people (id, account_id, embedding) VALUES (?, ?, ?)",
+    sql: `INSERT INTO ${table} (id, account_id, embedding) VALUES (?, ?, ?)`,
     args: [personId, accountId, JSON.stringify(embedding)],
   });
   return personId;

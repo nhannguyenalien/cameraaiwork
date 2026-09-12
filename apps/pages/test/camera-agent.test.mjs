@@ -17,6 +17,11 @@ test("yesterday and explicit dates resolve to bounded UTC ranges", () => {
   assert.equal(resolveTimeRange("ngày 2026-09-01", options).start.toISOString(), "2026-08-31T17:00:00.000Z");
 });
 
+test("invalid calendar dates fall back to today's safe range", () => {
+  const options = { now: new Date("2026-09-08T02:00:00.000Z"), timezoneOffsetMinutes: 420 };
+  assert.equal(resolveTimeRange("ngày 2026-02-31", options).start.toISOString(), "2026-09-07T17:00:00.000Z");
+});
+
 test("events for one person are grouped into visits with an inactivity gap", () => {
   const events = [
     { id: 1, timestamp: "2026-09-08T01:00:00Z", camera: "front", people: [{ id: "p1", label: "An" }] },

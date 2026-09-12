@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # One-command installer for a site's on-premise machine.
 #
-#   curl -fsSL https://camera.schoolsai.work/install.sh | bash
+#   curl -fSLo cameraaiwork-install.sh https://camera.schoolsai.work/install.sh
+#   less cameraaiwork-install.sh
+#   bash cameraaiwork-install.sh
 #
 # Does everything Phase 1 of docs/PLAN.md used to require by hand: clones
 # the repo, installs cloudflared + go2rtc, uses a short-lived install token
@@ -18,6 +20,33 @@ API_BASE="${CAMERAAIWORK_API:-https://camera.schoolsai.work}"
 BUNDLE_URL="${CAMERAAIWORK_BUNDLE_URL:-$API_BASE/cameraaiwork-relay.tar.gz}"
 MODEL_BASE_URL="${CAMERAAIWORK_MODEL_BASE_URL:-$API_BASE/models}"
 INSTALL_TOKEN="${CAMERAAIWORK_INSTALL_TOKEN:-}"
+
+die() { echo "Lỗi: $*" >&2; exit 1; }
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  else die "Thiếu sha256sum hoặc shasum để xác minh file tải về."
+  fi
+}
+
+download_verified() {
+  local url="$1" destination="$2" checksum_url="${3:-$1.sha256}" expected actual
+  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$destination"
+  expected="$(curl --proto '=https' --tlsv1.2 -fsSL "$checksum_url" | awk 'NR == 1 {print $1}')"
+  [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || die "Checksum không hợp lệ từ $checksum_url"
+  actual="$(sha256_file "$destination")"
+  [[ "${actual,,}" == "${expected,,}" ]] || die "SHA-256 không khớp cho $url"
+}
+
+validate_archive() {
+  local archive="$1" entry normalized
+  while IFS= read -r entry; do
+    normalized="${entry#./}"
+    [[ "$normalized" != /* ]] || die "Archive chứa đường dẫn tuyệt đối: $entry"
+    case "/$normalized/" in *"/../"*) die "Archive chứa đường dẫn thoát thư mục: $entry" ;; esac
+  done < <(tar -tzf "$archive")
+}
 
 echo "=== cameraaiwork — cài đặt on-site ==="
 echo "Sẽ cài vào: $INSTALL_DIR"
@@ -38,27 +67,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v cloudflared >/dev/null 2>&1; then
-  echo "==> Cài cloudflared..."
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    if command -v brew >/dev/null 2>&1; then
-      brew install cloudflared
-    else
-      echo "!! Cần Homebrew để tự cài cloudflared trên macOS, hoặc cài thủ công: https://github.com/cloudflare/cloudflared/releases" >&2
-      exit 1
-    fi
-  else
-    arch="$(uname -m)"
-    case "$arch" in
-      x86_64) cf_asset="cloudflared-linux-amd64" ;;
-      aarch64) cf_asset="cloudflared-linux-arm64" ;;
-      *) echo "!! Kiến trúc $arch chưa hỗ trợ tự cài cloudflared, cài thủ công: https://github.com/cloudflare/cloudflared/releases" >&2; exit 1 ;;
-    esac
-    curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/$cf_asset" -o /tmp/cloudflared
-    chmod +x /tmp/cloudflared
-    sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
-  fi
-fi
+command -v cloudflared >/dev/null 2>&1 || die "Thiếu cloudflared. Hãy cài bằng package manager chính thức rồi chạy lại; installer không tự tải binary với quyền cao."
 
 # --- 2. Get the code ---
 if [ -d "$INSTALL_DIR/.git" ]; then
@@ -67,7 +76,8 @@ if [ -d "$INSTALL_DIR/.git" ]; then
 else
   echo "==> Tải gói relay từ dashboard về $INSTALL_DIR..."
   bundle_dir="$(mktemp -d)"
-  curl -fsSL "$BUNDLE_URL" -o "$bundle_dir/cameraaiwork-relay.tar.gz"
+  download_verified "$BUNDLE_URL" "$bundle_dir/cameraaiwork-relay.tar.gz"
+  validate_archive "$bundle_dir/cameraaiwork-relay.tar.gz"
   mkdir -p "$INSTALL_DIR"
   tar -xzf "$bundle_dir/cameraaiwork-relay.tar.gz" -C "$INSTALL_DIR" --strip-components=1
   rm -rf "$bundle_dir"
@@ -86,7 +96,10 @@ for model_file in "${MODEL_FILES[@]}"; do
   if [[ ! -s "$model_path" ]]; then
     echo "==> Tải AI model: $model_file"
     mkdir -p "$(dirname "$model_path")"
-    curl -fsSL "$MODEL_BASE_URL/$model_file" -o "$model_path"
+    model_tmp="$(mktemp)"
+    download_verified "$MODEL_BASE_URL/$model_file" "$model_tmp"
+    install -m 0644 "$model_tmp" "$model_path"
+    rm -f "$model_tmp"
   fi
 done
 
@@ -141,6 +154,7 @@ const camera = [{
 fs.writeFileSync("apps/relay/cameras.json", `${JSON.stringify(camera, null, 2)}\n`, { mode: 0o600 });
 NODE
 
+umask 077
 cat > apps/relay/.env <<EOF
 SITE_ID=$SITE_ID
 RELAY_PORT=4000
@@ -149,6 +163,7 @@ GO2RTC_URL=http://localhost:1984
 PAGES_API_URL=$API_BASE
 CLOUDFLARE_TUNNEL_TOKEN=$TUNNEL_TOKEN
 EOF
+chmod 0600 apps/relay/.env apps/relay/cameras.json
 
 echo "==> Đã ghi apps/relay/cameras.json và apps/relay/.env"
 

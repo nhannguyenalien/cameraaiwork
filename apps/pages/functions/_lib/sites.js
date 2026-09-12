@@ -45,9 +45,9 @@ export async function listCameras(env, accountId) {
   const db = getDb(env);
   const result = await db.execute({
     sql: `
-      SELECT cameras.id as cameraId, cameras.stream, cameras.name as cameraName,
-             cameras.record_on_person as recordOnPerson,
-             sites.id as siteId, sites.name as siteName
+      SELECT cameras.id AS "cameraId", cameras.stream, cameras.name AS "cameraName",
+             cameras.record_on_person AS "recordOnPerson",
+             sites.id AS "siteId", sites.name AS "siteName"
       FROM cameras
       JOIN sites ON sites.id = cameras.site_id
       WHERE cameras.account_id = ?

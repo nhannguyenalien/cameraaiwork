@@ -17,6 +17,8 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
     await setIntegration(env, data.accountId, "runpod", { apiKey: body.apiKey.trim(), endpointId: body.endpointId.trim() });
   } else if (body.provider === "openai" || body.provider === "gemini") {
     if (!body.apiKey?.trim()) return errorJson("Thiếu API key", 400);
+    if (body.apiKey.trim().length > 4096) return errorJson("API key quá dài", 400);
+    if (body.model?.trim() && (!/^[A-Za-z0-9._:/-]+$/.test(body.model.trim()) || body.model.trim().length > 120)) return errorJson("Tên model không hợp lệ", 400);
     const config = { apiKey: body.apiKey.trim() };
     if (body.model?.trim()) config.model = body.model.trim();
     await setIntegration(env, data.accountId, body.provider, config);
@@ -28,7 +30,7 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
 
 export const onRequestDelete = withErrorHandling(async ({ request, env, data }) => {
   const { provider } = await request.json().catch(() => ({}));
-  if (!['telegram', 'runpod', 'openai', 'gemini'].includes(provider)) return errorJson("Provider không hợp lệ", 400);
+  if (!["telegram", "runpod", "openai", "gemini"].includes(provider)) return errorJson("Provider không hợp lệ", 400);
   await getDb(env).execute({ sql: "DELETE FROM account_integrations WHERE account_id = ? AND provider = ?", args: [data.accountId, provider] });
   return json({ ok: true });
 });

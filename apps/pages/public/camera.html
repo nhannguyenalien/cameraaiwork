@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Chi tiết camera · CameraAIWork</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/css/tabler.min.css" integrity="sha384-s6jIUOfpdN5ZKclSXm2VjCKXnJm2aYIXViXVju6qlb+XXkyE6yQvCikVSV5D2+2B" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.46.0/dist/tabler-icons.min.css" integrity="sha384-ND+q1IVc0KDElX60dZaqKc7Xl9cdxd2PpU2JfVUHcurCkFVtVLFdt9vJfxtHSL3p" crossorigin="anonymous" />
 <style>
   .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
   .ptz-pad .btn { height:3.25rem; }
@@ -17,6 +17,11 @@
   .event-dot { position:absolute; left:0; top:1.35rem; width:1.05rem; height:1.05rem; border-radius:50%; background:var(--tblr-primary); border:3px solid var(--tblr-bg-surface); z-index:1; }
   .event-image { width:100%; max-height:320px; object-fit:cover; }
   .video-shell video { width:100%; max-height:420px; background:#000; }
+  .events-pagination { position:sticky; bottom:.75rem; z-index:5; }
+  .events-pagination .card-body { backdrop-filter:blur(10px); background:var(--tblr-bg-surface); }
+  .events-pagination .page-link { min-width:2.5rem; min-height:2.5rem; display:grid; place-items:center; border-radius:.5rem !important; font-weight:600; }
+  .events-pagination .page-item.active .page-link { box-shadow:0 .25rem .75rem rgba(var(--tblr-primary-rgb),.24); }
+  .events-loading { opacity:.55; pointer-events:none; }
 </style>
 </head>
 <body class="border-top-wide border-primary">
@@ -78,6 +83,12 @@
       <div id="event-summary" class="row row-cards mb-3"></div>
       <div id="events-list"></div>
       <div id="events-empty" class="card card-body text-center text-secondary py-5 d-none"><i class="ti ti-bell-off fs-1 mb-2"></i>Camera này chưa có sự kiện.</div>
+      <div id="events-pagination" class="card events-pagination d-none mt-3 mb-4">
+        <div class="card-body py-2 d-flex flex-column flex-md-row align-items-center justify-content-between gap-2">
+          <div id="events-page-info" class="text-secondary small"></div>
+          <nav aria-label="Phân trang sự kiện"><ul id="events-page-list" class="pagination pagination-sm m-0 flex-wrap justify-content-center"></ul></nav>
+        </div>
+      </div>
 
       <div class="card mt-4">
         <div class="card-header"><h3 class="card-title"><i class="ti ti-settings me-2"></i>Quản lý camera</h3></div>
@@ -104,8 +115,10 @@
   </div></div>
 </main>
 
+<script src="/ui-i18n-fallback.js?v=20260910-6"></script>
 <script>
-const API_KEY_STORAGE = 'cameraaiwork_api_key';
+const API_KEY_STORAGE = 'cameraaiwork_logged_in';
+localStorage.removeItem('cameraaiwork_api_key');
 const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
 const params = new URLSearchParams(location.search);
 const siteId = params.get('site');
@@ -116,20 +129,28 @@ let talkChunks = [];
 let talkTimer = null;
 let objectUrls = [];
 let imageObserver = null;
+const EVENTS_PAGE_SIZE = 12;
+let eventPage = 1;
+let eventLoadId = 0;
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function api(path, options = {}) {
+async function apiResponse(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    credentials: 'same-origin',
     headers: { ...(options.body && typeof options.body === 'string' ? {'Content-Type':'application/json'} : {}), ...(options.headers || {}), Authorization:`Bearer ${getApiKey()}` }
   });
   if (response.status === 401) { localStorage.removeItem(API_KEY_STORAGE); location.href='/'; throw new Error('Phiên đăng nhập đã hết hạn'); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
+  return {data, response};
+}
+
+async function api(path, options = {}) {
+  return (await apiResponse(path, options)).data;
 }
 
 function endpoint(name) {
@@ -242,17 +263,66 @@ const talkButton=document.getElementById('talk-button');
 ['pointerup','pointercancel','pointerleave'].forEach(name=>talkButton.addEventListener(name,stopTalking));
 talkButton.addEventListener('pointerdown',startTalking);
 
-async function loadEvents() {
-  const query = new URLSearchParams({site:siteId, camera:camera.stream, limit:'100'});
-  const events = await api(`/api/events?${query}`);
+async function loadEvents(page = eventPage, scrollToList = false) {
+  const loadId = ++eventLoadId;
+  const list = document.getElementById('events-list');
+  list.classList.add('events-loading');
+  const query = new URLSearchParams({site:siteId, camera:camera.stream || camera.cameraId, limit:String(EVENTS_PAGE_SIZE), page:String(page)});
+  let result;
+  try {
+    result = await apiResponse(`/api/events?${query}`);
+  } catch (error) {
+    if (loadId === eventLoadId) list.classList.remove('events-loading');
+    throw error;
+  }
+  const {data:events, response} = result;
+  if (loadId !== eventLoadId) return;
+  const total = Number(response.headers.get('X-Total-Count') || events.length);
+  const totalPages = Math.max(1, Number(response.headers.get('X-Total-Pages')) || Math.ceil(total / EVENTS_PAGE_SIZE));
+  if (total > 0 && page > totalPages) return loadEvents(totalPages, scrollToList);
+  eventPage = page;
   objectUrls.forEach(URL.revokeObjectURL); objectUrls=[];
   const withImages=events.filter(e=>e.image_key).length, withVideos=events.filter(e=>e.video_key).length;
   document.getElementById('event-summary').innerHTML = [
-    ['ti-user','Phát hiện người',events.length],['ti-photo','Có hình ảnh',withImages],['ti-video','Có video',withVideos]
+    ['ti-user','Tổng sự kiện',total],['ti-photo','Có ảnh trang này',withImages],['ti-video','Có video trang này',withVideos]
   ].map(([icon,label,count])=>`<div class="col-sm-4"><div class="card card-sm"><div class="card-body d-flex align-items-center"><span class="avatar bg-blue-lt me-3"><i class="ti ${icon}"></i></span><div><div class="h2 mb-0">${count}</div><div class="text-secondary">${label}</div></div></div></div></div>`).join('');
   document.getElementById('events-empty').classList.toggle('d-none', events.length>0);
-  document.getElementById('events-list').innerHTML = events.map(eventCard).join('');
+  list.innerHTML = events.map(eventCard).join('');
+  list.classList.remove('events-loading');
+  renderEventPagination(total, totalPages);
   hydrateImages();
+  if (scrollToList) document.querySelector('#event-summary').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function paginationItems(current, total) {
+  if (total <= 7) return Array.from({length:total}, (_, index) => index + 1);
+  const pages = new Set([1, total, current - 1, current, current + 1]);
+  if (current <= 3) [2, 3, 4].forEach(page => pages.add(page));
+  if (current >= total - 2) [total - 3, total - 2, total - 1].forEach(page => pages.add(page));
+  const sorted = [...pages].filter(page => page > 0 && page <= total).sort((a, b) => a - b);
+  return sorted.flatMap((page, index) => index && page - sorted[index - 1] > 1 ? ['ellipsis', page] : [page]);
+}
+
+function renderEventPagination(total, totalPages) {
+  const pagination = document.getElementById('events-pagination');
+  pagination.classList.toggle('d-none', total === 0);
+  if (!total) return;
+  const first = (eventPage - 1) * EVENTS_PAGE_SIZE + 1;
+  const last = Math.min(eventPage * EVENTS_PAGE_SIZE, total);
+  document.getElementById('events-page-info').textContent = `Hiển thị ${first}–${last} / ${total} sự kiện · Trang ${eventPage}/${totalPages}`;
+  const pageButton = (page, label, disabled = false, active = false, ariaLabel = '') => `<li class="page-item${disabled?' disabled':''}${active?' active':''}"><button class="page-link" type="button" ${disabled?'disabled':''} ${ariaLabel?`aria-label="${ariaLabel}"`:''} ${active?'aria-current="page"':''} onclick="goToEventPage(${page})">${label}</button></li>`;
+  const items = [pageButton(eventPage - 1, '<i class="ti ti-chevron-left"></i>', eventPage === 1, false, 'Trang trước')];
+  paginationItems(eventPage, totalPages).forEach(item => {
+    if (item === 'ellipsis') items.push('<li class="page-item disabled"><span class="page-link">…</span></li>');
+    else items.push(pageButton(item, item, false, item === eventPage, `Trang ${item}`));
+  });
+  items.push(pageButton(eventPage + 1, '<i class="ti ti-chevron-right"></i>', eventPage === totalPages, false, 'Trang sau'));
+  document.getElementById('events-page-list').innerHTML = items.join('');
+}
+
+function goToEventPage(page) {
+  if (page < 1 || page === eventPage) return;
+  loadEvents(page, true).catch(showError);
 }
 
 function eventCard(event) {
@@ -349,7 +419,7 @@ document.getElementById('delete-camera').addEventListener('click', async () => {
   } catch(error) { showError(error); }
 });
 
-document.getElementById('logout-btn').addEventListener('click',()=>{localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
+document.getElementById('logout-btn').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}catch(_){}localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
 window.addEventListener('beforeunload',()=>{ imageObserver?.disconnect(); objectUrls.forEach(URL.revokeObjectURL); });
 init().catch(showError);
 setInterval(()=>{ if(camera && !document.hidden) loadEvents().catch(()=>{}); },30000);

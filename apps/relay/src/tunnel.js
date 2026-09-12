@@ -9,7 +9,11 @@ const { spawn } = require("child_process");
 const CLOUDFLARED_BIN = process.env.CLOUDFLARED_BIN || "cloudflared";
 
 function startNamedTunnel(tunnelToken) {
-  const proc = spawn(CLOUDFLARED_BIN, ["tunnel", "run", "--token", tunnelToken]);
+  // cloudflared accepts TUNNEL_TOKEN from the environment. Keeping the token
+  // out of argv prevents it from appearing in ps/systemctl status output.
+  const proc = spawn(CLOUDFLARED_BIN, ["tunnel", "run"], {
+    env: { ...process.env, TUNNEL_TOKEN: tunnelToken },
+  });
 
   const logChunk = (chunk) => {
     // cloudflared is fairly chatty; only surface actual problems.

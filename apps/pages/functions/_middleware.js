@@ -12,8 +12,9 @@
 //   point is exchanging a Google sign-in for one (see functions/api/auth/google/).
 import { getDb } from "./_lib/db.js";
 import { sha256Hex } from "./_lib/ids.js";
+import { readSessionToken } from "./_lib/session.js";
 
-const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/install/claim"];
+const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/internal/patrol", "/api/install/claim"];
 const PUBLIC_AUTH_PATHS = ["/api/auth/signup", "/api/auth/login", "/api/auth/stripe-webhook"];
 
 function isPublic(request, url) {
@@ -22,12 +23,14 @@ function isPublic(request, url) {
 
 function corsHeaders(env, request) {
   const origin = request.headers.get("Origin") || "";
-  const allowList = (env.ALLOWED_ORIGINS || "*").split(",").map((s) => s.trim());
-  const allowOrigin = allowList.includes("*") ? "*" : allowList.includes(origin) ? origin : "";
+  const sameOrigin = new URL(request.url).origin;
+  const allowList = (env.ALLOWED_ORIGINS || sameOrigin).split(",").map((s) => s.trim());
+  const allowOrigin = allowList.includes(origin) ? origin : "";
 
   const headers = {
-    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, x-relay-secret",
+    "Vary": "Origin",
   };
   if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin;
   return headers;
@@ -58,19 +61,35 @@ export async function onRequest({ request, next, env, data }) {
     return withCors(await next(), cors);
   }
 
-  const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!bearer) return withCors(unauthorized(), cors);
+  const token = readSessionToken(request);
+  if (!token) return withCors(unauthorized(), cors);
 
   try {
-    const keyHash = await sha256Hex(bearer);
+    const keyHash = await sha256Hex(token);
     const db = getDb(env);
     const result = await db.execute({
-      sql: "SELECT account_id FROM api_keys WHERE id = ? AND revoked_at IS NULL",
+      sql: "SELECT account_id, scope FROM api_keys WHERE id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)",
       args: [keyHash],
     });
 
     const row = result.rows[0];
     if (!row) return withCors(unauthorized(), cors);
+
+    // A 'read' key (see functions/api/settings/api-keys.js) may only issue
+    // GET requests — everything else needs a 'full' key. This is a
+    // deliberately coarse boundary (method, not per-endpoint): some GET-like
+    // actions are POST (agent query, LAN camera discovery) and are simply
+    // out of reach for a 'read' key rather than individually allow-listed,
+    // which would drift out of sync as endpoints are added.
+    if (row.scope === "read" && request.method !== "GET" && request.method !== "HEAD") {
+      return withCors(
+        new Response(JSON.stringify({ error: "This API key is read-only (GET requests only)" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }),
+        cors
+      );
+    }
 
     data.accountId = row.account_id;
   } catch (err) {

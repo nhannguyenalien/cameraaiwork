@@ -4,10 +4,8 @@
 <dict>
   <key>Label</key><string>com.cameraaiwork.update</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>__UPDATE_SCRIPT__</string></array>
-  <key>StartInterval</key><integer>21600</integer>
+  <array><string>/usr/bin/false</string></array>
+  <key>Disabled</key><true/>
   <key>RunAtLoad</key><false/>
-  <key>StandardOutPath</key><string>/tmp/cameraaiwork-update.log</string>
-  <key>StandardErrorPath</key><string>/tmp/cameraaiwork-update.log</string>
 </dict>
 </plist>

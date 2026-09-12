@@ -18,9 +18,11 @@ tags:
   - { name: Install }
   - { name: Events }
   - { name: People }
+  - { name: Agents }
   - { name: Integrations }
   - { name: Jobs }
   - { name: Billing }
+  - { name: Storage }
   - { name: Internal }
 paths:
   /api/health:
@@ -61,6 +63,46 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '401': { $ref: '#/components/responses/Error' }
+  /api/auth/stripe-webhook:
+    post:
+      operationId: handleStripeWebhook
+      tags: [Billing]
+      summary: Apply a Stripe subscription/customer update from a signed Stripe event
+      description: Called by Stripe, not by account holders or agents. Verifies the `stripe-signature` header against STRIPE_WEBHOOK_SECRET before updating the account's plan and subscription status.
+      x-internal: true
+      security: [{ stripeSignature: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        '200': { description: Event processed, content: { application/json: { schema: { type: object, properties: { received: { type: boolean } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/settings/api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [Account]
+      summary: List API keys the account holder created (browser session tokens are not included)
+      responses:
+        '200': { description: API keys; raw key values are never returned after creation, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } }
+    post:
+      operationId: createApiKey
+      tags: [Account]
+      summary: Create a new API key, scoped to full account access or read-only
+      description: The raw key is returned once, in this response only, and cannot be retrieved again — store it now. A 'read' key may only issue GET requests (enforced in the auth middleware, by HTTP method, not per-endpoint); everything else needs 'full'.
+      x-agent-risk: secret-write-human-confirmation-required
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [label, scope], properties: { label: { type: string, minLength: 1, maxLength: 100, description: "Must not start with \"web \" — that prefix is reserved for browser session tokens." }, scope: { type: string, enum: [full, read] }, expiresInDays: { type: integer, minimum: 1, maximum: 365, description: Omit for a key that never expires until revoked. } } } } } }
+      responses:
+        '201': { description: Created key, content: { application/json: { schema: { $ref: '#/components/schemas/ApiKeyCreated' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/settings/api-keys/{id}:
+    delete:
+      operationId: revokeApiKey
+      tags: [Account]
+      summary: Revoke an API key the account holder created
+      x-agent-risk: destructive-human-confirmation-required
+      parameters: [{ name: id, in: path, required: true, description: The key's id, as returned by listApiKeys/createApiKey (a SHA-256 hash, not the raw key)., schema: { type: string } }]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/settings/account:
     get:
       operationId: getAccountUsage
@@ -107,6 +149,18 @@ paths:
         '201': { description: Camera created, content: { application/json: { schema: { type: object, required: [cameraId], properties: { cameraId: { type: string } } } } } }
         '404': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
+  /api/sites/{id}/discover:
+    post:
+      operationId: discoverSiteCameras
+      tags: [Sites]
+      summary: Scan the site's LAN for ONVIF cameras via its relay
+      description: Read-only network scan; proposes cameras to add but does not register any. Requires the site's relay to be online.
+      parameters: [{ $ref: '#/components/parameters/SiteId' }]
+      responses:
+        '200': { description: Discovered ONVIF devices, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
   /api/sites/{id}/tunnel:
     post:
       operationId: reconcileSiteTunnel
@@ -247,11 +301,47 @@ paths:
       summary: Send an ONVIF PTZ movement or stop command
       x-agent-risk: physical-control
       parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [direction], properties: { direction: { type: string, enum: [up, down, left, right, stop] } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { action: { type: string, enum: [up, down, left, right, zoomIn, zoomOut, stop, home, gotoPreset, setPreset] }, direction: { type: string, deprecated: true, enum: [up, down, left, right, stop] }, speed: { type: number, minimum: 0.1, maximum: 1 }, durationMs: { type: integer, minimum: 100, maximum: 5000 }, preset: { type: string }, name: { type: string } }, anyOf: [{ required: [action] }, { required: [direction] }] } } } }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '400': { $ref: '#/components/responses/Error' }
         '502': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}/snapshot:
+    get:
+      operationId: getCameraSnapshot
+      tags: [Cameras]
+      summary: Capture a current JPEG snapshot
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: JPEG snapshot, content: { image/jpeg: { schema: { type: string, contentEncoding: binary } } } }
+        '502': { $ref: '#/components/responses/Error' }
+  /api/cameras/{site}/{camera}/status:
+    get:
+      operationId: getCameraStatus
+      tags: [Cameras]
+      summary: Check relay reachability and current camera capabilities
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: Camera status, content: { application/json: { schema: { $ref: '#/components/schemas/CameraStatus' } } } }
+        '503': { description: Relay unavailable, content: { application/json: { schema: { $ref: '#/components/schemas/CameraStatus' } } } }
+  /api/cameras/{site}/{camera}/config:
+    get:
+      operationId: getCameraConfig
+      tags: [Cameras]
+      summary: Get sanitized relay camera configuration; passwords are never returned
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      responses:
+        '200': { description: Sanitized camera configuration, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+    put:
+      operationId: updateCameraConfig
+      tags: [Cameras]
+      summary: Update relay camera source and ONVIF credentials
+      x-agent-risk: secret-write-human-confirmation-required
+      parameters: [{ $ref: '#/components/parameters/Site' }, { $ref: '#/components/parameters/Camera' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CameraConfigInput' } } } }
+      responses:
+        '200': { description: Sanitized camera configuration, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '400': { $ref: '#/components/responses/Error' }
   /api/events:
     get:
       operationId: listEvents
@@ -261,8 +351,55 @@ paths:
         - { name: site, in: query, schema: { type: string } }
         - { name: camera, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: page, in: query, description: One-based page number. Returns total-count pagination headers and cannot be combined with cursor., schema: { type: integer, minimum: 1 } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: person, in: query, schema: { type: string } }
+        - { name: videoStatus, in: query, schema: { type: string } }
+        - { name: faceScanStatus, in: query, schema: { type: string } }
+        - { name: acknowledged, in: query, schema: { type: boolean } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
       responses:
-        '200': { description: Events, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+        '200': { description: Events; cursor continuation or page totals are returned in response headers, headers: { X-Next-Cursor: { schema: { type: string } }, X-Has-More: { schema: { type: boolean } }, X-Total-Count: { schema: { type: integer } }, X-Total-Pages: { schema: { type: integer } }, X-Current-Page: { schema: { type: integer } } }, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+  /api/events/bulk:
+    delete:
+      operationId: deleteEvents
+      tags: [Events]
+      summary: Delete up to 100 account-owned events and their media
+      x-agent-risk: destructive-human-confirmation-required
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, minItems: 1, maxItems: 100, items: { type: integer } } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/events/{id}:
+    get:
+      operationId: getEvent
+      tags: [Events]
+      summary: Get event details and all matched people
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { description: Event detail, content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      operationId: updateEvent
+      tags: [Events]
+      summary: Acknowledge an event or update its note
+      x-agent-risk: write
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { acknowledged: { type: boolean }, note: { type: [string, 'null'], maxLength: 2000 } } } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      operationId: deleteEvent
+      tags: [Events]
+      summary: Delete one event and its media
+      x-agent-risk: destructive-human-confirmation-required
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/events/{id}/video:
     get:
       operationId: getEventVideo
@@ -271,6 +408,8 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses:
         '200': { description: Video bytes, content: { video/mp4: { schema: { type: string, contentEncoding: binary } } } }
+        '206': { description: Requested video byte range, content: { video/mp4: { schema: { type: string, contentEncoding: binary } } } }
+        '416': { description: Invalid or unsatisfiable byte range }
         '404': { $ref: '#/components/responses/Error' }
   /api/events/{id}/image:
     get:
@@ -299,6 +438,59 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Ok' }
         '404': { $ref: '#/components/responses/Error' }
+  /api/agent/query:
+    post:
+      operationId: queryCameraAgent
+      tags: [Agents]
+      summary: Ask questions about camera inventory and event-derived visits
+      description: Sends event and camera metadata only; face embeddings and raw images are not sent to the language model. Departure time is an estimate based on the last observed event.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgentQuery' } } } }
+      responses:
+        '200': { description: Grounded camera-agent answer, content: { application/json: { schema: { $ref: '#/components/schemas/AgentAnswer' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+  /api/agent/actions:
+    get:
+      operationId: listAgentActions
+      tags: [Agents]
+      summary: Discover the allow-listed camera agent tools and their confirmation policy
+      responses:
+        '200': { description: Agent action catalog, content: { application/json: { schema: { type: object, properties: { actions: { type: array, items: { $ref: '#/components/schemas/AgentActionDefinition' } } } } } } }
+    post:
+      operationId: executeAgentAction
+      tags: [Agents]
+      summary: Execute one allow-listed agent tool
+      description: Read-only tools execute immediately. State-changing tools require confirmed=true; otherwise the response is 428 with the exact proposal to present to a human.
+      x-agent-risk: dynamic-human-confirmation-for-writes
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgentActionRequest' } } } }
+      responses:
+        '200': { description: Tool-specific result, content: { application/json: { schema: {} } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '428': { description: Human confirmation required, content: { application/json: { schema: { $ref: '#/components/schemas/AgentActionConfirmation' } } } }
+  /api/agent/chat:
+    get:
+      operationId: listAgentChatHistory
+      tags: [Agents]
+      summary: Read the persisted agent chat transcript (interactive Q&A plus scheduled patrol digests)
+      description: Includes messages the account's own patrol digest wrote (source=patrol; see /api/internal/patrol), not just interactive chat (source=chat).
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: since, in: query, required: false, description: Return only messages with id greater than this, for polling., schema: { type: integer } }
+      responses:
+        '200': { description: Chat messages oldest to newest, content: { application/json: { schema: { type: object, properties: { messages: { type: array, items: { type: object, properties: { id: { type: integer }, role: { type: string, enum: [user, assistant] }, source: { type: string, enum: [chat, patrol] }, content: { type: string }, created_at: { type: string, format: date-time } } } } } } } } }
+    post:
+      operationId: chatWithCameraAgent
+      tags: [Agents]
+      summary: Chat with an OpenAI or Gemini tool-calling camera agent
+      description: Read-only tools execute automatically. Any state-changing tool is returned as a proposal and executes only when the client resubmits it as confirmedAction. Every turn is also persisted (see GET) — the client must still send its own recent message window for LLM context, persistence does not replace that.
+      x-agent-risk: dynamic-human-confirmation-for-writes
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgentChatRequest' } } } }
+      responses:
+        '200': { description: Agent reply, tool results, or confirmation proposals, content: { application/json: { schema: { $ref: '#/components/schemas/AgentChatAnswer' } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
   /api/settings/integrations:
     get:
       operationId: getIntegrationStatus
@@ -309,9 +501,9 @@ paths:
     put:
       operationId: setIntegration
       tags: [Integrations]
-      summary: Encrypt and store Telegram or RunPod credentials
+      summary: Encrypt and store Telegram, RunPod, OpenAI or Gemini credentials
       x-agent-risk: secret-write-human-confirmation-required
-      requestBody: { required: true, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/TelegramIntegration' }, { $ref: '#/components/schemas/RunPodIntegration' }] } } } }
+      requestBody: { required: true, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/TelegramIntegration' }, { $ref: '#/components/schemas/RunPodIntegration' }, { $ref: '#/components/schemas/OpenAIIntegration' }, { $ref: '#/components/schemas/GeminiIntegration' }] } } } }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
     delete:
@@ -319,9 +511,43 @@ paths:
       tags: [Integrations]
       summary: Delete stored integration credentials
       x-agent-risk: destructive-human-confirmation-required
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [provider], properties: { provider: { type: string, enum: [telegram, runpod] } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [provider], properties: { provider: { type: string, enum: [telegram, runpod, openai, gemini] } } } } } }
       responses:
         '200': { $ref: '#/components/responses/Ok' }
+  /api/settings/integrations/models:
+    post:
+      operationId: listIntegrationModels
+      tags: [Integrations]
+      summary: Validate an OpenAI or Gemini API key and list its usable chat models
+      description: Proxies to the provider's own models endpoint with the supplied key; the key is not stored by this call (see PUT /api/settings/integrations to save it).
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [provider, apiKey], properties: { provider: { type: string, enum: [openai, gemini] }, apiKey: { type: string, writeOnly: true } } } } } }
+      responses:
+        '200': { description: Usable model ids, newest first, content: { application/json: { schema: { type: object, properties: { provider: { type: string, enum: [openai, gemini] }, models: { type: array, items: { type: string } } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/settings/storage:
+    get:
+      operationId: getStorageUsage
+      tags: [Storage]
+      summary: Get event media storage usage, broken down by backend, site and camera
+      responses:
+        '200': { description: Storage usage report, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+  /api/settings/storage-config:
+    get:
+      operationId: getStorageConfig
+      tags: [Storage]
+      summary: Get the configured event-media storage backend; secret values are never returned
+      responses:
+        '200': { description: Sanitized storage configuration, content: { application/json: { schema: { type: object, required: [backend, configured], properties: { backend: { type: string, enum: [r2, s3, gdrive] }, configured: { type: boolean } }, additionalProperties: true } } } }
+    put:
+      operationId: setStorageConfig
+      tags: [Storage]
+      summary: Switch event media storage to Cloudflare R2, S3-compatible storage, or Google Drive
+      description: For s3/gdrive, the credentials are tested against the provider before being saved.
+      x-agent-risk: secret-write-human-confirmation-required
+      requestBody: { required: true, content: { application/json: { schema: { oneOf: [{ type: object, required: [backend], properties: { backend: { const: r2 } } }, { type: object, required: [backend, endpoint, region, bucket, accessKeyId, secretAccessKey], properties: { backend: { const: s3 }, endpoint: { type: string, format: uri, description: Public HTTPS S3-compatible endpoint; cannot point at a private/internal host. }, region: { type: string }, bucket: { type: string }, accessKeyId: { type: string }, secretAccessKey: { type: string, writeOnly: true }, sessionToken: { type: string, writeOnly: true }, forcePathStyle: { type: boolean, default: true } } }, { type: object, required: [backend, accessToken, folderId], properties: { backend: { const: gdrive }, accessToken: { type: string, writeOnly: true, description: Google OAuth access token. }, folderId: { type: string } } }] } } } }
+      responses:
+        '200': { description: Sanitized storage configuration, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '400': { $ref: '#/components/responses/Error' }
   /api/jobs:
     post:
       operationId: createJob
@@ -367,6 +593,37 @@ paths:
       responses:
         '202': { description: Event accepted, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
         '401': { $ref: '#/components/responses/Error' }
+  /api/face-backfill:
+    get:
+      operationId: claimFaceBackfillBatch
+      tags: [Internal]
+      summary: Claim a batch of a site's events pending face scanning, or fetch one event's stored media
+      description: Called by that site's relay to catch up face-matching on events saved before the AI worker was reachable. Claimed events are locked ('processing') for 20 minutes so concurrent relay restarts don't double-claim them. Pass `action=media` with `eventId` and `kind` to fetch one event's stored image/video instead of claiming a batch.
+      x-internal: true
+      security: [{ relaySecret: [] }]
+      parameters:
+        - { name: siteId, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 5 } }
+        - { name: action, in: query, schema: { type: string, enum: [media] } }
+        - { name: eventId, in: query, description: Required when action=media., schema: { type: integer } }
+        - { name: kind, in: query, schema: { type: string, enum: [image, video], default: image } }
+      responses:
+        '200': { description: Claimed events (default), or one event's media bytes (action=media), content: { application/json: { schema: { type: object, properties: { events: { type: array, items: { type: object, properties: { id: { type: integer }, hasImage: { type: boolean }, hasVideo: { type: boolean }, timestamp: { type: string, format: date-time } } } } } } }, image/jpeg: { schema: { type: string, contentEncoding: binary } }, video/mp4: { schema: { type: string, contentEncoding: binary } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: submitFaceBackfillResult
+      tags: [Internal]
+      summary: Submit face embeddings (or an error) for one claimed event
+      x-internal: true
+      security: [{ relaySecret: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [siteId, eventId], properties: { siteId: { type: string }, eventId: { type: integer }, faceEmbeddings: { type: array, items: {}, description: "Each item is either a raw embedding array, or an object with embedding and box." }, error: { type: string, description: "If set, marks the event 'error' for retry instead of recording detections." } } } } } }
+      responses:
+        '200': { description: Detections recorded, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, personIds: { type: array, items: { type: string } }, retry: { type: boolean } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/internal/maintenance:
     post:
       operationId: runMaintenance
@@ -378,11 +635,25 @@ paths:
       responses:
         '200': { description: Maintenance report, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
         '503': { $ref: '#/components/responses/Error' }
+  /api/internal/patrol:
+    post:
+      operationId: runPatrolDigest
+      tags: [Internal]
+      summary: Summarize recent camera events per account and write one digest into that account's agent chat
+      description: Called on a cron (see .github/workflows/camera-patrol.yml). "activity" mode only writes a message for accounts with events in the window; "daily" mode always writes one, including a "no events" check-in. Written as an agent_messages row (source=patrol), readable via GET /api/agent/chat.
+      x-internal: true
+      x-agent-risk: write
+      security: [{ maintenanceBearer: [] }]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { mode: { type: string, enum: [activity, daily], default: activity }, windowMinutes: { type: integer, minimum: 1 } } } } } }
+      responses:
+        '200': { description: Per-account digest results, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '401': { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
     accountBearer: { type: http, scheme: bearer, bearerFormat: opaque, description: Revocable account session/API key with full account privileges. }
     maintenanceBearer: { type: http, scheme: bearer, bearerFormat: opaque }
     relaySecret: { type: apiKey, in: header, name: x-relay-secret }
+    stripeSignature: { type: apiKey, in: header, name: stripe-signature }
   parameters:
     SiteId: { name: id, in: path, required: true, schema: { type: string, pattern: '^st-[A-Za-z0-9_-]+$' } }
     Site: { name: site, in: path, required: true, schema: { type: string } }
@@ -400,9 +671,23 @@ components:
     InstallClaim: { allOf: [{ $ref: '#/components/schemas/SiteCreated' }, { type: object, required: [cameraId], properties: { cameraId: { type: string } } }] }
     TunnelResult: { type: object, properties: { tunnelToken: { type: string, writeOnly: true }, go2rtcUrl: { type: string, format: uri }, relayUrl: { type: string, format: uri }, aiWorkerUrl: { type: string, format: uri } }, additionalProperties: true }
     Camera: { type: object, properties: { cameraId: { type: string }, stream: { type: string }, cameraName: { type: [string, 'null'] }, siteId: { type: string }, siteName: { type: [string, 'null'] } } }
+    CameraStatus: { type: object, required: [cameraId, siteId, relayOnline, checkedAt], properties: { cameraId: { type: string }, siteId: { type: string }, relayOnline: { type: boolean }, latencyMs: { type: integer }, checkedAt: { type: string, format: date-time }, controls: { type: object, additionalProperties: true }, error: { type: string } } }
+    CameraConfigInput: { type: object, properties: { source: { type: string }, rtspUrl: { type: string, format: uri }, snapshotUrl: { type: string, format: uri }, onvifHost: { type: string }, onvifPort: { type: integer, minimum: 1, maximum: 65535 }, username: { type: string }, password: { type: string, writeOnly: true }, talkbackCommand: { type: string } }, additionalProperties: false }
     LiveResult: { type: object, required: [url, expiresAt, viewerLimit], properties: { url: { type: string, format: uri }, expiresAt: { type: integer, description: Unix epoch seconds }, viewerLimit: { type: integer, minimum: 1 } } }
-    Event: { type: object, additionalProperties: true, properties: { id: { type: integer }, site_id: { type: string }, camera: { type: string }, timestamp: { type: string }, type: { type: string }, person_id: { type: [string, 'null'] }, person_label: { type: [string, 'null'] }, video_key: { type: [string, 'null'] } } }
+    Event: { type: object, additionalProperties: true, properties: { id: { type: integer }, site_id: { type: string }, camera: { type: string }, timestamp: { type: string, format: date-time }, type: { type: string }, person_id: { type: [string, 'null'] }, person_label: { type: [string, 'null'] }, people: { type: array, items: { $ref: '#/components/schemas/Person' } }, video_key: { type: [string, 'null'] }, video_status: { type: string }, face_scan_status: { type: string }, acknowledged: { type: boolean }, note: { type: [string, 'null'] } } }
     Person: { type: object, properties: { id: { type: string }, label: { type: [string, 'null'] }, first_seen_at: { type: string }, last_seen_at: { type: string }, seen_count: { type: integer } } }
     TelegramIntegration: { type: object, required: [provider, botToken, chatId], properties: { provider: { const: telegram }, botToken: { type: string, writeOnly: true }, chatId: { type: string, writeOnly: true } } }
     RunPodIntegration: { type: object, required: [provider, apiKey, endpointId], properties: { provider: { const: runpod }, apiKey: { type: string, writeOnly: true }, endpointId: { type: string } } }
+    OpenAIIntegration: { type: object, required: [provider, apiKey], properties: { provider: { const: openai }, apiKey: { type: string, writeOnly: true }, model: { type: string, default: gpt-5-mini } } }
+    GeminiIntegration: { type: object, required: [provider, apiKey], properties: { provider: { const: gemini }, apiKey: { type: string, writeOnly: true }, model: { type: string, default: gemini-3.7-flash } } }
+    AgentQuery: { type: object, required: [question], properties: { question: { type: string, maxLength: 1000 }, provider: { type: string, enum: [auto, openai, gemini], default: auto }, timezoneOffsetMinutes: { type: integer, minimum: -720, maximum: 840, default: 420 } } }
+    AgentAnswer: { type: object, required: [answer, provider, range, visits, eventCount], properties: { answer: { type: string }, provider: { type: string, enum: [openai, gemini] }, model: { type: string }, range: { type: object, additionalProperties: true }, visits: { type: array, items: { type: object, additionalProperties: true } }, eventCount: { type: integer }, truncated: { type: boolean }, actions: { type: array, items: { $ref: '#/components/schemas/AgentActionDefinition' } } } }
+    AgentActionDefinition: { type: object, required: [name, description, readOnly, parameters, requiresConfirmation], properties: { name: { type: string }, description: { type: string }, readOnly: { type: boolean }, parameters: { type: object, additionalProperties: { type: string } }, requiresConfirmation: { type: boolean } } }
+    AgentActionRequest: { type: object, required: [action], properties: { action: { type: string, enum: [list_sites, scan_cameras, add_camera, list_cameras, list_people, list_recent_events, camera_status, camera_config, get_live_link, get_snapshot_link, label_person, set_recording, move_camera, update_camera_config] }, args: { type: object, additionalProperties: true, default: {} }, confirmed: { type: boolean, default: false } } }
+    AgentActionConfirmation: { type: object, required: [error, requiresConfirmation, proposal], properties: { error: { type: string }, requiresConfirmation: { const: true }, proposal: { $ref: '#/components/schemas/AgentActionRequest' } } }
+    AgentChatMessage: { type: object, required: [role, content], properties: { role: { type: string, enum: [user, assistant] }, content: { type: string, maxLength: 4000 } } }
+    AgentChatRequest: { type: object, properties: { provider: { type: string, enum: [auto, openai, gemini], default: auto }, messages: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/AgentChatMessage' } }, confirmedAction: { $ref: '#/components/schemas/AgentActionRequest' } } }
+    AgentChatAnswer: { type: object, required: [answer], properties: { answer: { type: string }, provider: { type: string, enum: [openai, gemini] }, model: { type: string }, proposals: { type: array, items: { $ref: '#/components/schemas/AgentActionRequest' } }, toolResults: { type: array, items: { type: object, additionalProperties: true } }, action: { type: string }, result: {} } }
     Job: { type: object, properties: { id: { type: string }, status: { type: string } }, additionalProperties: true }
+    ApiKey: { type: object, required: [id, label, scope, createdAt, revoked], properties: { id: { type: string, description: SHA-256 hash of the key; opaque, not the raw key. }, label: { type: string }, scope: { type: string, enum: [full, read] }, createdAt: { type: string, format: date-time }, expiresAt: { type: [string, 'null'], format: date-time }, revoked: { type: boolean } } }
+    ApiKeyCreated: { type: object, required: [id, label, scope, apiKey, createdAt], properties: { id: { type: string }, label: { type: string }, scope: { type: string, enum: [full, read] }, apiKey: { type: string, writeOnly: true, description: Shown only in this response. }, createdAt: { type: string, format: date-time }, expiresAt: { type: [string, 'null'], format: date-time } } }

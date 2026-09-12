@@ -1,0 +1,12 @@
+name = "cameraaiwork-gpu-worker"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[vars]
+GPU_MAX_EVENTS_PER_RUN = "1"
+GPU_MAX_ATTEMPTS = "3"
+GPU_SIMILARITY_THRESHOLD = "0.30"
+
+[[r2_buckets]]
+binding = "EVENTS_BUCKET"
+bucket_name = "cameraaiwork-events"

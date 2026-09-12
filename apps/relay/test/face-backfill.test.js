@@ -25,3 +25,17 @@ test("addDistinct merges camera-quality samples of the same face", () => {
   assert.equal(faces.length, 1);
   assert.deepEqual(faces[0].box, [1, 2, 3, 4]);
 });
+
+test("addDistinct merges samples above the production threshold", () => {
+  const faces = [];
+  addDistinct(faces, [{ embedding: [1, 0] }]);
+  addDistinct(faces, [{ embedding: [0.31, Math.sqrt(1 - 0.31 ** 2)] }]);
+  assert.equal(faces.length, 1);
+});
+
+test("addDistinct keeps faces below the production threshold separate", () => {
+  const faces = [];
+  addDistinct(faces, [{ embedding: [1, 0] }]);
+  addDistinct(faces, [{ embedding: [0.29, Math.sqrt(1 - 0.29 ** 2)] }]);
+  assert.equal(faces.length, 2);
+});

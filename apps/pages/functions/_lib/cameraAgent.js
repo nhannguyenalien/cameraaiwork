@@ -22,7 +22,10 @@ export function resolveTimeRange(question, { now = new Date(), timezoneOffsetMin
   if (explicitDate) {
     const [, year, month, day] = explicitDate;
     const start = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)) - offset * 60_000);
-    if (!Number.isNaN(start.getTime())) return { start, end: new Date(start.getTime() + DAY_MS), timezoneOffsetMinutes: offset };
+    const local = new Date(start.getTime() + offset * 60_000);
+    if (local.getUTCFullYear() === Number(year) && local.getUTCMonth() === Number(month) - 1 && local.getUTCDate() === Number(day)) {
+      return { start, end: new Date(start.getTime() + DAY_MS), timezoneOffsetMinutes: offset };
+    }
   }
 
   const today = localDayBounds(now, offset);
@@ -132,7 +135,7 @@ export async function askGemini(config, context) {
     method: "POST",
     headers: { "x-goog-api-key": config.apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: INSTRUCTIONS }] },
+      systemInstruction: { parts: [{ text: INSTRUCTIONS }] },
       contents: [{ role: "user", parts: [{ text: context }] }],
       generationConfig: { maxOutputTokens: 900 },
     }),

@@ -35,7 +35,7 @@ const { startNamedTunnel } = require("./tunnel");
 const { parseLiveRequest } = require("./live-auth");
 const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
-const { validateCamera, publicCamera, updateGo2rtc, persistCameras } = require("./camera-config");
+const { validateCamera, publicCamera, sameRtspSource, updateGo2rtc, persistCameras } = require("./camera-config");
 const { discoverAll, resolveRtsp } = require("./discovery");
 const { createFaceBackfill } = require("./face-backfill");
 
@@ -69,7 +69,7 @@ const talkback = createTalkback({
   cooldownMs: config.tapoGreetingCooldownMs,
 });
 
-function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 4 * 1024 * 1024) {
+function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 20 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const rtspUrl = `${config.go2rtc.rtspUrl.replace(/\/$/, "")}/${encodeURIComponent(cameraId)}`;
     const chunks = [];
@@ -120,7 +120,9 @@ app.use("/internal/go2rtc", requireSecret, (req, res) => {
 
 app.get("/internal/frame.jpeg", requireSecret, async (req, res) => {
   const cameraId = String(req.query.src || "");
-  if (!config.cameras.some((camera) => camera.id === cameraId)) return res.sendStatus(404);
+  if (!config.cameras.some((camera) => camera.id === cameraId)) {
+    return res.status(404).json({ error: "Camera không có trong cấu hình relay", code: "camera_not_configured" });
+  }
   try {
     const frame = await axios.get(`${config.go2rtc.url}/api/frame.jpeg`, {
       params: { src: cameraId },
@@ -134,7 +136,11 @@ app.get("/internal/frame.jpeg", requireSecret, async (req, res) => {
     res.type("image/jpeg").send(jpeg);
   } catch (err) {
     console.error(`❌ Snapshot lỗi (${cameraId}):`, err.message || err);
-    res.sendStatus(502);
+    const go2rtcUnavailable = ["ECONNREFUSED", "ENOTFOUND"].includes(err.code);
+    res.status(502).json({
+      error: go2rtcUnavailable ? "Không kết nối được dịch vụ go2rtc" : "Camera đang tắt, mất mạng hoặc RTSP không kết nối được",
+      code: go2rtcUnavailable ? "go2rtc_unavailable" : "camera_unreachable",
+    });
   }
 });
 
@@ -159,12 +165,29 @@ app.use("/internal/ai", requireSecret, (req, res) => {
   proxy.web(req, res, { target: config.aiWorkerUrl });
 });
 
-app.use("/live/:token", (req, res) => {
+app.use("/live/:token", async (req, res) => {
   const original = `/live/${req.params.token}${req.url}`;
   const parsed = parseLiveRequest(original, liveAuthOptions);
   if (!parsed) return res.sendStatus(401);
-  req.url = parsed.path;
-  proxy.web(req, res, { target: config.go2rtc.url });
+  try {
+    // Buffer the small HTTP assets instead of piping go2rtc's response through
+    // http-proxy. Named Cloudflare Tunnels can interpret the upstream's
+    // connection-close response as a broken origin stream and replace an
+    // otherwise valid response with a Cloudflare 502. WebSocket video traffic
+    // is still handled by server.on("upgrade") below.
+    const upstream = await axios.get(`${config.go2rtc.url}${parsed.path}`, {
+      responseType: "arraybuffer",
+      timeout: 10000,
+      validateStatus: () => true,
+    });
+    const contentType = upstream.headers["content-type"];
+    if (contentType) res.type(contentType);
+    res.set("Cache-Control", "private, no-store, no-cache, max-age=0");
+    res.status(upstream.status).send(Buffer.from(upstream.data));
+  } catch (err) {
+    console.error(`❌ Live HTTP proxy lỗi (${parsed.camera}):`, err.message || err);
+    res.status(502).send("Bad gateway");
+  }
 });
 
 app.post("/ptz/:camera/:dir", requireSecret, (req, res) => {
@@ -180,12 +203,50 @@ app.post("/ptz/:camera/:dir", requireSecret, (req, res) => {
   res.sendStatus(ok ? 200 : 404);
 });
 
-app.get("/controls/:camera", requireSecret, (req, res) => {
+app.post("/ptz/:camera", requireSecret, async (req, res) => {
+  const camera = req.params.camera;
+  const action = String(req.body?.action || "");
+  const speed = Math.max(0.1, Math.min(Number(req.body?.speed) || 0.5, 1));
+  const durationMs = Math.max(100, Math.min(Number(req.body?.durationMs) || 500, 5000));
+  let result = false;
+  if (action === "up") result = ptz.move(camera, 0, speed, 0, durationMs);
+  else if (action === "down") result = ptz.move(camera, 0, -speed, 0, durationMs);
+  else if (action === "left") result = ptz.move(camera, -speed, 0, 0, durationMs);
+  else if (action === "right") result = ptz.move(camera, speed, 0, 0, durationMs);
+  else if (action === "zoomIn") result = ptz.move(camera, 0, 0, speed, durationMs);
+  else if (action === "zoomOut") result = ptz.move(camera, 0, 0, -speed, durationMs);
+  else if (action === "stop") result = ptz.stop(camera);
+  else if (action === "home") result = await ptz.home(camera);
+  else if (action === "gotoPreset") result = await ptz.gotoPreset(camera, req.body?.preset);
+  else if (action === "setPreset") result = await ptz.setPreset(camera, req.body?.name);
+  else return res.status(400).json({ error: "PTZ action không hợp lệ" });
+  if (!result) return res.status(409).json({ error: "Camera không hỗ trợ lệnh PTZ này hoặc đang offline" });
+  res.json({ ok: true, ...(typeof result === "string" ? { preset: result } : {}) });
+});
+
+app.get("/controls/:camera", requireSecret, async (req, res) => {
   const camera = config.cameras.find((item) => item.id === req.params.camera);
   if (!camera) return res.sendStatus(404);
   const detected = ptz.capabilities(camera.id);
+  let streamOnline = detected.online;
+  if (!streamOnline) {
+    try {
+      const frame = await axios.get(`${config.go2rtc.url}/api/frame.jpeg`, {
+        params: { src: camera.id },
+        responseType: "arraybuffer",
+        timeout: 5000,
+      });
+      const jpeg = Buffer.from(frame.data);
+      streamOnline = jpeg.length >= 4 && jpeg[0] === 0xff && jpeg[1] === 0xd8;
+    } catch {
+      streamOnline = false;
+    }
+  }
   res.json({
-    online: detected.online,
+    // ONVIF can reject duplicate sessions when several logical channels share
+    // one NVR. Use the actual RTSP snapshot as the health fallback so a usable
+    // video stream is not incorrectly reported offline.
+    online: streamOnline,
     ptz: detected.ptz,
     talk: Boolean(config.tapoTalkbackPassword && camera.onvif?.ip),
     light: detected.light,
@@ -236,6 +297,9 @@ app.put("/config/cameras/:camera", requireSecret, async (req, res) => {
   const current = index >= 0 ? config.cameras[index] : null;
   try {
     let body = req.body || {};
+    const connectionFields = ["ip", "username", "password", "onvifPort", "rtspPort", "rtspPath", "onvifStream"];
+    const connectionChanged = !current || body.autoConfigure === true
+      || connectionFields.some((field) => Object.prototype.hasOwnProperty.call(body, field));
     if (body.autoConfigure) {
       const rtsp = await resolveRtsp({
         ip: body.ip,
@@ -246,10 +310,22 @@ app.put("/config/cameras/:camera", requireSecret, async (req, res) => {
       body = { ...body, ...rtsp };
     }
     const camera = validateCamera({ ...body, id: req.params.camera }, current);
-    await updateGo2rtc(config.go2rtc.url, camera);
+    const duplicate = config.cameras.find((item) => item.id !== camera.id && sameRtspSource(item, camera));
+    if (duplicate) {
+      return res.status(409).json({
+        error: `Luồng RTSP này đã tồn tại (${duplicate.id})`,
+        code: "duplicate_rtsp_source",
+        cameraId: duplicate.id,
+      });
+    }
+    // A policy-only change such as localAiEnabled must not restart or validate
+    // the video stream. Otherwise a temporary go2rtc issue can make the toggle
+    // appear to save and then jump back to its previous state.
+    if (connectionChanged) await updateGo2rtc(config.go2rtc.url, camera);
     if (index >= 0) config.cameras[index] = camera;
     else config.cameras.push(camera);
     persistCameras(config.camerasPath, config.cameras);
+    if (!camera.localAiEnabled) stopPersonPolling(camera.id);
     ptz.reconnect(camera, watchMotionOnvif);
     res.json(publicCamera(camera));
   } catch (error) {
@@ -268,10 +344,7 @@ app.delete("/config/cameras/:camera", requireSecret, async (req, res) => {
     config.cameras.splice(index, 1);
     persistCameras(config.camerasPath, config.cameras);
     ptz.remove(req.params.camera);
-    const timer = personPollers.get(req.params.camera);
-    if (timer) clearInterval(timer);
-    personPollers.delete(req.params.camera);
-    personPresence.delete(req.params.camera);
+    stopPersonPolling(req.params.camera);
     res.json({ ok: true });
   } catch (error) {
     res.status(502).json({ error: error.message || "Không xóa được camera tại site" });
@@ -282,7 +355,18 @@ const cooldowns = new Map(); // camera id -> bool
 const personPollers = new Map(); // camera id -> interval; ONVIF fallback only
 const personPresence = new Map(); // camera id -> { present, missingFrames }
 
-async function notifyMotion(cameraId) {
+function localAiEnabled(cameraId) {
+  return config.cameras.find((item) => item.id === cameraId)?.localAiEnabled !== false;
+}
+
+function stopPersonPolling(cameraId) {
+  const timer = personPollers.get(cameraId);
+  if (timer) clearInterval(timer);
+  personPollers.delete(cameraId);
+  personPresence.delete(cameraId);
+}
+
+async function notifyMotion(cameraId, trusted) {
   if (!config.motionWebhookUrl) {
     console.warn("⚠️ MOTION_WEBHOOK_URL chưa cấu hình, bỏ qua.");
     return;
@@ -290,9 +374,11 @@ async function notifyMotion(cameraId) {
   try {
     const response = await axios.post(
       config.motionWebhookUrl,
-      { siteId: config.siteId, camera: cameraId },
+      { siteId: config.siteId, camera: cameraId, trusted: Boolean(trusted) },
       // Pages fetches a fresh frame and asks the on-site AI to confirm the
-      // person before inserting the event. On a tunnel this can exceed 5s.
+      // person before inserting the event, unless `trusted` skips that check
+      // (camera's own ONVIF motion is trusted, see onvifMotionTrusted below).
+      // On a tunnel the AI round trip can exceed 5s.
       { headers: { "x-relay-secret": config.relaySecret }, timeout: 30000 }
     );
     console.log(
@@ -305,12 +391,16 @@ async function notifyMotion(cameraId) {
   }
 }
 
-function triggerMotion(cameraId, source) {
+function triggerMotion(cameraId, source, trusted = false) {
   if (cooldowns.get(cameraId)) return;
   console.log(`📡 Kích hoạt motion (${cameraId}, ${source})`);
   cooldowns.set(cameraId, true);
-  notifyMotion(cameraId);
+  notifyMotion(cameraId, trusted);
   setTimeout(() => cooldowns.set(cameraId, false), 30000);
+}
+
+function onvifMotionTrusted(cameraId) {
+  return config.cameras.find((item) => item.id === cameraId)?.onvifMotionTrusted === true;
 }
 
 // A number of low-cost cameras expose ONVIF/PTZ correctly but abort every
@@ -318,9 +408,13 @@ function triggerMotion(cameraId, source) {
 // and local AI worker instead. The backend still re-checks the current frame,
 // so this only replaces the unreliable motion trigger, not server-side policy.
 function startPersonPolling(cameraId) {
-  if (personPollers.has(cameraId) || config.personPollIntervalMs <= 0) return;
+  if (!localAiEnabled(cameraId) || personPollers.has(cameraId) || config.personPollIntervalMs <= 0) return;
 
   const poll = async () => {
+    if (!localAiEnabled(cameraId)) {
+      stopPersonPolling(cameraId);
+      return;
+    }
     try {
       const frame = await axios.get(`${config.go2rtc.url}/api/frame.jpeg`, {
         params: { src: cameraId },
@@ -395,10 +489,21 @@ function watchMotionOnvif(cameraId, cam) {
     }
 
     console.log(`📡 ONVIF motion (${cameraId}): ${topic}`);
-    // Tapo can emit a burst (or even a continuous stream) of CellMotion
-    // events for light/noise changes. Never let those unverified events take
-    // the person-event cooldown: use them only to ensure local AI polling is
-    // awake. The poller calls triggerMotion only after hasPerson=true.
+    // Most cheap cameras (e.g. Tapo) can emit a burst — or even a continuous
+    // stream — of CellMotion events for light/noise changes, not people. By
+    // default those unverified events never take the person-event cooldown:
+    // they only ensure local AI polling is awake, and the poller calls
+    // triggerMotion itself once it confirms hasPerson=true.
+    //
+    // A camera explicitly marked onvifMotionTrusted (opt-in per camera, see
+    // camera-config.js) is assumed to have a reliable motion feed already —
+    // for it, skip the local AI check entirely and record straight away.
+    // This is the main lever for cutting local PC load: no AI-polling loop
+    // ever starts for a trusted camera as long as its ONVIF feed is healthy.
+    if (onvifMotionTrusted(cameraId)) {
+      triggerMotion(cameraId, "ONVIF motion (trusted)", true);
+      return;
+    }
     startPersonPolling(cameraId);
   }
 
@@ -428,8 +533,24 @@ if (!config.siteId) {
   throw new Error("SITE_ID chưa cấu hình trong .env — phải khớp với sites.id trên Turso.");
 }
 
-ptz.connectAll(watchMotionOnvif);
-createFaceBackfill(config).start();
+async function reconcileConfiguredStreams() {
+  const results = await Promise.allSettled(
+    config.cameras.map((camera) => updateGo2rtc(config.go2rtc.url, camera))
+  );
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error(`❌ Không đồng bộ được luồng ${config.cameras[index].id}:`, result.reason?.message || result.reason);
+    }
+  });
+}
+
+// Rebuild go2rtc's dynamic sources on every relay start. This also migrates
+// old NVR entries away from the unsafe shared ONVIF video fallback without
+// changing anything on the NVR itself.
+reconcileConfiguredStreams().finally(() => {
+  ptz.connectAll(watchMotionOnvif);
+  createFaceBackfill(config).start();
+});
 const server = app.listen(config.port, "127.0.0.1", () =>
   console.log(`🚀 Relay (${config.siteId}) chạy ở http://127.0.0.1:${config.port}`)
 );

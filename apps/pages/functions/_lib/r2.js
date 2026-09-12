@@ -11,6 +11,7 @@
 // clips come out unplayable, that assumption is the first thing to check.
 const CLIP_SECONDS = 10;
 const MAX_CLIP_BYTES = 20 * 1024 * 1024; // safety net if bitrate is far above expected
+import { putObject } from "./objectStorage.js";
 
 async function readBoundedClip(readableBody, maxMs, maxBytes) {
   const reader = readableBody.getReader();
@@ -80,24 +81,13 @@ export async function captureClip(site, camera) {
 
 // Upload is deliberately separate from capture so motion.js can begin capture
 // before it knows the eventual DB event id / R2 key.
-export async function uploadClip(env, clipPromise, key) {
-  if (!env.EVENTS_BUCKET) {
-    throw new Error("Kho R2 chưa được cấu hình");
-  }
-
+export async function uploadClip(env, accountId, backend, clipPromise, key) {
   const clip = await clipPromise;
   if (!clip?.byteLength) throw new Error("Camera không trả về clip hợp lệ");
-  await env.EVENTS_BUCKET.put(key, clip, {
-    httpMetadata: { contentType: "video/mp4" },
-  });
-  return key;
+  return putObject(env, accountId, backend, key, clip, "video/mp4");
 }
 
-export async function uploadSnapshot(env, frame, key) {
-  if (!env.EVENTS_BUCKET) throw new Error("Kho R2 chưa được cấu hình");
+export async function uploadSnapshot(env, accountId, backend, frame, key) {
   if (!frame?.byteLength) throw new Error("Ảnh camera rỗng");
-  await env.EVENTS_BUCKET.put(key, frame, {
-    httpMetadata: { contentType: "image/jpeg" },
-  });
-  return key;
+  return putObject(env, accountId, backend, key, frame, "image/jpeg");
 }

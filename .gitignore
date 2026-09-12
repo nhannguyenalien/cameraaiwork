@@ -24,3 +24,7 @@ npm-debug.log*
 
 # OS
 .DS_Store
+
+# local tooling
+.claude/
+apps/pages/.wrangler/

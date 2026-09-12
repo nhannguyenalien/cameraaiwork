@@ -1,9 +1,6 @@
 [Unit]
-Description=CameraAIWork automatic updater
-After=network-online.target
-Wants=network-online.target
+Description=CameraAIWork legacy automatic updater (intentionally disabled)
 
 [Service]
 Type=oneshot
-Environment=CAMERAAIWORK_DIR=__INSTALL_DIR__
-ExecStart=/bin/bash __INSTALL_DIR__/apps/relay/update.sh
+ExecStart=/usr/bin/false

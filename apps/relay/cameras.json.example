@@ -2,6 +2,8 @@
   {
     "id": "tapo",
     "stream": "tapo",
+    "localAiEnabled": true,
+    "onvifMotionTrusted": false,
     "onvif": {
       "ip": "192.168.2.23",
       "port": 2020,
