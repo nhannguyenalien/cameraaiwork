@@ -1,9 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../events/data/event_repository.dart';
+import '../../events/domain/camera_event.dart';
 import '../data/camera_repository.dart';
 import '../domain/camera.dart';
+
+/// How long before a live session expires to silently start a new one.
+const _liveSessionRenewMargin = Duration(seconds: 20);
 
 class CameraDetailScreen extends ConsumerStatefulWidget {
   const CameraDetailScreen({required this.camera, super.key});
@@ -19,8 +27,16 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
   LiveSession? _liveSession;
   bool _startingLive = false;
   String? _actionError;
+  Timer? _renewTimer;
+
+  @override
+  void dispose() {
+    _renewTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _startLive() async {
+    _renewTimer?.cancel();
     setState(() {
       _startingLive = true;
       _actionError = null;
@@ -37,6 +53,12 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
       setState(() {
         _liveSession = session;
         _liveController = controller;
+      });
+      final renewIn =
+          session.expiresAt.difference(DateTime.now().toUtc()) -
+          _liveSessionRenewMargin;
+      _renewTimer = Timer(renewIn.isNegative ? Duration.zero : renewIn, () {
+        if (mounted) _startLive();
       });
     } catch (error) {
       if (mounted) setState(() => _actionError = error.toString());
@@ -57,12 +79,14 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
   void _refresh() {
     ref.invalidate(cameraStatusProvider(widget.camera));
     ref.invalidate(cameraSnapshotProvider(widget.camera));
+    ref.invalidate(cameraEventsProvider(widget.camera.stream));
   }
 
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(cameraStatusProvider(widget.camera));
     final snapshot = ref.watch(cameraSnapshotProvider(widget.camera));
+    final events = ref.watch(cameraEventsProvider(widget.camera.stream));
     final liveController = _liveController;
     final supportsPtz = status.asData?.value.supportsPtz == true;
 
@@ -167,6 +191,35 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
+          const SizedBox(height: 24),
+          Text(
+            'Sự kiện gần đây',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          events.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, _) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.cloud_off, color: Colors.red),
+                title: const Text('Không lấy được sự kiện'),
+                subtitle: Text(error.toString()),
+              ),
+            ),
+            data: (items) => items.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: Text('Chưa có sự kiện nào.')),
+                  )
+                : Column(
+                    children: items
+                        .map((event) => _CameraEventTile(event: event))
+                        .toList(growable: false),
+                  ),
+          ),
         ],
       ),
     );
@@ -267,6 +320,45 @@ class _PtzControls extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _CameraEventTile extends ConsumerWidget {
+  const _CameraEventTile({required this.event});
+  final CameraEvent event;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: () => context.push('/event', extra: event),
+        leading: SizedBox(
+          width: 56,
+          height: 56,
+          child: event.hasImage
+              ? ref
+                    .watch(eventImageProvider(event.id))
+                    .when(
+                      data: (bytes) => Image.memory(bytes, fit: BoxFit.cover),
+                      loading: () => const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      error: (_, _) => const Icon(Icons.broken_image_outlined),
+                    )
+              : const ColoredBox(
+                  color: Color(0xFFE8EAED),
+                  child: Icon(Icons.image_not_supported_outlined),
+                ),
+        ),
+        title: Text(event.personLabel ?? event.typeLabel),
+        subtitle: Text(eventDateLabel(event.timestamp)),
+        trailing: event.hasVideo
+            ? const Icon(Icons.play_circle_outline)
+            : null,
+      ),
     );
   }
 }

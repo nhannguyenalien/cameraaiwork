@@ -51,6 +51,20 @@ class CameraEvent {
   }
 }
 
+extension CameraEventLabels on CameraEvent {
+  String get typeLabel => switch (type) {
+    'motion' => 'Chuyển động',
+    'person' => 'Phát hiện người',
+    _ => type,
+  };
+}
+
+String eventDateLabel(DateTime value) {
+  final date = value.toLocal();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${two(date.hour)}:${two(date.minute)} · ${two(date.day)}/${two(date.month)}/${date.year}';
+}
+
 class EventPage {
   const EventPage({required this.items, this.nextCursor});
   final List<CameraEvent> items;

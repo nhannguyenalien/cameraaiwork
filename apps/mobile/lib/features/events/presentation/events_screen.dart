@@ -304,7 +304,7 @@ class _EventCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      event.personLabel ?? _typeLabel(event.type),
+                      event.personLabel ?? event.typeLabel,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),
@@ -318,7 +318,7 @@ class _EventCard extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            _dateLabel(event.timestamp),
+                            eventDateLabel(event.timestamp),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
@@ -335,16 +335,4 @@ class _EventCard extends ConsumerWidget {
       ),
     );
   }
-}
-
-String _typeLabel(String type) => switch (type) {
-  'motion' => 'Chuyển động',
-  'person' => 'Phát hiện người',
-  _ => type,
-};
-
-String _dateLabel(DateTime value) {
-  final date = value.toLocal();
-  String two(int number) => number.toString().padLeft(2, '0');
-  return '${two(date.hour)}:${two(date.minute)} · ${two(date.day)}/${two(date.month)}/${date.year}';
 }

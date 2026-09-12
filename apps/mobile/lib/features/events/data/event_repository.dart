@@ -19,6 +19,14 @@ final peopleProvider = FutureProvider<List<EventPerson>>(
   (ref) => ref.read(eventRepositoryProvider).people(),
 );
 
+final cameraEventsProvider = FutureProvider.autoDispose
+    .family<List<CameraEvent>, String>((ref, cameraStream) async {
+      final page = await ref
+          .read(eventRepositoryProvider)
+          .list(camera: cameraStream, limit: 8);
+      return page.items;
+    });
+
 class EventRepository {
   const EventRepository(this.client);
   final ApiClient client;
