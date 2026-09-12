@@ -12,8 +12,6 @@ endpoint theo lịch.
 Code, build và test tự động đã hoàn tất. Những việc còn lại đều cần môi trường
 thật hoặc credential production:
 
-- [ ] Thu hồi API token Cloudflare từng được dán vào chat, tạo token mới và cập
-      nhật Pages secret. Repo private không làm token đã lộ trở lại an toàn.
 - [ ] Deploy Pages, chạy migration đổi URL AI cũ sang `/internal/ai`, cấu hình
       R2 binding và GitHub secrets cho maintenance job.
 - [ ] Khi site có điện: cập nhật relay, reboot máy site, rồi chạy E2E một lần để
