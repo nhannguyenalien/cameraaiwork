@@ -23,6 +23,18 @@ void main() {
     expect(event.hasVideo, isTrue);
   });
 
+  test('parses a stringified id (Postgres BIGINT serialization)', () {
+    final event = CameraEvent.fromJson({
+      'id': '42',
+      'camera': 'front-door',
+      'timestamp': '2026-09-09T01:02:03.000Z',
+      'type': 'motion',
+      'acknowledged': 0,
+    });
+
+    expect(event.id, 42);
+  });
+
   test('rejects an event without required identity fields', () {
     expect(
       () => CameraEvent.fromJson({'type': 'motion'}),

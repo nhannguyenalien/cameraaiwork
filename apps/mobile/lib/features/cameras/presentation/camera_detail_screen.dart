@@ -46,9 +46,16 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
           .read(cameraRepositoryProvider)
           .createLiveSession(widget.camera);
       final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.black)
-        ..loadRequest(session.url);
+        ..setJavaScriptMode(JavaScriptMode.unrestricted);
+      try {
+        // webview_flutter_wkwebview has no macOS implementation of
+        // setOpaque, which setBackgroundColor calls under the hood —
+        // it always throws UnimplementedError there.
+        await controller.setBackgroundColor(Colors.black);
+      } on UnimplementedError {
+        // Safe to ignore: WKWebView on macOS already renders opaque.
+      }
+      await controller.loadRequest(session.url);
       if (!mounted) return;
       setState(() {
         _liveSession = session;

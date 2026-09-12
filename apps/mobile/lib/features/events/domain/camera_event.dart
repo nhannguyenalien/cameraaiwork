@@ -1,3 +1,12 @@
+// Postgres BIGINT/COUNT columns (events.id, preview_event_id, seen_count)
+// are serialized as JSON strings, not numbers, to avoid precision loss —
+// accept either representation instead of assuming a JSON number.
+int? _parseInt(Object? value) => switch (value) {
+  final num v => v.toInt(),
+  final String v => int.tryParse(v),
+  _ => null,
+};
+
 class CameraEvent {
   const CameraEvent({
     required this.id,
@@ -29,7 +38,7 @@ class CameraEvent {
   bool get hasVideo => videoKey?.isNotEmpty == true;
 
   factory CameraEvent.fromJson(Map<String, dynamic> json) {
-    final id = (json['id'] as num?)?.toInt();
+    final id = _parseInt(json['id']);
     final camera = json['camera']?.toString();
     final timestamp = DateTime.tryParse(json['timestamp']?.toString() ?? '');
     if (id == null || camera == null || timestamp == null) {
@@ -98,8 +107,8 @@ class EventPerson {
       label: json['label']?.toString(),
       firstSeenAt: DateTime.tryParse(json['first_seen_at']?.toString() ?? ''),
       lastSeenAt: DateTime.tryParse(json['last_seen_at']?.toString() ?? ''),
-      seenCount: (json['seen_count'] as num?)?.toInt() ?? 0,
-      previewEventId: (json['preview_event_id'] as num?)?.toInt(),
+      seenCount: _parseInt(json['seen_count']) ?? 0,
+      previewEventId: _parseInt(json['preview_event_id']),
     );
   }
 }
