@@ -9,9 +9,15 @@ import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 const SESSION_LABEL_PATTERN = "web %";
 
 export const onRequestGet = withErrorHandling(async ({ env, data }) => {
+  // Revoking a key is meant to make it disappear from this list, not just
+  // stop working — there's no "revocation history" view, so a revoked key
+  // left visible here has no revoke button that would do anything (the
+  // DELETE handler only matches revoked_at IS NULL) and just clutters the
+  // list looking identical to an active key.
   const result = await getDb(env).execute({
-    sql: `SELECT id, label, scope, created_at, expires_at, revoked_at FROM api_keys
-          WHERE account_id = ? AND label NOT LIKE ? ORDER BY created_at DESC`,
+    sql: `SELECT id, label, scope, created_at, expires_at FROM api_keys
+          WHERE account_id = ? AND label NOT LIKE ? AND revoked_at IS NULL
+          ORDER BY created_at DESC`,
     args: [data.accountId, SESSION_LABEL_PATTERN],
   });
   return json(result.rows.map((row) => ({
@@ -20,7 +26,6 @@ export const onRequestGet = withErrorHandling(async ({ env, data }) => {
     scope: row.scope,
     createdAt: row.created_at,
     expiresAt: row.expires_at,
-    revoked: Boolean(row.revoked_at),
   })));
 });
 

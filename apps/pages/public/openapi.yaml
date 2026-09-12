@@ -82,7 +82,7 @@ paths:
       tags: [Account]
       summary: List API keys the account holder created (browser session tokens are not included)
       responses:
-        '200': { description: API keys; raw key values are never returned after creation, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } }
+        '200': { description: Active (non-revoked) API keys; raw key values are never returned after creation, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } }
     post:
       operationId: createApiKey
       tags: [Account]
@@ -689,5 +689,5 @@ components:
     AgentChatRequest: { type: object, properties: { provider: { type: string, enum: [auto, openai, gemini], default: auto }, messages: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/AgentChatMessage' } }, confirmedAction: { $ref: '#/components/schemas/AgentActionRequest' } } }
     AgentChatAnswer: { type: object, required: [answer], properties: { answer: { type: string }, provider: { type: string, enum: [openai, gemini] }, model: { type: string }, proposals: { type: array, items: { $ref: '#/components/schemas/AgentActionRequest' } }, toolResults: { type: array, items: { type: object, additionalProperties: true } }, action: { type: string }, result: {} } }
     Job: { type: object, properties: { id: { type: string }, status: { type: string } }, additionalProperties: true }
-    ApiKey: { type: object, required: [id, label, scope, createdAt, revoked], properties: { id: { type: string, description: SHA-256 hash of the key; opaque, not the raw key. }, label: { type: string }, scope: { type: string, enum: [full, read] }, createdAt: { type: string, format: date-time }, expiresAt: { type: [string, 'null'], format: date-time }, revoked: { type: boolean } } }
+    ApiKey: { type: object, required: [id, label, scope, createdAt], properties: { id: { type: string, description: SHA-256 hash of the key; opaque, not the raw key. }, label: { type: string }, scope: { type: string, enum: [full, read] }, createdAt: { type: string, format: date-time }, expiresAt: { type: [string, 'null'], format: date-time } } }
     ApiKeyCreated: { type: object, required: [id, label, scope, apiKey, createdAt], properties: { id: { type: string }, label: { type: string }, scope: { type: string, enum: [full, read] }, apiKey: { type: string, writeOnly: true, description: Shown only in this response. }, createdAt: { type: string, format: date-time }, expiresAt: { type: [string, 'null'], format: date-time } } }
