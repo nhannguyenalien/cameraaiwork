@@ -24,11 +24,15 @@
  *   3. Be the only origin behind the site's named tunnel: authenticated
  *      internal proxy for go2rtc/AI plus signed, camera-scoped live view.
  */
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const express = require("express");
 const axios = require("axios");
 const http = require("http");
 const httpProxy = require("http-proxy");
 const { spawn } = require("child_process");
+const { randomUUID } = require("crypto");
 const config = require("./config");
 const ptz = require("./ptz");
 const { startNamedTunnel } = require("./tunnel");
@@ -72,39 +76,57 @@ const talkback = createTalkback({
 function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 20 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const rtspUrl = `${config.go2rtc.rtspUrl.replace(/\/$/, "")}/${encodeURIComponent(cameraId)}`;
-    const chunks = [];
-    let bytes = 0;
+    const outputPath = path.join(os.tmpdir(), `cameraai-clip-${randomUUID()}.mp4`);
     let settled = false;
     let stderr = "";
 
     // go2rtc's HTTP MP4 endpoint may replay the same completed fragment after
     // a client truncates it. FFmpeg opening go2rtc's RTSP endpoint creates a
     // genuinely new consumer for every event and closes a valid finite MP4.
+    //
+    // Output goes to a real (seekable) temp file, not a pipe: +faststart
+    // needs to seek back and rewrite the moov box at the front once encoding
+    // finishes, which a pipe can't support. That's also why this used to
+    // write frag_keyframe+empty_moov instead — but that fragmented format
+    // isn't playable via a plain HTTP Range GET in AVPlayer/ExoPlayer or a
+    // <video src>, which is exactly how /api/events/:id/video serves clips.
     const ffmpeg = spawn("ffmpeg", [
       "-hide_banner", "-loglevel", "error",
       "-rtsp_transport", "tcp",
       "-i", rtspUrl,
       "-t", String(durationMs / 1000),
       "-map", "0:v:0", "-c:v", "copy", "-an",
-      "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-      "-f", "mp4", "pipe:1",
-    ], { stdio: ["ignore", "pipe", "pipe"] });
+      "-movflags", "+faststart",
+      "-f", "mp4", "-y", outputPath,
+    ], { stdio: ["ignore", "ignore", "pipe"] });
 
-    const finish = (err) => {
+    const cleanup = () => fs.promises.unlink(outputPath).catch(() => {});
+
+    const finish = async (err) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (!ffmpeg.killed) ffmpeg.kill("SIGKILL");
-      if (err) reject(err);
-      else resolve(Buffer.concat(chunks, bytes));
+      if (err) {
+        await cleanup();
+        return reject(err);
+      }
+      try {
+        const { size } = await fs.promises.stat(outputPath);
+        if (size > maxBytes) {
+          await cleanup();
+          return reject(new Error("Clip vượt giới hạn dung lượng"));
+        }
+        const buffer = await fs.promises.readFile(outputPath);
+        await cleanup();
+        resolve(buffer);
+      } catch (readErr) {
+        await cleanup();
+        reject(readErr);
+      }
     };
 
     const timer = setTimeout(() => finish(new Error("FFmpeg ghi clip quá thời gian")), durationMs + 15000);
-    ffmpeg.stdout.on("data", (chunk) => {
-      if (bytes + chunk.length > maxBytes) return finish(new Error("Clip vượt giới hạn dung lượng"));
-      chunks.push(chunk);
-      bytes += chunk.length;
-    });
     ffmpeg.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-2000); });
     ffmpeg.on("error", (err) => finish(err));
     ffmpeg.on("close", (code) => {
