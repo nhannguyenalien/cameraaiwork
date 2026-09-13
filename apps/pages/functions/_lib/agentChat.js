@@ -33,7 +33,16 @@ async function runTool(call, execute) {
   const validationError = validateAgentAction(call.name, args);
   if (validationError) return { error: validationError };
   if (requiresAgentConfirmation(call.name)) return { proposal: { action: call.name, args } };
-  return { result: await execute(call.name, args) };
+  // A tool failure (e.g. scan_cameras when a site's relay/LAN is
+  // unreachable) must not crash the whole turn — feed the error back to the
+  // model as a normal tool result so it can still answer using whatever
+  // other tools succeeded, instead of the request failing outright with a
+  // top-level "Không gọi được AI provider" error.
+  try {
+    return { result: await execute(call.name, args) };
+  } catch (err) {
+    return { error: String(err?.message || err).slice(0, 500) };
+  }
 }
 
 function separateMedia(outcome) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/agent/presentation/agent_chat_screen.dart';
 import '../features/auth/application/session_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/cameras/domain/camera.dart';
@@ -36,6 +37,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
       GoRoute(path: '/events', builder: (_, _) => const EventsScreen()),
       GoRoute(path: '/people', builder: (_, _) => const PeopleScreen()),
+      GoRoute(path: '/agent', builder: (_, _) => const AgentChatScreen()),
       GoRoute(
         path: '/event',
         builder: (_, state) {

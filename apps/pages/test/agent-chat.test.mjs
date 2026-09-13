@@ -88,6 +88,26 @@ test("OpenAI receives camera images inline without exposing base64 in tool resul
   assert.doesNotMatch(JSON.stringify(result.toolResults), /aW1hZ2U=/);
 });
 
+test("a failing tool call is reported back to the model instead of crashing the turn", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (_url, options) => {
+    requestCount += 1;
+    const body = JSON.parse(options.body);
+    if (requestCount === 1) return Response.json({ model: "gpt-test", output: [{
+      type: "function_call", name: "scan_cameras", call_id: "call-1", arguments: JSON.stringify({ siteId: "st-1" }),
+    }] });
+    const toolOutput = JSON.parse(body.input.at(-1).output);
+    assert.match(toolOutput.error, /Không quét được mạng LAN/);
+    return Response.json({ model: "gpt-test", output_text: "Không quét được camera trong LAN lúc này.", output: [] });
+  };
+  const result = await chatOpenAI({ apiKey: "test" }, [{ role: "user", content: "Quét camera mới" }], async () => {
+    throw new Error("Không quét được mạng LAN tại site");
+  });
+  assert.equal(result.answer, "Không quét được camera trong LAN lúc này.");
+});
+
 test("Gemini receives short event videos as inline data", async (t) => {
   const originalFetch = globalThis.fetch;
   let requestCount = 0;

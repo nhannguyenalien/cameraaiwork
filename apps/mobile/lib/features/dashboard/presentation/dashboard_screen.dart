@@ -17,6 +17,11 @@ class DashboardScreen extends ConsumerWidget {
         title: const Text('CameraAI'),
         actions: [
           IconButton(
+            tooltip: 'Trợ lý AI',
+            onPressed: () => context.push('/agent'),
+            icon: const Icon(Icons.smart_toy_outlined),
+          ),
+          IconButton(
             tooltip: 'Mọi người',
             onPressed: () => context.push('/people'),
             icon: const Icon(Icons.people_outline),
