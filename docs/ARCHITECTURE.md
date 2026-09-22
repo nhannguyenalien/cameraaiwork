@@ -45,6 +45,20 @@ analyzes every frame of continuous video, and go2rtc only needs to pull
 RTSP when a browser actually opens the live view. This is the biggest
 lever for keeping bandwidth/CPU low across N sites.
 
+**Cameras without ONVIF still get detection, via polling instead of a
+push event.** A camera is marked `hasOnvif: false` in `cameras.json`
+(`apps/relay/cameras.json.example`) when it has no ONVIF service at all —
+`apps/relay/src/ptz.js` then never attempts a connection for it (avoids an
+infinite reconnect loop), and `apps/relay/src/index.js` starts
+`startPersonPolling` for it directly at boot / on config save instead of
+waiting for an ONVIF motion event or PullPoint error to trigger it. The
+poller pulls a snapshot from go2rtc and calls the local AI worker's
+`/detect` every `PERSON_POLL_INTERVAL_MS` (default 5s) — same mechanism
+already used as the fallback for cameras whose ONVIF PullPoint is broken,
+just started unconditionally instead of after a proven ONVIF error. This
+is strictly more CPU/bandwidth than the ONVIF-push path (fixed-interval
+polling vs. event-driven), so it's opt-in per camera, not the default.
+
 **Multi-tenant from the start.** Every `site`, `camera`, `event`, and `job`
 row belongs to an `account`. A relay only ever talks about *its own* site
 (authenticated with that site's `relay_secret`); the Pages API only ever

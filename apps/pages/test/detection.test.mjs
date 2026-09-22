@@ -25,6 +25,8 @@ test("detection falls back from a stale AI hostname to AI behind the relay", asy
   ]);
   assert.deepEqual(result, {
     hasPerson: true,
+    hasVehicle: false,
+    vehicleBoxes: [],
     faceEmbedding: [0.1, 0.2],
     faceEmbeddings: [[0.1, 0.2]],
     faceDetections: [{ embedding: [0.1, 0.2], box: null }],

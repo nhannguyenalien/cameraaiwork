@@ -2,6 +2,7 @@ import { getDb } from "../../_lib/db.js";
 import { cleanupOrphanTunnels, managedInfrastructure } from "../../_lib/cloudflareTunnel.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 import { triggerGpuScan } from "../../_lib/gpuWorker.js";
+import { cleanupExpiredVideos } from "../../_lib/videoRetention.js";
 
 function positiveInt(value, fallback) {
   const parsed = Number(value);
@@ -34,6 +35,10 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
     console.error("GPU backfill dispatch failed:", error.message || error);
     return false;
   });
+  const videoRetention = await cleanupExpiredVideos(env).catch((error) => {
+    console.error("Video retention cleanup failed:", error.message || error);
+    return { scanned: 0, deleted: 0, errors: [{ accountId: null, backend: null, count: 0 }] };
+  });
 
   return json({
     ok: warnings.length === 0,
@@ -44,5 +49,6 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
     orphanTunnelsDeleted: deleted,
     warnings,
     gpuBackfillQueued,
+    videoRetention,
   }, { status: warnings.length ? 503 : 200 });
 });

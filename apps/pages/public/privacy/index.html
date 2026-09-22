@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chính sách quyền riêng tư | CameraAIWork</title>
+  <meta name="description" content="Chính sách quyền riêng tư của CameraAIWork: dữ liệu thu thập, cách sử dụng, dữ liệu sinh trắc học, Google Drive và quyền của bạn." />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@latest/dist/css/tabler.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <style>
+    :root { scroll-padding-top: 5rem; }
+    body { background: #f6f8fb; }
+    .doc-section { margin-bottom: 1.5rem; }
+    .doc-nav { position: sticky; top: 1rem; }
+    .doc-section h2 { font-size: 1.15rem; }
+    .doc-section ul { margin-bottom: 0; }
+  </style>
+</head>
+<body class="border-top-wide border-primary">
+  <header class="navbar navbar-expand-md navbar-light bg-white border-bottom">
+    <div class="container-xl">
+      <a class="navbar-brand" href="/">CameraAIWork</a>
+      <div class="navbar-nav flex-row gap-2 align-items-center">
+        <select id="language-select" class="form-select form-select-sm" aria-label="Language">
+          <option value="vi">Tiếng Việt</option><option value="en">English</option><option value="ja">日本語</option>
+          <option value="fr">Français</option><option value="ko">한국어</option><option value="es">Español</option>
+        </select>
+        <a id="terms-link" class="nav-link" href="/terms/">Điều khoản dịch vụ</a>
+        <a id="dashboard-link" class="btn btn-primary btn-sm" href="/">Mở dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrapper">
+    <div class="page-header">
+      <div class="container-xl py-4">
+        <div class="page-pretitle">Legal</div>
+        <h1 id="page-title" class="page-title">Chính sách quyền riêng tư</h1>
+        <p id="page-subtitle" class="text-secondary mt-2 mb-0">Cập nhật lần cuối: 13/09/2026</p>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="container-xl">
+        <div class="row g-4">
+          <aside class="col-lg-3">
+            <div class="card doc-nav">
+              <div class="list-group list-group-flush">
+                <a id="nav-intro" class="list-group-item list-group-item-action" href="#intro">Giới thiệu</a>
+                <a id="nav-data" class="list-group-item list-group-item-action" href="#data-collected">Dữ liệu thu thập</a>
+                <a id="nav-use" class="list-group-item list-group-item-action" href="#data-use">Cách chúng tôi sử dụng</a>
+                <a id="nav-third-parties" class="list-group-item list-group-item-action" href="#third-parties">Bên thứ ba &amp; Google Drive</a>
+                <a id="nav-biometric" class="list-group-item list-group-item-action" href="#biometric">Dữ liệu sinh trắc học</a>
+                <a id="nav-retention" class="list-group-item list-group-item-action" href="#retention">Lưu trữ &amp; Xoá</a>
+                <a id="nav-rights" class="list-group-item list-group-item-action" href="#rights">Quyền của bạn</a>
+                <a id="nav-security" class="list-group-item list-group-item-action" href="#security">Bảo mật</a>
+                <a id="nav-children" class="list-group-item list-group-item-action" href="#children">Trẻ em</a>
+                <a id="nav-changes" class="list-group-item list-group-item-action" href="#changes">Thay đổi chính sách</a>
+                <a id="nav-contact" class="list-group-item list-group-item-action" href="#contact">Liên hệ</a>
+              </div>
+            </div>
+          </aside>
+
+          <div class="col-lg-9">
+            <section id="intro" class="card doc-section"><div class="card-body">
+              <h2 id="intro-title">Giới thiệu</h2>
+              <p id="intro-body" class="mb-0">CameraAIWork ("chúng tôi") cung cấp dịch vụ giám sát camera thông minh: nhận diện khuôn mặt, phát hiện chuyển động, cảnh báo tức thời, xem trực tiếp và trợ lý AI. Chính sách này giải thích dữ liệu nào chúng tôi thu thập khi bạn dùng dashboard, camera và các tích hợp liên quan (Google Drive, S3, Telegram...), vì sao chúng tôi thu thập, và các quyền bạn có đối với dữ liệu đó.</p>
+            </div></section>
+
+            <section id="data-collected" class="card doc-section"><div class="card-body">
+              <h2 id="data-title">Dữ liệu chúng tôi thu thập</h2>
+              <ul id="data-list">
+                <li><strong>Thông tin tài khoản:</strong> email, mật khẩu (đã băm), thông tin thanh toán xử lý qua Stripe (chúng tôi không lưu số thẻ).</li>
+                <li><strong>Cấu hình site/camera:</strong> tên site, địa chỉ IP camera nội bộ, thông tin ONVIF/RTSP do bạn nhập.</li>
+                <li><strong>Ảnh và video sự kiện:</strong> ảnh chụp và clip ngắn khi camera phát hiện chuyển động/người, lưu tại nơi bạn chọn (Cloudflare R2, S3 riêng, hoặc Google Drive riêng của bạn).</li>
+                <li><strong>Dữ liệu sinh trắc học:</strong> embedding khuôn mặt dùng để nhận diện người quen (xem mục riêng bên dưới).</li>
+                <li><strong>Thông tin tích hợp bên thứ ba:</strong> Telegram bot token, RunPod API key, khoá S3, hoặc quyền truy cập Google Drive — được mã hoá trước khi lưu.</li>
+                <li><strong>Dữ liệu sử dụng:</strong> nhật ký truy cập API, thời điểm đăng nhập, thiết bị/trình duyệt, phục vụ vận hành và bảo mật.</li>
+              </ul>
+            </div></section>
+
+            <section id="data-use" class="card doc-section"><div class="card-body">
+              <h2 id="use-title">Cách chúng tôi sử dụng dữ liệu</h2>
+              <ul id="use-list">
+                <li>Vận hành dịch vụ: hiển thị live view, phát hiện chuyển động, gửi cảnh báo, trả lời câu hỏi qua AI Agent.</li>
+                <li>Nhận diện và gom nhóm khuôn mặt để bạn biết ai xuất hiện trong sự kiện.</li>
+                <li>Lưu trữ ảnh/video theo lựa chọn của bạn (R2 mặc định, hoặc S3/Google Drive riêng nếu bạn kết nối).</li>
+                <li>Xử lý thanh toán và quản lý gói dịch vụ (Free/Pro) qua Stripe.</li>
+                <li>Gỡ lỗi, đảm bảo an toàn hệ thống và cải thiện chất lượng dịch vụ.</li>
+                <li>Chúng tôi không bán dữ liệu cá nhân hoặc hình ảnh/video của bạn cho bên thứ ba.</li>
+              </ul>
+            </div></section>
+
+            <section id="third-parties" class="card doc-section"><div class="card-body">
+              <h2 id="third-parties-title">Bên thứ ba &amp; Google Drive</h2>
+              <p id="third-parties-body">Chúng tôi dùng các nhà cung cấp hạ tầng sau để vận hành dịch vụ, mỗi bên chỉ nhận dữ liệu cần thiết cho vai trò của họ: Cloudflare (hosting, lưu trữ R2), Neon (cơ sở dữ liệu), Stripe (thanh toán), RunPod (xử lý AI theo yêu cầu), Telegram Bot API (gửi cảnh báo nếu bạn bật).</p>
+              <div id="google-drive-note" class="alert alert-info mb-0">
+                <strong>Nếu bạn kết nối Google Drive:</strong> chúng tôi chỉ yêu cầu quyền <code>drive.file</code> — phạm vi hẹp nhất Google cung cấp. Sau khi bạn cấp quyền, ứng dụng chỉ có thể đọc/ghi vào <em>đúng thư mục bạn chọn</em> qua hộp thoại Google Picker, không thể xem, liệt kê hay chỉnh sửa bất kỳ file/thư mục nào khác trong Drive của bạn. Bạn có thể thu hồi quyền này bất cứ lúc nào tại <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>. Việc CameraAIWork sử dụng và chuyển thông tin nhận được từ Google API tuân thủ <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Chính sách dữ liệu người dùng của Dịch vụ API Google</a>, bao gồm các yêu cầu về Sử dụng hạn chế (Limited Use).
+              </div>
+            </div></section>
+
+            <section id="biometric" class="card doc-section"><div class="card-body">
+              <h2 id="biometric-title">Dữ liệu sinh trắc học (nhận diện khuôn mặt)</h2>
+              <p id="biometric-body" class="mb-0">Khi camera phát hiện người, hệ thống có thể tạo ra một "embedding" khuôn mặt (một dãy số toán học đại diện cho đặc điểm khuôn mặt, không phải ảnh khuôn mặt) để gom các lượt xuất hiện của cùng một người vào một hồ sơ "Người" trong dashboard của bạn. Dữ liệu này chỉ dùng nội bộ cho tài khoản của bạn, không dùng để nhận diện chéo giữa các khách hàng khác nhau, và không chia sẻ cho bên thứ ba nào ngoài các nhà cung cấp hạ tầng nêu trên. Bạn có thể xoá một hồ sơ "Người" hoặc toàn bộ dữ liệu khuôn mặt bất cứ lúc nào trong dashboard; embedding liên quan sẽ bị xoá vĩnh viễn khỏi hệ thống.</p>
+            </div></section>
+
+            <section id="retention" class="card doc-section"><div class="card-body">
+              <h2 id="retention-title">Lưu trữ &amp; Xoá dữ liệu</h2>
+              <ul id="retention-list">
+                <li>Tài khoản dùng gói miễn phí (R2): dung lượng giới hạn, sự kiện cũ nhất bị xoá tự động khi vượt hạn mức để nhường chỗ cho sự kiện mới.</li>
+                <li>Tài khoản dùng S3/Google Drive riêng: bạn toàn quyền kiểm soát thời gian lưu trữ theo chính sách của dịch vụ đó.</li>
+                <li>Xoá tài khoản sẽ xoá toàn bộ camera, site, sự kiện, hồ sơ người và cấu hình tích hợp liên quan trong hệ thống của chúng tôi.</li>
+              </ul>
+            </div></section>
+
+            <section id="rights" class="card doc-section"><div class="card-body">
+              <h2 id="rights-title">Quyền của bạn</h2>
+              <ul id="rights-list">
+                <li>Xem, xuất hoặc xoá ảnh/video sự kiện và hồ sơ người trực tiếp trong dashboard.</li>
+                <li>Thu hồi quyền truy cập Google Drive bất cứ lúc nào tại Google Account của bạn hoặc bằng cách "Kết nối lại" sang nơi lưu khác trong dashboard.</li>
+                <li>Yêu cầu xuất hoặc xoá toàn bộ dữ liệu tài khoản bằng cách liên hệ chúng tôi (xem mục Liên hệ).</li>
+                <li>Đóng tài khoản bất cứ lúc nào; dữ liệu sẽ được xoá theo mục Lưu trữ &amp; Xoá ở trên.</li>
+              </ul>
+            </div></section>
+
+            <section id="security" class="card doc-section"><div class="card-body">
+              <h2 id="security-title">Bảo mật</h2>
+              <p id="security-body" class="mb-0">Mọi kết nối tới dashboard và camera đều qua HTTPS/WSS. Khoá bí mật của các tích hợp bên thứ ba (Telegram, RunPod, S3, Google Drive) được mã hoá bằng AES-GCM trước khi lưu vào cơ sở dữ liệu — chúng tôi không lưu mật khẩu hay access token dạng văn bản thuần. Việc điều khiển camera qua tunnel đều được ký và xác thực; không mở port trực tiếp ra Internet.</p>
+            </div></section>
+
+            <section id="children" class="card doc-section"><div class="card-body">
+              <h2 id="children-title">Trẻ em</h2>
+              <p id="children-body" class="mb-0">Dịch vụ không dành cho trẻ em dưới 16 tuổi và chúng tôi không cố ý thu thập thông tin tài khoản từ trẻ em. Nếu camera của bạn ghi nhận hình ảnh trẻ em trong khuôn viên giám sát, bạn (chủ tài khoản) chịu trách nhiệm tuân thủ quy định pháp luật về bảo vệ dữ liệu trẻ em áp dụng tại khu vực của bạn.</p>
+            </div></section>
+
+            <section id="changes" class="card doc-section"><div class="card-body">
+              <h2 id="changes-title">Thay đổi chính sách</h2>
+              <p id="changes-body" class="mb-0">Chúng tôi có thể cập nhật chính sách này theo thời gian. Ngày cập nhật gần nhất luôn hiển thị ở đầu trang. Thay đổi quan trọng sẽ được thông báo qua email hoặc trong dashboard.</p>
+            </div></section>
+
+            <section id="contact" class="card doc-section"><div class="card-body">
+              <h2 id="contact-title">Liên hệ</h2>
+              <p id="contact-body" class="mb-0">Mọi câu hỏi về quyền riêng tư, vui lòng liên hệ <a href="mailto:nhantin41@gmail.com">nhantin41@gmail.com</a>.</p>
+            </div></section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/privacy/i18n.js"></script>
+</body>
+</html>

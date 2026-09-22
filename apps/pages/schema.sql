@@ -24,8 +24,10 @@ CREATE TABLE IF NOT EXISTS accounts (
     plan TEXT DEFAULT 'free',
     subscription_status TEXT DEFAULT 'inactive',
     stripe_customer_id TEXT,
-    stripe_subscription_id TEXT
+    stripe_subscription_id TEXT,
+    video_retention_days INTEGER NOT NULL DEFAULT 7
 );
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS video_retention_days INTEGER NOT NULL DEFAULT 7;
 -- SQLite can't add a UNIQUE column via ALTER TABLE, so uniqueness is a
 -- separate index instead (NULLs don't collide, so accounts without an
 -- email — e.g. seeded manually — are unaffected).
@@ -37,6 +39,11 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
     password_hash TEXT NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+-- The PBKDF2 iteration count used when password_hash was computed. Existing
+-- rows predate this column and were hashed with the original 100,000-round
+-- constant; new/changed passwords use a lower count that fits the Workers
+-- free-tier CPU budget more reliably (see functions/_lib/auth.js).
+ALTER TABLE auth_credentials ADD COLUMN IF NOT EXISTS password_iterations INTEGER NOT NULL DEFAULT 100000;
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id TEXT PRIMARY KEY,               -- SHA-256 hash of the key, never the raw key
@@ -103,8 +110,10 @@ CREATE TABLE IF NOT EXISTS cameras (
     account_id TEXT NOT NULL REFERENCES accounts(id), -- denormalized for fast scoping
     stream TEXT NOT NULL,              -- go2rtc stream name at that site
     name TEXT,
-    record_on_person INTEGER NOT NULL DEFAULT 1 -- upload an R2 clip for person events
+    record_on_person INTEGER NOT NULL DEFAULT 1, -- upload an R2 clip for person events
+    clip_duration_seconds INTEGER NOT NULL DEFAULT 10
 );
+ALTER TABLE cameras ADD COLUMN IF NOT EXISTS clip_duration_seconds INTEGER NOT NULL DEFAULT 10;
 
 -- One row per distinct face the system has clustered together — not
 -- necessarily named yet ("Người lạ #3" until the account owner labels

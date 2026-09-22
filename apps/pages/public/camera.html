@@ -11,17 +11,45 @@
   .ptz-pad .btn { height:3.25rem; }
   .talk-button.is-recording { animation:talk-pulse 1s infinite; }
   @keyframes talk-pulse { 50% { box-shadow:0 0 0 .4rem rgba(214,57,57,.18); } }
-  .event-line { position:relative; padding-left:2rem; }
-  .event-line::before { content:""; position:absolute; left:.5rem; top:0; bottom:-1.5rem; width:2px; background:var(--tblr-border-color); }
-  .event-line:last-child::before { bottom:50%; }
-  .event-dot { position:absolute; left:0; top:1.35rem; width:1.05rem; height:1.05rem; border-radius:50%; background:var(--tblr-primary); border:3px solid var(--tblr-bg-surface); z-index:1; }
   .event-image { width:100%; max-height:320px; object-fit:cover; }
   .video-shell video { width:100%; max-height:420px; background:#000; }
-  .events-pagination { position:sticky; bottom:.75rem; z-index:5; }
-  .events-pagination .card-body { backdrop-filter:blur(10px); background:var(--tblr-bg-surface); }
-  .events-pagination .page-link { min-width:2.5rem; min-height:2.5rem; display:grid; place-items:center; border-radius:.5rem !important; font-weight:600; }
-  .events-pagination .page-item.active .page-link { box-shadow:0 .25rem .75rem rgba(var(--tblr-primary-rgb),.24); }
   .events-loading { opacity:.55; pointer-events:none; }
+  .camera-timeline { overflow:hidden; }
+  .timeline-toolbar { display:flex; align-items:end; gap:.5rem; flex-wrap:wrap; }
+  .timeline-picker { padding:.55rem .7rem; border:1px solid rgba(var(--tblr-primary-rgb),.28); border-radius:10px; background:rgba(var(--tblr-primary-rgb),.06); }
+  .timeline-picker-label { display:block; margin-bottom:.25rem; color:var(--tblr-primary); font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .timeline-date { width:12rem; min-height:2.65rem; border-color:rgba(var(--tblr-primary-rgb),.35); font-size:1rem; font-weight:600; }
+  .timeline-time { width:7rem; min-height:2.65rem; font-weight:600; }
+  .timeline-zoom { display:flex; align-items:center; border:1px solid var(--tblr-border-color); border-radius:8px; overflow:hidden; }
+  .timeline-zoom .btn { border:0; border-radius:0; }
+  .timeline-zoom-label { min-width:4.25rem; text-align:center; font-size:.75rem; font-weight:700; color:var(--tblr-body-color); }
+  .timeline-scroll { overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; }
+  .timeline-stage { position:relative; min-width:640px; height:112px; cursor:pointer; user-select:none; touch-action:none; background:var(--tblr-bg-surface); }
+  .timeline-hours { position:absolute; inset:0 0 auto; height:34px; }
+  .timeline-hour { position:absolute; top:0; color:var(--tblr-secondary); font-size:.7rem; transform:translateX(-50%); padding-top:.4rem; }
+  .timeline-hour:first-child { transform:none; }
+  .timeline-lane { position:absolute; inset:34px 12px 30px; border-radius:10px; background:var(--tblr-bg-surface-secondary); box-shadow:inset 0 0 0 1px var(--tblr-border-color-translucent); }
+  .timeline-lane::after { content:""; position:absolute; inset:50% 0 auto; border-top:1px solid var(--tblr-border-color-translucent); }
+  .timeline-event { position:absolute; top:44px; height:28px; min-width:12px; border:0; border-radius:7px; background:var(--tblr-primary); box-shadow:0 2px 5px rgba(var(--tblr-primary-rgb),.22); color:#fff; cursor:pointer; padding:0 5px; font-size:.65rem; font-weight:700; line-height:28px; overflow:hidden; transition:transform .12s,filter .12s; z-index:3; }
+  .timeline-event.vehicle { background:var(--tblr-orange); }
+  .timeline-event.mixed { background:linear-gradient(90deg,var(--tblr-primary) 50%,var(--tblr-orange) 50%); }
+  .timeline-event:hover,.timeline-event.active { filter:brightness(1.08); transform:translateY(-2px); z-index:4; }
+  .timeline-event.active { outline:2px solid var(--tblr-body-color); outline-offset:2px; }
+  .timeline-playhead { position:absolute; top:29px; bottom:24px; width:2px; background:var(--tblr-red); z-index:6; pointer-events:none; }
+  .timeline-playhead::before { content:""; position:absolute; top:0; left:50%; width:10px; height:10px; border-radius:50%; background:var(--tblr-red); transform:translate(-50%,-50%); }
+  .timeline-playhead-label { position:absolute; bottom:4px; transform:translateX(-50%); color:var(--tblr-red); font-size:.72rem; font-weight:700; white-space:nowrap; z-index:7; pointer-events:none; }
+  .timeline-now { position:absolute; top:34px; bottom:30px; width:1px; border-left:1px dashed var(--tblr-green); z-index:2; }
+  .timeline-legend { display:flex; align-items:center; gap:1rem; font-size:.75rem; color:var(--tblr-secondary); }
+  .timeline-legend span::before { content:""; display:inline-block; width:.55rem; height:.55rem; border-radius:2px; background:var(--tblr-primary); margin-right:.35rem; }
+  .timeline-legend .vehicle::before { background:var(--tblr-orange); }
+  .timeline-preview { position:fixed; width:240px; z-index:1080; pointer-events:none; border-radius:10px; overflow:hidden; background:#111827; color:#fff; box-shadow:0 12px 32px rgba(0,0,0,.32); opacity:0; transform:translateY(6px); transition:opacity .12s,transform .12s; }
+  .timeline-preview.show { opacity:1; transform:translateY(0); }
+  .timeline-preview-image { display:block; width:100%; height:135px; object-fit:cover; background:#1f2937; }
+  .timeline-preview-empty { height:135px; display:grid; place-items:center; color:#9ca3af; background:#1f2937; }
+  .timeline-preview-meta { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.55rem .7rem; font-size:.75rem; }
+  .timeline-preview-meta strong { font-size:.82rem; }
+  .event-viewer-placeholder { min-height:220px; display:grid; place-items:center; background:var(--tblr-bg-surface-secondary); }
+  @media (max-width:767.98px) { .timeline-stage { min-width:620px; } .timeline-picker { width:100%; } .timeline-date { width:calc(100% - 7.5rem); } .timeline-legend { width:100%; } }
 </style>
 </head>
 <body class="border-top-wide border-primary">
@@ -39,7 +67,7 @@
     <div id="camera-page" class="d-none">
       <div class="page-header mb-3">
         <div class="row align-items-center">
-          <div class="col"><div class="page-pretitle" id="site-name"></div><h2 class="page-title" id="camera-name">Camera</h2></div>
+          <div class="col"><div class="page-pretitle" id="site-name"></div><h2 class="page-title" id="camera-name">Camera</h2><div class="text-secondary small mt-1" id="camera-address"><i class="ti ti-network me-1"></i>IP: Đang tải…</div></div>
           <div class="col-auto"><span id="online-badge" class="badge bg-secondary-lt">Đang kiểm tra…</span></div>
         </div>
       </div>
@@ -61,34 +89,66 @@
               <button class="btn btn-outline-danger" onclick="move('stop')" aria-label="Dừng"><i class="ti ti-player-stop"></i></button>
               <button class="btn" onclick="move('right')" aria-label="Phải"><i class="ti ti-chevron-right"></i></button>
               <span></span><button class="btn" onclick="move('down')" aria-label="Xuống"><i class="ti ti-chevron-down"></i></button><span></span>
-            </div></div>
+            </div><div class="input-group mt-3"><select id="ptz-preset" class="form-select"></select><button class="btn btn-outline-primary" onclick="gotoSelectedPreset()">Tới</button></div><div class="d-flex gap-2 mt-2"><button class="btn btn-outline-secondary btn-sm flex-fill" onclick="savePreset()">Lưu preset</button><button id="patrol-button" class="btn btn-outline-primary btn-sm flex-fill" onclick="togglePatrol()">Bắt đầu patrol</button></div></div>
           </div>
           <div class="card mb-3" id="talk-card"><div class="card-body text-center">
             <button id="talk-button" class="btn btn-primary talk-button" type="button"><i class="ti ti-microphone me-2"></i><span>Giữ để nói</span></button>
             <div class="text-secondary small mt-2">Giữ tối đa 10 giây, thả ra để phát qua loa camera.</div>
           </div></div>
           <div class="card mb-3" id="light-card"><div class="card-body">
-            <label class="form-check form-switch m-0"><input id="camera-light" class="form-check-input" type="checkbox" /><span class="form-check-label"><i class="ti ti-bulb me-1"></i>Đèn camera</span></label>
+            <label class="form-label"><i class="ti ti-bulb me-1"></i>Chế độ đèn</label><select id="camera-light-mode" class="form-select"><option value="auto">Auto</option><option value="on">Bật</option><option value="off">Tắt</option><option value="blink">Nhấp nháy</option></select>
+          </div></div>
+          <div class="card mb-3" id="alarm-card"><div class="card-body">
+            <label class="form-check form-switch m-0"><input id="camera-alarm" class="form-check-input" type="checkbox" /><span class="form-check-label"><i class="ti ti-alarm me-1"></i>Còi / âm thanh cảnh báo</span></label>
           </div></div>
           <div class="card"><div class="card-body">
             <label class="form-check form-switch m-0"><input id="record-person" class="form-check-input" type="checkbox" /><span class="form-check-label"><strong>Lưu video khi phát hiện người</strong><br><span class="text-secondary small">Ảnh sự kiện vẫn được lưu nếu clip gặp lỗi.</span></span></label>
+            <label class="form-label mt-3" for="clip-duration">Thời lượng mỗi clip</label>
+            <select id="clip-duration" class="form-select"><option value="10">10 giây</option><option value="30">30 giây · Pro</option><option value="60">1 phút · Pro</option></select>
+            <div id="clip-duration-note" class="form-hint"></div>
           </div></div>
         </div>
       </div>
 
       <div class="row align-items-center mt-4 mb-3">
-        <div class="col"><h2 class="mb-0">Nhật ký sự kiện</h2><div class="text-secondary">Người, hình ảnh và video của riêng camera này</div></div>
+        <div class="col"><h2 class="mb-0">Dòng thời gian</h2><div class="text-secondary">Chọn một đoạn màu để xem sự kiện</div></div>
         <div class="col-auto d-flex gap-2"><button class="btn btn-outline-secondary btn-sm" onclick="exportEvents()"><i class="ti ti-download me-1"></i>Xuất CSV</button><button class="btn btn-outline-secondary btn-sm" onclick="loadEvents()"><i class="ti ti-refresh me-1"></i>Làm mới</button></div>
       </div>
       <div id="event-summary" class="row row-cards mb-3"></div>
-      <div id="events-list"></div>
-      <div id="events-empty" class="card card-body text-center text-secondary py-5 d-none"><i class="ti ti-bell-off fs-1 mb-2"></i>Camera này chưa có sự kiện.</div>
-      <div id="events-pagination" class="card events-pagination d-none mt-3 mb-4">
-        <div class="card-body py-2 d-flex flex-column flex-md-row align-items-center justify-content-between gap-2">
-          <div id="events-page-info" class="text-secondary small"></div>
-          <nav aria-label="Phân trang sự kiện"><ul id="events-page-list" class="pagination pagination-sm m-0 flex-wrap justify-content-center"></ul></nav>
+      <div id="events-list" class="card camera-timeline">
+        <div class="card-header gap-3 flex-wrap">
+          <div class="timeline-toolbar">
+            <button class="btn btn-icon btn-ghost-secondary" type="button" onclick="changeTimelineDay(-1)" aria-label="Ngày trước"><i class="ti ti-chevron-left"></i></button>
+            <div class="timeline-picker">
+              <label class="timeline-picker-label" for="timeline-date"><i class="ti ti-calendar-time me-1"></i>Chỉ hiển thị ngày có video</label>
+              <div class="d-flex gap-2">
+                <select id="timeline-date" class="form-select timeline-date" aria-label="Chọn ngày có video"><option>Đang tải…</option></select>
+                <input id="timeline-time" class="form-control timeline-time" type="time" step="60" aria-label="Chọn giờ">
+              </div>
+            </div>
+            <button id="timeline-next" class="btn btn-icon btn-ghost-secondary" type="button" onclick="changeTimelineDay(1)" aria-label="Ngày sau"><i class="ti ti-chevron-right"></i></button>
+            <button class="btn btn-outline-primary" type="button" onclick="goTimelineToday()"><i class="ti ti-clock me-1"></i>Bây giờ</button>
+          </div>
+          <div class="timeline-zoom" aria-label="Thu phóng dòng thời gian">
+            <button id="timeline-zoom-out" class="btn btn-icon btn-sm" type="button" onclick="changeTimelineZoom(-1)" aria-label="Thu nhỏ timeline"><i class="ti ti-minus"></i></button>
+            <span id="timeline-zoom-label" class="timeline-zoom-label">3 giờ</span>
+            <button id="timeline-zoom-in" class="btn btn-icon btn-sm" type="button" onclick="changeTimelineZoom(1)" aria-label="Phóng to timeline"><i class="ti ti-plus"></i></button>
+          </div>
+          <div class="timeline-legend ms-md-auto"><span>Người</span><span class="vehicle">Phương tiện</span></div>
         </div>
+        <div class="timeline-scroll" id="timeline-scroll">
+          <div class="timeline-stage" id="timeline-stage" role="slider" tabindex="0" aria-label="Dòng thời gian 24 giờ" aria-valuemin="0" aria-valuemax="1439" aria-valuenow="0">
+            <div class="timeline-hours" id="timeline-hours"></div>
+            <div class="timeline-lane" id="timeline-lane"></div>
+            <div class="timeline-now d-none" id="timeline-now"></div>
+            <div class="timeline-playhead" id="timeline-playhead"></div>
+            <div class="timeline-playhead-label" id="timeline-playhead-label">00:00</div>
+          </div>
+        </div>
+        <div class="card-footer py-2 text-secondary small"><i class="ti ti-info-circle me-1"></i>Dùng nút − / + để xem toàn ngày hoặc phóng to từng clip sự kiện.</div>
       </div>
+      <div id="event-viewer" class="mt-3"></div>
+      <div id="events-empty" class="card card-body text-center text-secondary py-5 d-none"><i class="ti ti-bell-off fs-1 mb-2"></i>Camera này chưa có sự kiện.</div>
 
       <div class="card mt-4">
         <div class="card-header"><h3 class="card-title"><i class="ti ti-settings me-2"></i>Quản lý camera</h3></div>
@@ -108,12 +168,20 @@
             <div class="col-md-3"><label class="form-label">Cổng ONVIF</label><input id="config-onvif-port" type="number" min="1" max="65535" class="form-control" value="2020" required></div>
             <div class="col-12 d-flex align-items-center gap-3"><button id="save-camera-config" class="btn btn-primary" type="submit"><i class="ti ti-device-floppy me-1"></i>Lưu và kết nối lại</button><span id="camera-config-status" class="text-secondary small"></span></div>
           </form>
+          <hr class="my-4">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div><h4 class="mb-0">Thông tin & khả năng ONVIF</h4><div class="text-secondary small">Đọc trực tiếp từ camera; không hiển thị mật khẩu hay thông tin xác thực.</div></div>
+            <button id="refresh-onvif" class="btn btn-outline-secondary btn-sm" type="button"><i class="ti ti-refresh me-1"></i>Đọc lại</button>
+          </div>
+          <div id="onvif-summary" class="text-secondary small">Đang đọc cấu hình ONVIF…</div>
+          <div id="onvif-details" class="mt-3"></div>
         </div>
         <div class="card-footer"><button id="delete-camera" class="btn btn-outline-danger" type="button"><i class="ti ti-trash me-1"></i>Xóa camera và toàn bộ sự kiện</button></div>
       </div>
     </div>
   </div></div>
 </main>
+<div id="timeline-preview" class="timeline-preview" role="tooltip" aria-hidden="true"></div>
 
 <script src="/ui-i18n-fallback.js?v=20260910-6"></script>
 <script>
@@ -129,9 +197,18 @@ let talkChunks = [];
 let talkTimer = null;
 let objectUrls = [];
 let imageObserver = null;
-const EVENTS_PAGE_SIZE = 12;
-let eventPage = 1;
+const EVENTS_DAY_LIMIT = 100;
+const TIMELINE_ZOOM_LEVELS = [24, 12, 6, 3, 1];
 let eventLoadId = 0;
+let timelineDate = new Date();
+let timelineEvents = [];
+let selectedEventId = null;
+let timelineDragging = false;
+let timelineZoomIndex = 3;
+let timelineViewStartMinutes = Math.max(0, new Date().getHours() * 60 + new Date().getMinutes() - 180);
+let timelineCursorMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+let timelinePreviewRequest = 0;
+let timelineVideoDays = [];
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -166,7 +243,7 @@ function showError(error) {
 async function init() {
   if (!getApiKey()) return location.replace('/');
   if (!siteId || !cameraId) throw new Error('Thiếu thông tin camera trong đường dẫn.');
-  const cameras = await api('/api/cameras');
+  const [cameras, account] = await Promise.all([api('/api/cameras'), api('/api/settings/account')]);
   camera = cameras.find(c => c.siteId === siteId && c.cameraId === cameraId);
   if (!camera) throw new Error('Không tìm thấy camera hoặc tài khoản không có quyền truy cập.');
   document.title = `${camera.cameraName || camera.cameraId} · CameraAIWork`;
@@ -174,15 +251,57 @@ async function init() {
   document.getElementById('camera-name').textContent = camera.cameraName || camera.cameraId;
   document.getElementById('camera-name-input').value = camera.cameraName || '';
   document.getElementById('record-person').checked = Number(camera.recordOnPerson ?? 1) === 1;
+  const duration = document.getElementById('clip-duration');
+  duration.value = String(camera.clipDurationSeconds || 10);
+  [...duration.options].forEach(option => { option.disabled = !account.limits.clipDurations.includes(Number(option.value)); });
+  document.getElementById('clip-duration-note').textContent = account.plan === 'pro' ? 'Gói Pro: chọn 10 giây, 30 giây hoặc 1 phút.' : 'Gói Free dùng clip 10 giây. Nâng cấp Pro để chọn clip dài hơn.';
   document.getElementById('camera-page').classList.remove('d-none');
   // Give the live player first access to the network. Event thumbnails can be
   // numerous and previously competed with the MSE WebSocket during startup.
   await loadLive();
-  void Promise.all([loadControls(), loadEvents(), loadCameraConfig()]).catch(showError);
+  await loadVideoDays();
+  void Promise.all([loadControls(), loadEvents(), loadCameraConfig(), loadOnvif()]).catch(showError);
 }
+
+function capabilityBadge(enabled, label) {
+  return `<span class="badge ${enabled ? 'bg-green-lt' : 'bg-secondary-lt'} me-1 mb-1">${escapeHtml(label)}: ${enabled ? 'Có' : 'Không'}</span>`;
+}
+
+function onvifSection(title, value) {
+  if (value == null || (Array.isArray(value) && !value.length) || (typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length)) return '';
+  return `<details class="border rounded p-2 mb-2"><summary class="fw-semibold">${escapeHtml(title)}</summary><pre class="small mt-2 mb-0 text-wrap">${escapeHtml(JSON.stringify(value, null, 2))}</pre></details>`;
+}
+
+async function loadOnvif(refresh = false) {
+  const button = document.getElementById('refresh-onvif');
+  button.disabled = true;
+  document.getElementById('onvif-summary').textContent = 'Đang đọc cấu hình ONVIF trực tiếp từ camera…';
+  try {
+    const value = await api(`${endpoint('onvif')}${refresh ? '?refresh=1' : ''}`);
+    const info = value.deviceInformation || {};
+    const caps = value.capabilities || {};
+    const name = [info.manufacturer, info.model].filter(Boolean).join(' ') || 'Camera ONVIF';
+    document.getElementById('onvif-summary').innerHTML = `<strong>${escapeHtml(name)}</strong>${info.firmwareVersion ? ` · Firmware ${escapeHtml(info.firmwareVersion)}` : ''}<div class="mt-2">${capabilityBadge(caps.ptz,'PTZ')}${capabilityBadge(caps.audioInput,'Micro camera')}${capabilityBadge(caps.talk,'Loa/đàm thoại')}${capabilityBadge(caps.light,'Đèn')}${capabilityBadge(caps.alarm,'Relay/còi')}</div>`;
+    document.getElementById('onvif-details').innerHTML = [
+      onvifSection('Thiết bị', value.deviceInformation),
+      onvifSection(`Media profiles (${value.profiles?.length || 0})`, value.profiles),
+      onvifSection('Nguồn âm thanh', value.audioSources),
+      onvifSection('Đầu ra âm thanh', value.audioOutputs),
+      onvifSection('Cấu hình hình ảnh', value.imaging),
+      onvifSection('Preset PTZ', value.presets),
+      onvifSection('Capability ONVIF đầy đủ', caps.onvif),
+    ].join('') || '<div class="text-secondary small">Camera không trả về chi tiết bổ sung.</div>';
+  } catch (error) {
+    document.getElementById('onvif-summary').textContent = error.message;
+    document.getElementById('onvif-details').innerHTML = '';
+  } finally { button.disabled = false; }
+}
+
+document.getElementById('refresh-onvif').addEventListener('click', () => loadOnvif(true));
 
 async function loadCameraConfig() {
   const value = await api(endpoint('config'));
+  document.getElementById('camera-address').innerHTML = `<i class="ti ti-network me-1"></i>IP: ${escapeHtml(value.ip || 'Chưa cấu hình')}`;
   document.getElementById('config-ip').value = value.ip || '';
   document.getElementById('config-username').value = value.username || '';
   document.getElementById('config-password').value = value.password || '';
@@ -207,6 +326,14 @@ async function loadControls() {
     document.getElementById('ptz-card').classList.toggle('d-none', !controls.ptz);
     document.getElementById('talk-card').classList.toggle('d-none', !controls.talk);
     document.getElementById('light-card').classList.toggle('d-none', !controls.light);
+    const lightMode = document.getElementById('camera-light-mode');
+    if (!controls.lightModes?.length) lightMode.innerHTML='<option value="on">Bật</option><option value="off">Tắt</option>';
+    lightMode.value = controls.lightMode || (typeof controls.lightOn === 'boolean' ? (controls.lightOn ? 'on' : 'off') : 'auto');
+    const presets = Object.entries(controls.presets || {}).map(([token,value])=>({token,name:value?.name||value?.Name||token}));
+    document.getElementById('ptz-preset').innerHTML = presets.map(p=>`<option value="${escapeHtml(p.token)}">${escapeHtml(p.name)}</option>`).join('');
+    const patrolButton=document.getElementById('patrol-button'); patrolButton.dataset.active=String(Boolean(controls.patrol?.active)); patrolButton.textContent=controls.patrol?.active?'Dừng patrol':'Bắt đầu patrol';
+    document.getElementById('alarm-card').classList.toggle('d-none', !controls.alarm);
+    if(typeof controls.alarmOn==='boolean') document.getElementById('camera-alarm').checked=controls.alarmOn;
     const badge = document.getElementById('online-badge');
     badge.className = `badge ${controls.online ? 'bg-green-lt' : 'bg-red-lt'}`;
     badge.textContent = controls.online ? 'Đang trực tuyến' : 'Ngoại tuyến';
@@ -222,9 +349,23 @@ async function move(direction) {
   catch (error) { document.getElementById('camera-status').textContent = error.message; }
 }
 
-document.getElementById('camera-light').addEventListener('change', async event => {
+document.getElementById('camera-light-mode').addEventListener('change', async event => {
   const input = event.currentTarget; input.disabled = true;
-  try { await api(endpoint('controls'), {method:'POST', body:JSON.stringify({light:input.checked})}); }
+  try {
+    await api(endpoint('controls'), {method:'POST', body:JSON.stringify({lightMode:input.value})});
+    document.getElementById('camera-status').textContent=`Đã chuyển đèn sang ${input.options[input.selectedIndex].text}.`;
+  }
+  catch (error) { await loadControls(); document.getElementById('camera-status').textContent=error.message; }
+  finally { input.disabled=false; }
+});
+
+async function gotoSelectedPreset(){const preset=document.getElementById('ptz-preset').value;if(preset)await api(endpoint('ptz'),{method:'POST',body:JSON.stringify({action:'gotoPreset',preset})});}
+async function savePreset(){const name=prompt('Tên preset mới:');if(!name)return;await api(endpoint('ptz'),{method:'POST',body:JSON.stringify({action:'setPreset',name})});await loadControls();}
+async function togglePatrol(){const button=document.getElementById('patrol-button');const active=button.dataset.active==='true';const presets=[...document.getElementById('ptz-preset').options].map(o=>o.value);try{await api(endpoint('ptz'),{method:'POST',body:JSON.stringify(active?{action:'stopPatrol'}:{action:'startPatrol',presets,intervalSeconds:15})});await loadControls();}catch(error){document.getElementById('camera-status').textContent=error.message;}}
+
+document.getElementById('camera-alarm').addEventListener('change', async event => {
+  const input = event.currentTarget; input.disabled = true;
+  try { await api(endpoint('controls'), {method:'POST', body:JSON.stringify({alarm:input.checked})}); }
   catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
   finally { input.disabled=false; }
 });
@@ -233,6 +374,13 @@ document.getElementById('record-person').addEventListener('change', async event 
   const input = event.currentTarget; input.disabled=true;
   try { await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({recordOnPerson:input.checked})}); }
   catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
+  finally { input.disabled=false; }
+});
+
+document.getElementById('clip-duration').addEventListener('change', async event => {
+  const input=event.currentTarget; const previous=String(camera.clipDurationSeconds || 10); input.disabled=true;
+  try { const saved=await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({clipDurationSeconds:Number(input.value)})}); camera.clipDurationSeconds=saved.clipDurationSeconds; input.value=String(saved.clipDurationSeconds); }
+  catch (error) { input.value=previous; document.getElementById('camera-status').textContent=error.message; }
   finally { input.disabled=false; }
 });
 
@@ -263,11 +411,93 @@ const talkButton=document.getElementById('talk-button');
 ['pointerup','pointercancel','pointerleave'].forEach(name=>talkButton.addEventListener(name,stopTalking));
 talkButton.addEventListener('pointerdown',startTalking);
 
-async function loadEvents(page = eventPage, scrollToList = false) {
+function localDateValue(date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function localDateTimeValue(date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function localTimeValue(date) {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function dateFromDayAndTime(day, time = '00:00') {
+  const [year, month, date] = day.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  return new Date(year, month - 1, date, hour || 0, minute || 0);
+}
+
+function syncTimelinePicker() {
+  document.getElementById('timeline-date').value = localDateValue(timelineDate);
+  document.getElementById('timeline-time').value = localTimeValue(timelineDate);
+}
+
+async function loadVideoDays() {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  timelineVideoDays = await api(`${endpoint('video-days')}?timezone=${encodeURIComponent(timeZone)}`);
+  const select = document.getElementById('timeline-date');
+  if (!timelineVideoDays.length) {
+    select.innerHTML = '<option value="">Chưa có video</option>';
+    select.disabled = true;
+    document.getElementById('timeline-time').disabled = true;
+    return;
+  }
+  select.disabled = false;
+  document.getElementById('timeline-time').disabled = false;
+  select.innerHTML = timelineVideoDays.map(item => {
+    const label = dateFromDayAndTime(item.day).toLocaleDateString('vi-VN', {weekday:'short', day:'2-digit', month:'2-digit', year:'numeric'});
+    return `<option value="${escapeHtml(item.day)}">${escapeHtml(label)} · ${item.videoCount} clip</option>`;
+  }).join('');
+  const today = localDateValue(new Date());
+  const initial = timelineVideoDays.find(item => item.day === today) || timelineVideoDays[0];
+  timelineDate = initial.day === today ? new Date() : new Date(initial.lastVideoAt);
+  syncTimelinePicker();
+  resetTimelineView();
+}
+
+function timelineDayBounds() {
+  const [year, month, day] = localDateValue(timelineDate).split('-').map(Number);
+  const start = new Date(year, month - 1, day);
+  const end = new Date(year, month - 1, day + 1);
+  return {start, end, duration:end - start};
+}
+
+function timelineViewBounds() {
+  const day = timelineDayBounds();
+  const hours = TIMELINE_ZOOM_LEVELS[timelineZoomIndex];
+  const viewMinutes = hours * 60;
+  timelineViewStartMinutes = Math.max(0, Math.min(1440 - viewMinutes, timelineViewStartMinutes));
+  const start = new Date(day.start.getTime() + timelineViewStartMinutes * 60000);
+  const end = new Date(start.getTime() + viewMinutes * 60000);
+  return {start, end, duration:end - start, hours, viewMinutes, dayStart:day.start};
+}
+
+function centerTimelineOn(minutes) {
+  const viewMinutes = TIMELINE_ZOOM_LEVELS[timelineZoomIndex] * 60;
+  timelineCursorMinutes = Math.max(0, Math.min(1439, minutes));
+  timelineViewStartMinutes = Math.max(0, Math.min(1440 - viewMinutes, timelineCursorMinutes - viewMinutes / 2));
+}
+
+function endTimelineAt(minutes) {
+  const viewMinutes = TIMELINE_ZOOM_LEVELS[timelineZoomIndex] * 60;
+  timelineCursorMinutes = Math.max(0, Math.min(1439, minutes));
+  timelineViewStartMinutes = Math.max(0, Math.min(1440 - viewMinutes, timelineCursorMinutes - viewMinutes));
+}
+
+function formatTimelineTime(value, seconds = false) {
+  return new Intl.DateTimeFormat('vi-VN', {hour:'2-digit', minute:'2-digit', ...(seconds ? {second:'2-digit'} : {}), hour12:false}).format(new Date(value));
+}
+
+async function loadEvents() {
   const loadId = ++eventLoadId;
   const list = document.getElementById('events-list');
   list.classList.add('events-loading');
-  const query = new URLSearchParams({site:siteId, camera:camera.stream || camera.cameraId, limit:String(EVENTS_PAGE_SIZE), page:String(page)});
+  const {start, end} = timelineDayBounds();
+  const query = new URLSearchParams({site:siteId, camera:camera.stream || camera.cameraId, limit:String(EVENTS_DAY_LIMIT), page:'1', from:start.toISOString(), to:end.toISOString()});
   let result;
   try {
     result = await apiResponse(`/api/events?${query}`);
@@ -278,62 +508,269 @@ async function loadEvents(page = eventPage, scrollToList = false) {
   const {data:events, response} = result;
   if (loadId !== eventLoadId) return;
   const total = Number(response.headers.get('X-Total-Count') || events.length);
-  const totalPages = Math.max(1, Number(response.headers.get('X-Total-Pages')) || Math.ceil(total / EVENTS_PAGE_SIZE));
-  if (total > 0 && page > totalPages) return loadEvents(totalPages, scrollToList);
-  eventPage = page;
+  timelineEvents = events;
   objectUrls.forEach(URL.revokeObjectURL); objectUrls=[];
   const withImages=events.filter(e=>e.image_key).length, withVideos=events.filter(e=>e.video_key).length;
   document.getElementById('event-summary').innerHTML = [
-    ['ti-user','Tổng sự kiện',total],['ti-photo','Có ảnh trang này',withImages],['ti-video','Có video trang này',withVideos]
+    ['ti-activity','Sự kiện trong ngày',total],['ti-photo','Có ảnh',withImages],['ti-video','Có video',withVideos]
   ].map(([icon,label,count])=>`<div class="col-sm-4"><div class="card card-sm"><div class="card-body d-flex align-items-center"><span class="avatar bg-blue-lt me-3"><i class="ti ${icon}"></i></span><div><div class="h2 mb-0">${count}</div><div class="text-secondary">${label}</div></div></div></div></div>`).join('');
   document.getElementById('events-empty').classList.toggle('d-none', events.length>0);
-  list.innerHTML = events.map(eventCard).join('');
+  renderTimeline();
   list.classList.remove('events-loading');
-  renderEventPagination(total, totalPages);
-  hydrateImages();
-  if (scrollToList) document.querySelector('#event-summary').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-function paginationItems(current, total) {
-  if (total <= 7) return Array.from({length:total}, (_, index) => index + 1);
-  const pages = new Set([1, total, current - 1, current, current + 1]);
-  if (current <= 3) [2, 3, 4].forEach(page => pages.add(page));
-  if (current >= total - 2) [total - 3, total - 2, total - 1].forEach(page => pages.add(page));
-  const sorted = [...pages].filter(page => page > 0 && page <= total).sort((a, b) => a - b);
-  return sorted.flatMap((page, index) => index && page - sorted[index - 1] > 1 ? ['ellipsis', page] : [page]);
-}
-
-function renderEventPagination(total, totalPages) {
-  const pagination = document.getElementById('events-pagination');
-  pagination.classList.toggle('d-none', total === 0);
-  if (!total) return;
-  const first = (eventPage - 1) * EVENTS_PAGE_SIZE + 1;
-  const last = Math.min(eventPage * EVENTS_PAGE_SIZE, total);
-  document.getElementById('events-page-info').textContent = `Hiển thị ${first}–${last} / ${total} sự kiện · Trang ${eventPage}/${totalPages}`;
-  const pageButton = (page, label, disabled = false, active = false, ariaLabel = '') => `<li class="page-item${disabled?' disabled':''}${active?' active':''}"><button class="page-link" type="button" ${disabled?'disabled':''} ${ariaLabel?`aria-label="${ariaLabel}"`:''} ${active?'aria-current="page"':''} onclick="goToEventPage(${page})">${label}</button></li>`;
-  const items = [pageButton(eventPage - 1, '<i class="ti ti-chevron-left"></i>', eventPage === 1, false, 'Trang trước')];
-  paginationItems(eventPage, totalPages).forEach(item => {
-    if (item === 'ellipsis') items.push('<li class="page-item disabled"><span class="page-link">…</span></li>');
-    else items.push(pageButton(item, item, false, item === eventPage, `Trang ${item}`));
+function renderTimeline() {
+  const {start, end, duration, hours:viewHours, viewMinutes} = timelineViewBounds();
+  const hours = document.getElementById('timeline-hours');
+  const tickMinutes = viewHours >= 24 ? 180 : viewHours >= 12 ? 120 : viewHours >= 6 ? 60 : viewHours >= 3 ? 30 : 10;
+  const firstTick = Math.ceil(timelineViewStartMinutes / tickMinutes) * tickMinutes;
+  const ticks = [];
+  for (let minute = firstTick; minute <= timelineViewStartMinutes + viewMinutes; minute += tickMinutes) {
+    const moment = new Date(start.getTime() + (minute - timelineViewStartMinutes) * 60000);
+    ticks.push(`<span class="timeline-hour" style="left:${(minute - timelineViewStartMinutes) / viewMinutes * 100}%">${formatTimelineTime(moment)}</span>`);
+  }
+  hours.innerHTML = ticks.join('');
+  document.querySelectorAll('.timeline-event').forEach(element => element.remove());
+  const visibleEvents = timelineEvents.filter(event => {
+    const moment = new Date(event.timestamp);
+    return moment >= start && moment < end;
   });
-  items.push(pageButton(eventPage + 1, '<i class="ti ti-chevron-right"></i>', eventPage === totalPages, false, 'Trang sau'));
-  document.getElementById('events-page-list').innerHTML = items.join('');
+  const clusterMinutes = viewHours >= 24 ? 15 : viewHours >= 12 ? 5 : viewHours >= 6 ? 2 : viewHours >= 3 ? .5 : 0;
+  const clusters = new Map();
+  visibleEvents.forEach((event, index) => {
+    const bucket = clusterMinutes ? Math.floor((new Date(event.timestamp) - start) / (clusterMinutes * 60 * 1000)) : index;
+    if (!clusters.has(bucket)) clusters.set(bucket, []);
+    clusters.get(bucket).push(event);
+  });
+  [...clusters.values()].forEach(events => {
+    events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const event = events[events.length - 1];
+    const moment = new Date(events[0].timestamp);
+    const position = Math.max(0, Math.min(100, (moment - start) / duration * 100));
+    const hasPerson = events.some(item => item.type !== 'Vehicle');
+    const hasVehicle = events.some(item => item.type === 'Vehicle');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `timeline-event ${hasPerson && hasVehicle ? 'mixed' : (hasVehicle ? 'vehicle' : '')}`;
+    button.style.left = `calc(${position}% - 6px)`;
+    button.style.width = `${Math.min(44, Math.max(12, 12 + (events.length - 1) * 5))}px`;
+    button.dataset.eventId = event.id;
+    button.dataset.eventIds = events.map(item => item.id).join(',');
+    const previewEvent = [...events].reverse().find(item => item.image_key) || event;
+    button.dataset.previewEventId = previewEvent.id;
+    button.textContent = events.length > 1 ? events.length : '';
+    button.title = events.length > 1 ? `${formatTimelineTime(moment, true)} · ${events.length} sự kiện` : `${formatTimelineTime(moment, true)} · Clip ${camera?.clipDurationSeconds || 10} giây`;
+    button.setAttribute('aria-label', button.title);
+    button.addEventListener('click', clickEvent => { clickEvent.stopPropagation(); selectTimelineEvent(event.id); });
+    button.addEventListener('pointerenter', pointerEvent => showTimelinePreview(previewEvent, pointerEvent));
+    button.addEventListener('pointermove', positionTimelinePreview);
+    button.addEventListener('pointerleave', hideTimelinePreview);
+    document.getElementById('timeline-stage').appendChild(button);
+  });
+  const now = new Date();
+  const nowMarker = document.getElementById('timeline-now');
+  const nowInView = now >= start && now < end;
+  nowMarker.classList.toggle('d-none', !nowInView);
+  if (nowInView) nowMarker.style.left = `${(now - start) / duration * 100}%`;
+  const currentDayIndex = timelineVideoDays.findIndex(item => item.day === localDateValue(timelineDate));
+  document.getElementById('timeline-next').disabled = currentDayIndex <= 0;
+  document.getElementById('timeline-zoom-label').textContent = `${viewHours} giờ`;
+  document.getElementById('timeline-zoom-out').disabled = timelineZoomIndex === 0;
+  document.getElementById('timeline-zoom-in').disabled = timelineZoomIndex === TIMELINE_ZOOM_LEVELS.length - 1;
+  const stage = document.getElementById('timeline-stage');
+  stage.setAttribute('aria-label', `Dòng thời gian ${viewHours} giờ`);
+  stage.setAttribute('aria-valuemin', String(Math.round(timelineViewStartMinutes)));
+  stage.setAttribute('aria-valuemax', String(Math.round(timelineViewStartMinutes + viewMinutes)));
+  const selected = visibleEvents.find(event => String(event.id) === String(selectedEventId));
+  if (selected) selectTimelineEvent(selected.id, false);
+  else if (visibleEvents.length) selectTimelineEvent(visibleEvents[0].id, true);
+  else {
+    setPlayhead((timelineCursorMinutes - timelineViewStartMinutes) / viewMinutes);
+  }
 }
 
-function goToEventPage(page) {
-  if (page < 1 || page === eventPage) return;
-  loadEvents(page, true).catch(showError);
+function positionTimelinePreview(event) {
+  const preview = document.getElementById('timeline-preview');
+  const margin = 14;
+  const width = preview.offsetWidth || 240;
+  const height = preview.offsetHeight || 178;
+  const left = Math.max(margin, Math.min(innerWidth - width - margin, event.clientX + 16));
+  const top = event.clientY - height - 16 >= margin ? event.clientY - height - 16 : Math.min(innerHeight - height - margin, event.clientY + 16);
+  preview.style.left = `${left}px`;
+  preview.style.top = `${top}px`;
+}
+
+async function showTimelinePreview(event, pointerEvent) {
+  const preview = document.getElementById('timeline-preview');
+  const requestId = ++timelinePreviewRequest;
+  const label = event.type === 'Vehicle' ? 'Phương tiện' : (event.person_label || 'Phát hiện người');
+  preview.innerHTML = `<div class="timeline-preview-empty"><i class="ti ti-loader-2 ti-spin fs-2"></i></div><div class="timeline-preview-meta"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(formatTimelineTime(event.timestamp, true))}</span></div>`;
+  preview.classList.add('show');
+  preview.setAttribute('aria-hidden', 'false');
+  positionTimelinePreview(pointerEvent);
+  if (!event.image_key) {
+    preview.querySelector('.timeline-preview-empty').innerHTML = '<i class="ti ti-photo-off fs-2"></i>';
+    return;
+  }
+  try {
+    const response = await fetch(`/api/events/${encodeURIComponent(event.id)}/image`, {headers:{Authorization:`Bearer ${getApiKey()}`}});
+    if (!response.ok) throw new Error('Không tải được ảnh');
+    const url = URL.createObjectURL(await response.blob());
+    if (requestId !== timelinePreviewRequest) { URL.revokeObjectURL(url); return; }
+    objectUrls.push(url);
+    preview.firstElementChild.outerHTML = `<img class="timeline-preview-image" src="${url}" alt="Snapshot lúc ${escapeHtml(formatTimelineTime(event.timestamp, true))}">`;
+    positionTimelinePreview(pointerEvent);
+  } catch {
+    if (requestId === timelinePreviewRequest) preview.querySelector('.timeline-preview-empty').innerHTML = '<i class="ti ti-photo-off fs-2"></i>';
+  }
+}
+
+function hideTimelinePreview() {
+  timelinePreviewRequest++;
+  const preview = document.getElementById('timeline-preview');
+  preview.classList.remove('show');
+  preview.setAttribute('aria-hidden', 'true');
+}
+
+function setPlayhead(ratio) {
+  ratio = Math.max(0, Math.min(1, ratio));
+  const {start, duration, dayStart} = timelineViewBounds();
+  const moment = new Date(start.getTime() + duration * ratio);
+  timelineCursorMinutes = Math.max(0, Math.min(1439, (moment - dayStart) / 60000));
+  document.getElementById('timeline-playhead').style.left = `${ratio * 100}%`;
+  const label = document.getElementById('timeline-playhead-label');
+  label.style.left = `${ratio * 100}%`;
+  label.textContent = formatTimelineTime(moment);
+  const stage = document.getElementById('timeline-stage');
+  stage.setAttribute('aria-valuenow', String(Math.round(timelineCursorMinutes)));
+  stage.setAttribute('aria-valuetext', formatTimelineTime(moment));
+}
+
+function selectTimelineEvent(id, movePlayhead = true) {
+  const event = timelineEvents.find(item => String(item.id) === String(id));
+  if (!event) return;
+  selectedEventId = event.id;
+  document.querySelectorAll('.timeline-event').forEach(element => element.classList.toggle('active', element.dataset.eventIds.split(',').includes(String(id))));
+  if (movePlayhead) {
+    const {start, duration} = timelineViewBounds();
+    setPlayhead((new Date(event.timestamp) - start) / duration);
+  }
+  document.getElementById('event-viewer').innerHTML = eventCard(event);
+  hydrateImages();
 }
 
 function eventCard(event) {
-  const person=event.person_label||'Người chưa xác định';
+  const isVehicle=event.type==='Vehicle', person=isVehicle?'Phương tiện':(event.person_label||'Người chưa xác định');
   let video='';
   if(event.video_key) video=`<button class="btn btn-outline-primary btn-sm" onclick="loadVideo('${escapeHtml(event.id)}', this)"><i class="ti ti-player-play me-1"></i>Xem video</button><div class="video-shell mt-2" id="video-${escapeHtml(event.id)}"></div>`;
   else if(event.video_status==='recording') video='<span class="badge bg-yellow-lt">Đang lưu video…</span>';
   else if(event.video_status==='error') video=`<div class="alert alert-danger py-2 mb-0"><strong>Lỗi lưu clip:</strong> ${escapeHtml(event.video_error||'Không rõ lỗi')}</div>`;
   else video='<span class="text-secondary small">Sự kiện không có video</span>';
-  return `<div class="event-line mb-4"><span class="event-dot"></span><div class="card"><div class="card-header"><div><span class="badge bg-blue-lt me-2"><i class="ti ti-user me-1"></i>Có người</span><strong>${escapeHtml(person)}</strong></div><div class="card-actions text-secondary small"><i class="ti ti-clock me-1"></i>${escapeHtml(event.timestamp)}</div></div><div class="card-body"><div class="row g-3"><div class="col-lg-7">${event.image_key?`<img class="rounded event-image bg-secondary-lt" data-event-image="${escapeHtml(event.id)}" alt="Ảnh sự kiện ${escapeHtml(event.id)}" />`:'<div class="text-secondary">Không có ảnh sự kiện</div>'}</div><div class="col-lg-5"><div class="text-secondary small mb-2">LOG SỰ KIỆN #${escapeHtml(event.id)}</div><div class="mb-3"><i class="ti ti-user-check me-1"></i>AI xác nhận có người</div>${video}</div></div></div></div></div>`;
+  return `<div class="card"><div class="card-header"><div><span class="badge ${isVehicle?'bg-orange-lt':'bg-blue-lt'} me-2"><i class="ti ${isVehicle?'ti-car':'ti-user'} me-1"></i>${isVehicle?'Có xe':'Có người'}</span><strong>${escapeHtml(person)}</strong></div><div class="card-actions text-secondary small"><i class="ti ti-clock me-1"></i>${escapeHtml(new Date(event.timestamp).toLocaleString('vi-VN'))}</div></div><div class="card-body"><div class="row g-3"><div class="col-lg-7">${event.image_key?`<img class="rounded event-image bg-secondary-lt" data-event-image="${escapeHtml(event.id)}" alt="Ảnh sự kiện ${escapeHtml(event.id)}" />`:'<div class="event-viewer-placeholder rounded text-secondary"><div class="text-center"><i class="ti ti-photo-off fs-1 d-block mb-2"></i>Không có ảnh sự kiện</div></div>'}</div><div class="col-lg-5"><div class="text-secondary small mb-2">SỰ KIỆN #${escapeHtml(event.id)}</div><div class="mb-3"><i class="ti ti-${isVehicle?'car':'user-check'} me-1"></i>AI xác nhận có ${isVehicle?'xe':'người'}</div>${video}</div></div></div></div>`;
 }
+
+function timelineRatioFromPointer(event) {
+  const bounds = document.getElementById('timeline-stage').getBoundingClientRect();
+  return Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+}
+
+function selectNearestTimelineEvent(ratio) {
+  const {start, end, duration} = timelineViewBounds();
+  const visibleEvents = timelineEvents.filter(event => new Date(event.timestamp) >= start && new Date(event.timestamp) < end);
+  if (!visibleEvents.length) return;
+  const target = start.getTime() + duration * ratio;
+  const nearest = visibleEvents.reduce((best, event) => Math.abs(new Date(event.timestamp) - target) < Math.abs(new Date(best.timestamp) - target) ? event : best);
+  selectTimelineEvent(nearest.id, false);
+}
+
+function changeTimelineZoom(direction) {
+  const nextIndex = Math.max(0, Math.min(TIMELINE_ZOOM_LEVELS.length - 1, timelineZoomIndex + direction));
+  if (nextIndex === timelineZoomIndex) return;
+  timelineZoomIndex = nextIndex;
+  centerTimelineOn(timelineCursorMinutes);
+  renderTimeline();
+}
+
+function resetTimelineView() {
+  endTimelineAt(timelineDate.getHours() * 60 + timelineDate.getMinutes());
+}
+
+function changeTimelineDay(offset) {
+  const currentIndex = timelineVideoDays.findIndex(item => item.day === localDateValue(timelineDate));
+  if (currentIndex < 0) return;
+  const nextIndex = Math.max(0, Math.min(timelineVideoDays.length - 1, currentIndex - offset));
+  if (nextIndex === currentIndex) return;
+  const target = timelineVideoDays[nextIndex];
+  const time = localTimeValue(timelineDate);
+  timelineDate = dateFromDayAndTime(target.day, time);
+  if (timelineDate > new Date(target.lastVideoAt)) timelineDate = new Date(target.lastVideoAt);
+  syncTimelinePicker();
+  selectedEventId = null;
+  resetTimelineView();
+  loadEvents().catch(showError);
+}
+
+function goTimelineToday() {
+  if (!timelineVideoDays.length) return;
+  const today = localDateValue(new Date());
+  const target = timelineVideoDays.find(item => item.day === today) || timelineVideoDays[0];
+  timelineDate = target.day === today ? new Date() : new Date(target.lastVideoAt);
+  syncTimelinePicker();
+  selectedEventId = null;
+  resetTimelineView();
+  loadEvents().catch(showError);
+}
+
+const timelineDateInput = document.getElementById('timeline-date');
+timelineDateInput.addEventListener('change', () => {
+  if (!timelineDateInput.value) return;
+  const target = timelineVideoDays.find(item => item.day === timelineDateInput.value);
+  if (!target) return;
+  timelineDate = dateFromDayAndTime(target.day, document.getElementById('timeline-time').value || '00:00');
+  if (timelineDate > new Date(target.lastVideoAt)) timelineDate = new Date(target.lastVideoAt);
+  syncTimelinePicker();
+  selectedEventId = null;
+  resetTimelineView();
+  loadEvents().catch(showError);
+});
+
+document.getElementById('timeline-time').addEventListener('change', event => {
+  const target = timelineVideoDays.find(item => item.day === timelineDateInput.value);
+  if (!target || !event.currentTarget.value) return;
+  timelineDate = dateFromDayAndTime(target.day, event.currentTarget.value);
+  if (timelineDate > new Date(target.lastVideoAt)) timelineDate = new Date(target.lastVideoAt);
+  syncTimelinePicker();
+  selectedEventId = null;
+  resetTimelineView();
+  loadEvents().catch(showError);
+});
+
+const timelineStage = document.getElementById('timeline-stage');
+timelineStage.addEventListener('pointerdown', event => {
+  if (event.target.closest('.timeline-event')) return;
+  timelineDragging = true;
+  timelineStage.setPointerCapture(event.pointerId);
+  setPlayhead(timelineRatioFromPointer(event));
+});
+timelineStage.addEventListener('pointermove', event => { if (timelineDragging) setPlayhead(timelineRatioFromPointer(event)); });
+timelineStage.addEventListener('pointerup', event => {
+  if (!timelineDragging) return;
+  timelineDragging = false;
+  const ratio = timelineRatioFromPointer(event);
+  setPlayhead(ratio);
+  selectNearestTimelineEvent(ratio);
+});
+timelineStage.addEventListener('keydown', event => {
+  if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
+  event.preventDefault();
+  const current = Number(timelineStage.getAttribute('aria-valuenow') || 0);
+  const {viewMinutes} = timelineViewBounds();
+  const step = viewMinutes <= 180 ? 1 : 5;
+  const minutes = Math.max(timelineViewStartMinutes, Math.min(timelineViewStartMinutes + viewMinutes, current + (event.key === 'ArrowRight' ? step : -step)));
+  const ratio = (minutes - timelineViewStartMinutes) / viewMinutes;
+  setPlayhead(ratio);
+  selectNearestTimelineEvent(ratio);
+});
 
 async function hydrateImage(img) {
   if (img.dataset.loaded === 'true') return;
@@ -422,7 +859,7 @@ document.getElementById('delete-camera').addEventListener('click', async () => {
 document.getElementById('logout-btn').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}catch(_){}localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
 window.addEventListener('beforeunload',()=>{ imageObserver?.disconnect(); objectUrls.forEach(URL.revokeObjectURL); });
 init().catch(showError);
-setInterval(()=>{ if(camera && !document.hidden) loadEvents().catch(()=>{}); },30000);
+setInterval(()=>{ if(camera && !document.hidden && localDateValue(timelineDate)===localDateValue(new Date())) loadEvents().catch(()=>{}); },15000);
 </script>
 </body>
 </html>

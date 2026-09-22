@@ -16,6 +16,7 @@ import { onRequestGet as cameraSnapshot } from "../cameras/[site]/[camera]/snaps
 import { onRequestGet as eventImage } from "../events/[id]/image.js";
 import { onRequestGet as eventVideo } from "../events/[id]/video.js";
 import { getDb } from "../../_lib/db.js";
+import { getCamera } from "../../_lib/sites.js";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
@@ -120,6 +121,8 @@ export async function executeAgentAction(action, args, context) {
     case "camera_config": return cameraConfig({ request, env, data, params: cameraParams });
     case "get_live_link": return createLiveLink({ request, env, data, params: cameraParams });
     case "get_snapshot_link": {
+      const camera = await getCamera(env, data.accountId, args.siteId, args.cameraId);
+      if (!camera) return errorJson("Camera not found", 404);
       const url = new URL(request.url);
       url.pathname = `/api/cameras/${encodeURIComponent(args.siteId)}/${encodeURIComponent(args.cameraId)}/snapshot`;
       url.search = "";

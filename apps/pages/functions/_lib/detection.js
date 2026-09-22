@@ -34,6 +34,8 @@ export async function detectPerson(env, site, frameBuffer) {
       const faceEmbedding = Array.isArray(data.faceEmbedding) ? data.faceEmbedding : faceEmbeddings[0] || null;
       return {
         hasPerson: Boolean(data.hasPerson),
+        hasVehicle: Boolean(data.hasVehicle),
+        vehicleBoxes: Array.isArray(data.vehicleBoxes) ? data.vehicleBoxes : [],
         faceEmbedding,
         faceEmbeddings: faceEmbeddings.length ? faceEmbeddings : (faceEmbedding ? [faceEmbedding] : []),
         faceDetections: faceDetections.length ? faceDetections : (faceEmbedding ? [{ embedding: faceEmbedding, box: null }] : []),
@@ -47,7 +49,7 @@ export async function detectPerson(env, site, frameBuffer) {
   // fail-open behavior created empty clips with personId=null whenever a
   // transient go2rtc snapshot was not a valid JPEG.
   console.warn("AI worker không xác nhận được người, bỏ qua event:", failures.join("; "));
-  return { hasPerson: false, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] };
+  return { hasPerson: false, hasVehicle: false, vehicleBoxes: [], faceEmbedding: null, faceEmbeddings: [], faceDetections: [] };
 }
 
 export function detectionWorkerUrls(env, site) {

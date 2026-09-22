@@ -12,7 +12,8 @@ import { captureClip, uploadClip, uploadSnapshot } from "../_lib/r2.js";
 import { getIntegration } from "../_lib/integrations.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
 import { triggerGpuScan } from "../_lib/gpuWorker.js";
-import { storageChoice } from "../_lib/objectStorage.js";
+import { resolveStorageChain } from "../_lib/objectStorage.js";
+import { effectivePlanForAccount, normalizeClipDuration } from "../_lib/plans.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil }) => {
   let body;
@@ -22,7 +23,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
     return errorJson("Invalid JSON body", 400);
   }
 
-  const { siteId, camera, trusted } = body;
+  const { siteId, camera, trusted, detection } = body;
   if (!siteId || !camera) {
     return errorJson("siteId và camera là bắt buộc", 400);
   }
@@ -38,7 +39,9 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   // Open the MP4 stream before the slower snapshot/AI/Telegram/DB path only
   // when this camera is configured to retain person-event video.
   const shouldRecord = Number(cameraConfig.record_on_person ?? 1) === 1;
-  const clipPromise = shouldRecord ? captureClip(site, camera) : null;
+  const plan = shouldRecord ? await effectivePlanForAccount(env, site.account_id) : "free";
+  const clipSeconds = normalizeClipDuration(plan, cameraConfig.clip_duration_seconds);
+  const clipPromise = shouldRecord ? captureClip(site, camera, clipSeconds) : null;
   const frame = await getFrame(env, site, camera);
   // A camera the relay marked onvifMotionTrusted already made the person
   // call itself (reliable ONVIF motion feed, see apps/relay/src/index.js).
@@ -46,11 +49,21 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   // worker — instead of re-confirming a decision that camera already made.
   // Trade-off: no face embedding is produced, so these events won't be
   // matched to a known person (personId stays null).
-  const { hasPerson, faceEmbedding, faceEmbeddings = [], faceDetections = [] } = trusted === true
-    ? { hasPerson: true, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] }
+  const trustedResult = trusted === true && detection &&
+    typeof detection.hasPerson === "boolean" && typeof detection.hasVehicle === "boolean"
+    ? {
+        hasPerson: detection.hasPerson,
+        hasVehicle: detection.hasVehicle,
+        faceEmbedding: null,
+        faceEmbeddings: [],
+        faceDetections: [],
+      }
+    : null;
+  const { hasPerson, hasVehicle = false, faceEmbedding, faceEmbeddings = [], faceDetections = [] } = trusted === true
+    ? (trustedResult || { hasPerson: true, hasVehicle: false, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] })
     : await detectPerson(env, site, frame);
 
-  if (!hasPerson) {
+  if (!hasPerson && !hasVehicle) {
     return json({ ok: true, alerted: false });
   }
 
@@ -69,15 +82,22 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   }
   const personId = personIds[0] || null;
 
-  const caption = `🔔 Phát hiện người (${site.name || site.id})!\n⏰ ${new Date().toLocaleString("vi-VN")}`;
+  const eventType = hasPerson ? "Person" : "Vehicle";
+  const caption = `🔔 Phát hiện ${hasPerson ? "người" : "xe"} (${site.name || site.id})!\n⏰ ${new Date().toLocaleString("vi-VN")}`;
   const telegram = await getIntegration(env, site.account_id, "telegram");
   const link = await sendPhotoAlert(telegram, frame, caption);
-  const { backend } = await storageChoice(env, site.account_id);
+  // Chain order: the account's selected backend first, the other
+  // configured customer backend as fallback, R2 always last as the
+  // guaranteed backstop (see objectStorage.js resolveStorageChain).
+  // storage_backend below is a placeholder until the upload actually
+  // lands — it's corrected to whichever candidate succeeded once the
+  // snapshot/clip upload resolves (see the waitUntil blocks below).
+  const storageChain = await resolveStorageChain(env, site.account_id);
 
   const db = getDb(env);
   const inserted = await db.execute({
     sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, storage_backend, video_status, face_scan_status, face_scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP) RETURNING id",
-    args: [site.account_id, site.id, camera, personId, "Person", link, backend, shouldRecord ? "recording" : "disabled"],
+    args: [site.account_id, site.id, camera, personId, eventType, link, storageChain[0], shouldRecord ? "recording" : "disabled"],
   });
   const eventId = Number(inserted.lastInsertRowid);
   for (const id of personIds) {
@@ -89,23 +109,41 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
 
   // The event is already durable at this point. Snapshot and clip persistence
   // are independent so a broken video stream never removes the event/photo.
+  // They must still land on the same storage_backend (one column covers the
+  // whole event row), so the clip upload below waits for the snapshot's
+  // fallback decision and tries that backend first. If the snapshot upload
+  // fails on every candidate (only possible if R2 itself is broken, since
+  // it's always last in the chain), the clip independently runs the full
+  // chain — the two could then diverge, but that only happens alongside a
+  // platform-level R2 outage.
+  let resolveSnapshotBackend;
+  const snapshotBackendKnown = new Promise((resolve) => { resolveSnapshotBackend = resolve; });
+
   waitUntil(
-    uploadSnapshot(env, site.account_id, backend, frame, `${site.account_id}/${eventId}.jpg`)
-      .then(async (key) => {
-        await db.execute({ sql: "UPDATE events SET image_key = ? WHERE id = ?", args: [key, eventId] });
+    uploadSnapshot(env, site.account_id, storageChain, frame, `${site.account_id}/${eventId}.jpg`)
+      .then(async ({ key, backend }) => {
+        resolveSnapshotBackend(backend);
+        await db.execute({ sql: "UPDATE events SET image_key = ?, storage_backend = ? WHERE id = ?", args: [key, backend, eventId] });
         if (backend === "r2") await triggerGpuScan(env, eventId);
       })
-      .catch((err) => console.error(`Upload snapshot thất bại (${eventId}):`, err.message || err))
+      .catch((err) => {
+        resolveSnapshotBackend(null);
+        console.error(`Upload snapshot thất bại (${eventId}):`, err.message || err);
+      })
   );
 
   // Capture + upload happens after the response below (via waitUntil) because
   // recording and uploading the finite clip takes several seconds.
   if (shouldRecord) {
     waitUntil(
-      uploadClip(env, site.account_id, backend, clipPromise, `${site.account_id}/${eventId}.mp4`)
-        .then((key) => db.execute({
-          sql: "UPDATE events SET video_key = ?, video_status = 'ready', video_error = NULL WHERE id = ?",
-          args: [key, eventId],
+      snapshotBackendKnown
+        .then((snapshotBackend) => {
+          const clipChain = snapshotBackend ? [snapshotBackend, ...storageChain.filter((b) => b !== snapshotBackend)] : storageChain;
+          return uploadClip(env, site.account_id, clipChain, clipPromise, `${site.account_id}/${eventId}.mp4`);
+        })
+        .then(({ key, backend }) => db.execute({
+          sql: "UPDATE events SET video_key = ?, storage_backend = ?, video_status = 'ready', video_error = NULL WHERE id = ?",
+          args: [key, backend, eventId],
         }))
         .catch((err) => {
           const message = String(err.message || "Không lưu được clip").slice(0, 300);
@@ -118,5 +156,5 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
     );
   }
 
-  return json({ ok: true, alerted: true, personId, personIds });
+  return json({ ok: true, alerted: true, type: eventType, personId, personIds });
 });

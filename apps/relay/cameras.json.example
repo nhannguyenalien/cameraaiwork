@@ -4,11 +4,26 @@
     "stream": "tapo",
     "localAiEnabled": true,
     "onvifMotionTrusted": false,
+    "hasOnvif": true,
     "onvif": {
       "ip": "192.168.2.23",
       "port": 2020,
       "username": "changeme",
       "password": "changeme"
     }
+  },
+  {
+    "id": "old-rtsp-cam",
+    "stream": "old-rtsp-cam",
+    "localAiEnabled": true,
+    "onvifMotionTrusted": false,
+    "hasOnvif": false,
+    "onvif": {
+      "ip": "192.168.2.24",
+      "port": 2020,
+      "username": "changeme",
+      "password": "changeme"
+    },
+    "rtsp": { "port": 554, "path": "/stream1" }
   }
 ]

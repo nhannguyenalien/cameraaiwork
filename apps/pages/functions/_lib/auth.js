@@ -2,20 +2,28 @@ import { getDb } from "./db.js";
 import { randomId, randomSecret, sha256Hex } from "./ids.js";
 
 const encoder = new TextEncoder();
-// Cloudflare Workers rejects PBKDF2 iteration counts above 100,000.
-const PASSWORD_PBKDF2_ITERATIONS = 100000;
+// Cloudflare Workers rejects PBKDF2 iteration counts above 100,000. 100,000
+// itself was found to sit right at (and sometimes over, under edge load) the
+// free-tier 10ms CPU-time budget for the whole /api/auth/login request
+// (query + hashing), causing sporadic "Worker exceeded CPU time limit" 503s.
+// New/changed passwords use the lower PASSWORD_PBKDF2_ITERATIONS instead;
+// existing rows keep working because the iteration count used at hash time
+// is stored alongside the hash (see password_iterations below) rather than
+// assumed from this constant.
+const PASSWORD_PBKDF2_ITERATIONS = 20000;
 const DUMMY_PASSWORD_SALT = "00000000000000000000000000000000";
 const DUMMY_PASSWORD_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
+const DUMMY_PASSWORD_ITERATIONS = PASSWORD_PBKDF2_ITERATIONS;
 
 function bytesToHex(bytes) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function derivePassword(password, saltHex) {
+async function derivePassword(password, saltHex, iterations = PASSWORD_PBKDF2_ITERATIONS) {
   const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   const salt = new Uint8Array(saltHex.match(/.{2}/g).map((value) => parseInt(value, 16)));
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: PASSWORD_PBKDF2_ITERATIONS },
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
     key,
     256
   );
@@ -77,13 +85,14 @@ export async function updateAccountPassword(env, accountId, password) {
   const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
   const passwordHash = await derivePassword(password, salt);
   await db.execute({
-    sql: `INSERT INTO auth_credentials (account_id, password_salt, password_hash, updated_at)
-          VALUES (?, ?, ?, datetime('now'))
+    sql: `INSERT INTO auth_credentials (account_id, password_salt, password_hash, password_iterations, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now'))
           ON CONFLICT(account_id) DO UPDATE SET
             password_salt = excluded.password_salt,
             password_hash = excluded.password_hash,
+            password_iterations = excluded.password_iterations,
             updated_at = datetime('now')`,
-    args: [accountId, salt, passwordHash],
+    args: [accountId, salt, passwordHash, PASSWORD_PBKDF2_ITERATIONS],
   });
 }
 
@@ -99,7 +108,7 @@ export async function createAccount(env, input) {
   const apiKey = randomSecret();
   await db.batch([
     { sql: "INSERT INTO accounts (id, name, email, plan, subscription_status) VALUES (?, ?, ?, 'free', 'inactive')", args: [accountId, normalizedName || normalizedEmail, normalizedEmail] },
-    { sql: "INSERT INTO auth_credentials (account_id, password_salt, password_hash) VALUES (?, ?, ?)", args: [accountId, salt, passwordHash] },
+    { sql: "INSERT INTO auth_credentials (account_id, password_salt, password_hash, password_iterations) VALUES (?, ?, ?, ?)", args: [accountId, salt, passwordHash, PASSWORD_PBKDF2_ITERATIONS] },
     { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web signup', CURRENT_TIMESTAMP + INTERVAL '12 hours')", args: [await sha256Hex(apiKey), accountId] },
   ]);
   return { accountId, apiKey };
@@ -109,11 +118,16 @@ export async function login(env, { email, password }) {
   if (typeof email !== "string" || typeof password !== "string") return null;
   const db = getDb(env);
   const result = await db.execute({
-    sql: "SELECT a.id, c.password_salt, c.password_hash FROM accounts a JOIN auth_credentials c ON c.account_id = a.id WHERE a.email = ?",
+    sql: "SELECT a.id, c.password_salt, c.password_hash, c.password_iterations FROM accounts a JOIN auth_credentials c ON c.account_id = a.id WHERE a.email = ?",
     args: [email.trim().toLowerCase()],
   });
   const row = result.rows[0];
-  const candidateHash = await derivePassword(password, row?.password_salt || DUMMY_PASSWORD_SALT);
+  // Rows created before password_iterations existed used the old fixed
+  // 100,000-iteration constant; new/updated passwords use the lower current
+  // default. Verifying with whatever count was actually used to hash keeps
+  // every existing password working through this change.
+  const iterations = row?.password_iterations || 100000;
+  const candidateHash = await derivePassword(password, row?.password_salt || DUMMY_PASSWORD_SALT, row ? iterations : DUMMY_PASSWORD_ITERATIONS);
   if (!row || !constantTimeEqual(candidateHash, row?.password_hash || DUMMY_PASSWORD_HASH)) return null;
   const apiKey = randomSecret();
   await db.batch([

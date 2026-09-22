@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validateCamera, publicCamera, sameRtspSource, sourceUrls } = require("../src/camera-config");
+const { validateCamera, publicCamera, sameRtspSource, sourceUrls, missingStreamIds } = require("../src/camera-config");
 
 test("keeps the local password when an edit submits an empty password", () => {
   const current = { id: "cam1", onvif: { ip: "192.168.1.2", port: 2020, username: "old", password: "secret" }, rtsp: { port: 554, path: "/stream1" } };
@@ -59,6 +59,26 @@ test("persists a per-camera ONVIF-motion-trusted switch, defaulting to false", (
   assert.equal(validateCamera({ username: "u2" }, trusted).onvifMotionTrusted, true);
   assert.equal(validateCamera({ onvifMotionTrusted: false }, trusted).onvifMotionTrusted, false);
   assert.throws(() => validateCamera({ onvifMotionTrusted: "true" }, trusted), /true hoặc false/);
+});
+
+test("persists a per-camera hasOnvif switch, defaulting to true", () => {
+  const camera = validateCamera({ id: "cam1", ip: "camera.lan", username: "u", password: "p" });
+  assert.equal(camera.hasOnvif, true);
+  assert.equal(publicCamera(camera).hasOnvif, true);
+
+  const noOnvif = validateCamera({ id: "cam1", ip: "camera.lan", username: "u", password: "p", hasOnvif: false });
+  assert.equal(noOnvif.hasOnvif, false);
+  assert.equal(publicCamera(noOnvif).hasOnvif, false);
+  assert.equal(validateCamera({ username: "u2" }, noOnvif).hasOnvif, false);
+  assert.equal(validateCamera({ hasOnvif: true }, noOnvif).hasOnvif, true);
+  assert.throws(() => validateCamera({ hasOnvif: "false" }, noOnvif), /true hoặc false/);
+});
+
+test("finds only configured streams missing after a go2rtc restart", () => {
+  const cameras = [{ id: "cam1" }, { id: "cam2" }, { id: "cam3" }];
+  assert.deepEqual(missingStreamIds(cameras, { cam1: { producers: [] }, cam3: {} }), ["cam2"]);
+  assert.deepEqual(missingStreamIds(cameras, {}), ["cam1", "cam2", "cam3"]);
+  assert.deepEqual(missingStreamIds(cameras, null), ["cam1", "cam2", "cam3"]);
 });
 
 test("rejects unsafe hosts and paths", () => {

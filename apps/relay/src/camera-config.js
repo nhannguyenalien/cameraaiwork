@@ -11,6 +11,9 @@ function validateCamera(input, current) {
   if (input.onvifMotionTrusted != null && typeof input.onvifMotionTrusted !== "boolean") {
     throw new Error("Trạng thái tin cậy ONVIF motion phải là true hoặc false");
   }
+  if (input.hasOnvif != null && typeof input.hasOnvif !== "boolean") {
+    throw new Error("Trạng thái hỗ trợ ONVIF phải là true hoặc false");
+  }
   const id = clean(input.id || current?.id);
   const ip = clean(input.ip ?? current?.onvif?.ip);
   const username = clean(input.username ?? current?.onvif?.username);
@@ -29,6 +32,14 @@ function validateCamera(input, current) {
   const onvifMotionTrusted = input.onvifMotionTrusted == null
     ? current?.onvifMotionTrusted === true
     : input.onvifMotionTrusted === true;
+  // Cameras with no ONVIF service at all (cheap/legacy models, RTSP-only)
+  // still need person detection — see startPersonPolling/hasOnvif in index.js
+  // and ptz.js, which skip the ONVIF connection entirely for these and poll
+  // a snapshot + local AI on a timer instead. Defaults to true so existing
+  // camera entries keep behaving exactly as before.
+  const hasOnvif = input.hasOnvif == null
+    ? current?.hasOnvif !== false
+    : input.hasOnvif === true;
 
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new Error("Mã camera không hợp lệ");
   if (!ip || ip.length > 253 || !/^[a-zA-Z0-9.-]+$/.test(ip)) throw new Error("IP/hostname camera không hợp lệ");
@@ -49,6 +60,7 @@ function validateCamera(input, current) {
     rtsp: { port: rtspPort, path: rtspPath },
     localAiEnabled,
     onvifMotionTrusted,
+    hasOnvif,
   };
 }
 
@@ -63,6 +75,7 @@ function publicCamera(camera) {
     onvifStream: camera.onvif?.stream === true,
     localAiEnabled: camera.localAiEnabled !== false,
     onvifMotionTrusted: camera.onvifMotionTrusted === true,
+    hasOnvif: camera.hasOnvif !== false,
     hasPassword: Boolean(camera.onvif.password),
   };
 }
@@ -85,6 +98,11 @@ function sameRtspSource(left, right) {
     && (left?.rtsp?.path || "/stream1") === (right?.rtsp?.path || "/stream1");
 }
 
+function missingStreamIds(cameras, streams) {
+  const registered = streams && typeof streams === "object" ? streams : {};
+  return cameras.filter((camera) => !Object.hasOwn(registered, camera.id)).map((camera) => camera.id);
+}
+
 async function updateGo2rtc(go2rtcUrl, camera) {
   const request = async (method, params) => {
     const url = new URL("/api/streams", go2rtcUrl);
@@ -103,4 +121,12 @@ function persistCameras(file, cameras) {
   fs.chmodSync(file, 0o600);
 }
 
-module.exports = { validateCamera, publicCamera, sameRtspSource, sourceUrls, updateGo2rtc, persistCameras };
+module.exports = {
+  validateCamera,
+  publicCamera,
+  sameRtspSource,
+  sourceUrls,
+  missingStreamIds,
+  updateGo2rtc,
+  persistCameras,
+};

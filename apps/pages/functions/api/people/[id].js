@@ -23,8 +23,8 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
 
   const label = (body.label || "").trim() || null;
   await db.execute({
-    sql: `UPDATE ${table} SET label = ? WHERE id = ?`,
-    args: [label, params.id],
+    sql: `UPDATE ${table} SET label = ? WHERE id = ? AND account_id = ?`,
+    args: [label, params.id, data.accountId],
   });
 
   return json({ ok: true, label });

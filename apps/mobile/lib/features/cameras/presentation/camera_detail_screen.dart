@@ -87,6 +87,7 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
     ref.invalidate(cameraStatusProvider(widget.camera));
     ref.invalidate(cameraSnapshotProvider(widget.camera));
     ref.invalidate(cameraEventsProvider(widget.camera.stream));
+    ref.invalidate(cameraTimelineEventsProvider);
   }
 
   @override
@@ -198,6 +199,8 @@ class _CameraDetailScreenState extends ConsumerState<CameraDetailScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
+          const SizedBox(height: 24),
+          _CameraTimeline(camera: widget.camera),
           const SizedBox(height: 24),
           Text(
             'Sự kiện gần đây',
@@ -331,6 +334,347 @@ class _PtzControls extends StatelessWidget {
   }
 }
 
+class _CameraTimeline extends ConsumerStatefulWidget {
+  const _CameraTimeline({required this.camera});
+
+  final CameraSummary camera;
+
+  @override
+  ConsumerState<_CameraTimeline> createState() => _CameraTimelineState();
+}
+
+class _CameraTimelineState extends ConsumerState<_CameraTimeline> {
+  static const _zoomHours = [24, 12, 6, 3, 1];
+  late DateTime _windowEnd;
+  int _zoomIndex = 3;
+  CameraEvent? _selectedEvent;
+
+  @override
+  void initState() {
+    super.initState();
+    _windowEnd = DateTime.now();
+  }
+
+  DateTime get _dayStart =>
+      DateTime(_windowEnd.year, _windowEnd.month, _windowEnd.day);
+  Duration get _windowDuration => Duration(hours: _zoomHours[_zoomIndex]);
+  DateTime get _windowStart {
+    final candidate = _windowEnd.subtract(_windowDuration);
+    return candidate.isBefore(_dayStart) ? _dayStart : candidate;
+  }
+
+  Future<void> _pickDateTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _windowEnd,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+      helpText: 'Chọn ngày xem timeline',
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_windowEnd),
+      helpText: 'Chọn giờ kết thúc timeline',
+    );
+    if (time == null) return;
+    var value = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    if (value.isAfter(now)) value = now;
+    setState(() {
+      _windowEnd = value;
+      _selectedEvent = null;
+    });
+  }
+
+  void _changeZoom(int delta) {
+    final next = (_zoomIndex + delta).clamp(0, _zoomHours.length - 1);
+    if (next == _zoomIndex) return;
+    setState(() => _zoomIndex = next);
+  }
+
+  void _goNow() {
+    setState(() {
+      _windowEnd = DateTime.now();
+      _selectedEvent = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = CameraTimelineQuery(
+      cameraStream: widget.camera.stream,
+      dayStart: _dayStart,
+    );
+    final events = ref.watch(cameraTimelineEventsProvider(query));
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Dòng thời gian',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _goNow,
+              icon: const Icon(Icons.schedule, size: 18),
+              label: const Text('Bây giờ'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickDateTime,
+                        icon: const Icon(Icons.calendar_month),
+                        label: Text(_dateTimeLabel(_windowEnd)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.outlined(
+                      onPressed: _zoomIndex == 0 ? null : () => _changeZoom(-1),
+                      tooltip: 'Thu nhỏ timeline',
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        '${_zoomHours[_zoomIndex]}h',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton.outlined(
+                      onPressed: _zoomIndex == _zoomHours.length - 1
+                          ? null
+                          : () => _changeZoom(1),
+                      tooltip: 'Phóng to timeline',
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                events.when(
+                  loading: () => const SizedBox(
+                    height: 112,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (error, _) => SizedBox(
+                    height: 112,
+                    child: Center(
+                      child: Text('Không tải được timeline: $error'),
+                    ),
+                  ),
+                  data: (items) => _buildTimeline(context, items, colors),
+                ),
+                if (_selectedEvent case final event?) ...[
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () => context.push('/event', extra: event),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: const BorderRadius.horizontal(
+                              left: Radius.circular(12),
+                            ),
+                            child: SizedBox(
+                              width: 120,
+                              height: 76,
+                              child: event.hasImage
+                                  ? ref
+                                        .watch(eventImageProvider(event.id))
+                                        .when(
+                                          data: (bytes) => Image.memory(
+                                            bytes,
+                                            fit: BoxFit.cover,
+                                          ),
+                                          loading: () => const Center(
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                          error: (_, _) => const Icon(
+                                            Icons.broken_image_outlined,
+                                          ),
+                                        )
+                                  : const Icon(
+                                      Icons.image_not_supported_outlined,
+                                    ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    event.personLabel ?? event.typeLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(eventDateLabel(event.timestamp)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: Icon(Icons.chevron_right),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeline(
+    BuildContext context,
+    List<CameraEvent> allEvents,
+    ColorScheme colors,
+  ) {
+    final start = _windowStart;
+    final end = _windowEnd;
+    final durationMs = end.difference(start).inMilliseconds;
+    final visible = allEvents.where((event) {
+      final local = event.timestamp.toLocal();
+      return !local.isBefore(start) && local.isBefore(end);
+    }).toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _timeLabel(start),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Text(
+                  _timeLabel(end),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 54,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    top: 13,
+                    bottom: 13,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                    ),
+                  ),
+                  for (final event in visible)
+                    Positioned(
+                      left:
+                          ((event.timestamp
+                                          .toLocal()
+                                          .difference(start)
+                                          .inMilliseconds /
+                                      durationMs) *
+                                  (width - 16))
+                              .clamp(0, width - 16),
+                      top: 10,
+                      child: Semantics(
+                        label:
+                            '${event.typeLabel}, ${eventDateLabel(event.timestamp)}',
+                        button: true,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedEvent = event),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            width: 16,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: event.type == 'Vehicle'
+                                  ? Colors.orange
+                                  : colors.primary,
+                              borderRadius: BorderRadius.circular(6),
+                              border: _selectedEvent?.id == event.id
+                                  ? Border.all(
+                                      color: colors.onSurface,
+                                      width: 2,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (visible.isEmpty)
+                    const Positioned.fill(
+                      child: Center(
+                        child: Text('Không có đoạn ghi hình trong khoảng này'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app, size: 16),
+                SizedBox(width: 4),
+                Text('Chạm vào đoạn ghi hình để xem snapshot'),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _dateTimeLabel(DateTime value) =>
+      '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year} · ${_timeLabel(value)}';
+  String _timeLabel(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+}
+
 class _CameraEventTile extends ConsumerWidget {
   const _CameraEventTile({required this.event});
   final CameraEvent event;
@@ -362,9 +706,7 @@ class _CameraEventTile extends ConsumerWidget {
         ),
         title: Text(event.personLabel ?? event.typeLabel),
         subtitle: Text(eventDateLabel(event.timestamp)),
-        trailing: event.hasVideo
-            ? const Icon(Icons.play_circle_outline)
-            : null,
+        trailing: event.hasVideo ? const Icon(Icons.play_circle_outline) : null,
       ),
     );
   }

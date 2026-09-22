@@ -7,6 +7,7 @@ Mỗi địa điểm dùng một máy luôn bật, một Named Tunnel và một 
 - Máy macOS hoặc Linux 64-bit, cùng LAN với camera, chạy 24/7; khuyến nghị Ethernet và DHCP reservation/static IP cho camera.
 - Node.js 20+, Git, Python 3.10+ có `venv`, `curl`; Linux cần `sudo`. Homebrew cần có trên macOS nếu chưa cài `cloudflared`.
 - Camera bật RTSP và ONVIF, có tài khoản camera riêng cho CameraAI. Xác nhận IP, ONVIF port, username/password. MVP hiện yêu cầu nhập IP; chưa tự quét camera trong LAN.
+- Camera cũ không có ONVIF vẫn thêm được: tick "Camera cũ, không hỗ trợ ONVIF" khi thêm camera (hoặc đặt `hasOnvif: false` trong `cameras.json`). Camera đó sẽ không nhận PTZ và không có motion event đẩy từ camera, thay vào đó relay tự chụp ảnh RTSP mỗi vài giây (`PERSON_POLL_INTERVAL_MS`, mặc định 5s) và chạy AI cục bộ để phát hiện người — tốn CPU/băng thông hơn đường ONVIF nên chỉ nên bật khi camera thật sự không có ONVIF.
 - Mạng cho phép outbound HTTPS/WSS tới Cloudflare, GitHub, dashboard và dịch vụ package. Không mở port inbound/router.
 - Một account CameraAI đã đăng nhập. Trong **Cấu hình → Cài relay lên VPS**, bấm tạo lệnh cài; lệnh chứa token dùng một lần, hết hạn sau 15 phút và gắn với đúng account/email đang đăng nhập.
 
@@ -59,7 +60,9 @@ cd "$HOME/cameraaiwork"
 ./apps/relay/update.sh
 ```
 
-Updater chỉ chạy thủ công, kiểm tra checksum/archive, giữ nguyên `.env` và `cameras.json`, đồng thời gỡ lịch auto-update legacy nếu máy từng cài bản cũ.
+Updater kiểm tra checksum/archive, giữ nguyên `.env` và `cameras.json`, đồng thời gỡ lịch auto-update legacy nếu máy từng cài bản cũ.
+
+Ngoài chạy tay qua SSH, dashboard có nút **"Đẩy update"** ở bảng "Site đã kết nối" (Cài đặt → Site) gọi `POST /api/sites/:id/update`, việc này chỉ ra lệnh cho relay tự chạy `update.sh` cục bộ — không tải/deploy code từ dashboard. Vẫn cần người bấm (checkpoint con người), chỉ bỏ được bước SSH thủ công. Relay/AI worker sẽ restart trong lúc cập nhật nên live view/PTZ gián đoạn vài giây; trạng thái (`running`/`success`/`failed`) hiện ngay dưới nút, đọc từ `apps/relay/.update-status.json` do chính `update.sh` ghi lúc thoát — file này sống sót qua việc relay tự restart giữa chừng nên không mất trạng thái. Cơ chế này KHÔNG thay thế yêu cầu đọc release notes trước khi bấm: bundle vẫn chỉ được xác minh bằng SHA-256 tự tính, chưa ký số (xem gap #5, [PRODUCTION.md](PRODUCTION.md)) — chưa nên biến thành cron tự động.
 
 Không sửa file sinh ra ngoài `apps/relay/.env` và `apps/relay/cameras.json`. Sao lưu hai file này bằng kho bí mật; chúng chứa relay/tunnel/camera secrets. Khi mất máy, thu hồi tunnel token bằng cách xóa/re-provision site, đổi mật khẩu camera rồi cài lại.
 

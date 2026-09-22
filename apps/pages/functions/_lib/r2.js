@@ -9,9 +9,8 @@
 // mid-stream still yields a playable file up to the last full fragment.
 // Verify this against a real go2rtc instance before relying on it; if
 // clips come out unplayable, that assumption is the first thing to check.
-const CLIP_SECONDS = 10;
-const MAX_CLIP_BYTES = 20 * 1024 * 1024; // safety net if bitrate is far above expected
-import { putObject } from "./objectStorage.js";
+const ALLOWED_CLIP_SECONDS = new Set([10, 30, 60]);
+import { putObjectWithFallback } from "./objectStorage.js";
 
 async function readBoundedClip(readableBody, maxMs, maxBytes) {
   const reader = readableBody.getReader();
@@ -50,12 +49,14 @@ async function readBoundedClip(readableBody, maxMs, maxBytes) {
 // In particular, do not wait for snapshot AI, Telegram and the DB insert: on a
 // person walking through frame those steps used to delay the clip by 1-2s and
 // the evidence could be gone before recording began.
-export async function captureClip(site, camera) {
+export async function captureClip(site, camera, requestedSeconds = 10) {
   try {
+    const clipSeconds = ALLOWED_CLIP_SECONDS.has(Number(requestedSeconds)) ? Number(requestedSeconds) : 10;
+    const maxClipBytes = Math.max(20, Math.ceil(clipSeconds * 1.25)) * 1024 * 1024;
     // The site hostname passes through Cloudflare. Use a unique URL per event
     // so an account-level Cache Everything rule can never replay an older MP4.
     const nonce = `${Date.now()}-${crypto.randomUUID()}`;
-    const clipUrl = `${site.relay_url}/internal/clip.mp4?src=${encodeURIComponent(camera)}&_clip=${encodeURIComponent(nonce)}`;
+    const clipUrl = `${site.relay_url}/internal/clip.mp4?src=${encodeURIComponent(camera)}&duration=${clipSeconds}&_clip=${encodeURIComponent(nonce)}`;
     const res = await fetch(clipUrl, {
       redirect: "manual",
       headers: {
@@ -69,7 +70,7 @@ export async function captureClip(site, camera) {
       throw new Error(`go2rtc trả content-type không hợp lệ: ${contentType || "unknown"}`);
     }
 
-    const clip = await readBoundedClip(res.body, CLIP_SECONDS * 1000, MAX_CLIP_BYTES);
+    const clip = await readBoundedClip(res.body, 15000, maxClipBytes);
     if (!clip.byteLength) throw new Error("go2rtc trả clip rỗng");
 
     return clip;
@@ -80,14 +81,17 @@ export async function captureClip(site, camera) {
 }
 
 // Upload is deliberately separate from capture so motion.js can begin capture
-// before it knows the eventual DB event id / R2 key.
-export async function uploadClip(env, accountId, backend, clipPromise, key) {
+// before it knows the eventual DB event id / R2 key. `chain` is the ordered
+// list of backends to try (see objectStorage.js resolveStorageChain) — R2
+// capacity eviction for the free tier is handled inside putObject itself,
+// only when a candidate in the chain is actually "r2".
+export async function uploadClip(env, accountId, chain, clipPromise, key) {
   const clip = await clipPromise;
   if (!clip?.byteLength) throw new Error("Camera không trả về clip hợp lệ");
-  return putObject(env, accountId, backend, key, clip, "video/mp4");
+  return putObjectWithFallback(env, accountId, chain, key, clip, "video/mp4", "clip");
 }
 
-export async function uploadSnapshot(env, accountId, backend, frame, key) {
+export async function uploadSnapshot(env, accountId, chain, frame, key) {
   if (!frame?.byteLength) throw new Error("Ảnh camera rỗng");
-  return putObject(env, accountId, backend, key, frame, "image/jpeg");
+  return putObjectWithFallback(env, accountId, chain, key, frame, "image/jpeg", "snapshot");
 }

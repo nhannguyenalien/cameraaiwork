@@ -1,5 +1,6 @@
 import { getDb } from "./db.js";
 import { headObject } from "./objectStorage.js";
+import { R2_FREE_QUOTA_BYTES } from "./storageQuota.js";
 
 const MAX_LIST_PAGES = 100;
 const BACKENDS = ["r2", "s3", "gdrive"];
@@ -18,6 +19,9 @@ function emptyBackend(backend) {
     missingObjects: 0,
     unavailable: false,
     error: "",
+    // Only the shared free-tier R2 bucket is quota-capped and auto-rotated
+    // (see storageQuota.js); s3/gdrive are the paid, unlimited backends.
+    quotaBytes: backend === "r2" ? R2_FREE_QUOTA_BYTES : null,
   };
 }
 

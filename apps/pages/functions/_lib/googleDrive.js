@@ -29,10 +29,10 @@ function escapeQuery(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-async function findFile(config, key) {
+async function findFile(config, key, signal) {
   const q = `'${escapeQuery(config.folderId)}' in parents and trashed = false and appProperties has { key='cameraaiObjectKey' and value='${escapeQuery(key)}' }`;
   const url = `${API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size)&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-  const response = await ensureOk(await fetch(url, { headers: headers(config) }), "Tìm file trên");
+  const response = await ensureOk(await fetch(url, { headers: headers(config), signal }), "Tìm file trên");
   const data = await response.json();
   return data.files?.[0] || null;
 }
@@ -41,8 +41,8 @@ function fileName(key) {
   return String(key).split("/").pop() || "cameraai-object";
 }
 
-export async function putGoogleDrive(config, key, body, contentType) {
-  const existing = await findFile(config, key);
+export async function putGoogleDrive(config, key, body, contentType, signal) {
+  const existing = await findFile(config, key, signal);
   const metadata = existing ? null : {
     name: fileName(key),
     parents: [config.folderId],
@@ -58,6 +58,7 @@ export async function putGoogleDrive(config, key, body, contentType) {
       "x-upload-content-type": contentType || "application/octet-stream",
     }),
     body: JSON.stringify(metadata || {}),
+    signal,
   }), "Khởi tạo upload lên");
   const location = init.headers.get("location");
   if (!location) throw new Error("Google Drive không trả về URL upload");
@@ -65,6 +66,7 @@ export async function putGoogleDrive(config, key, body, contentType) {
     method: "PUT",
     headers: { "content-type": contentType || "application/octet-stream" },
     body,
+    signal,
   }), "Upload lên");
 }
 

@@ -54,3 +54,28 @@ CUSTOMER_SECRETS_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_PRICE_ID=
 STRIPE_WEBHOOK_SECRET=
+
+# One platform-owned Google OAuth client, shared by every account, so a
+# customer can connect their own Google Drive for event storage without
+# creating anything in Google Cloud themselves — see
+# functions/_lib/googleAuth.js and functions/api/settings/storage-config/.
+# Setup in Google Cloud Console (console.cloud.google.com):
+#   1. APIs & Services -> Library -> enable "Google Drive API".
+#   2. APIs & Services -> OAuth consent screen -> External -> fill app name/
+#      support email -> add scope ".../auth/drive" -> while in "Testing"
+#      publishing status, add every Google account that will connect a
+#      Drive as a test user (or "Publish app" to allow any Google account,
+#      which may require Google's verification review for this scope).
+#   3. APIs & Services -> Credentials -> Create Credentials -> OAuth client
+#      ID -> Application type "Web application" -> Authorized redirect URIs:
+#      add exactly "https://<your-pages-domain>/api/settings/storage-config/google-callback"
+#      (and the localhost equivalent for `wrangler pages dev` if testing
+#      locally, e.g. "http://localhost:8788/api/settings/storage-config/google-callback").
+#   4. Copy the resulting Client ID / Client secret below.
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+
+# SchoolsAI powers the public customer-support bot and is the preferred
+# dashboard operator. Keep the real key in Cloudflare secrets/.dev.vars only.
+SCHOOLSAI_API_KEY=
+SCHOOLSAI_BASE_URL=https://apic.schoolsai.work

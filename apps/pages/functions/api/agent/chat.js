@@ -5,6 +5,7 @@ import { executeAgentAction } from "./actions.js";
 import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 import { resolveTimeRange } from "../../_lib/cameraAgent.js";
 import { listAgentMessages, saveAgentMessage } from "../../_lib/agentMessages.js";
+import { chatSchoolsOperator, schoolsAiConfigured } from "../../_lib/schoolsAi.js";
 
 async function credentials(env, accountId) {
   const [openai, gemini] = await Promise.all([
@@ -22,11 +23,20 @@ async function responseValue(response) {
   return body;
 }
 
-function requestedMedia(question) {
+export function requestedMedia(question) {
   const normalized = String(question || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (/\b(video|clip)\b/.test(normalized)) return "video";
-  if (/\b(hinh|anh|khuon mat|face)\b/.test(normalized)) return "image";
+  // Operational phrases such as "bật ghi hình" describe a recording setting,
+  // not a request to fetch event media. Remove them before looking for media
+  // nouns so the UI does not attach unrelated event images to write proposals.
+  const mediaText = normalized.replace(/\b(?:bat|tat|dung|tiep tuc)?\s*(?:ghi hinh|ghi anh|recording)\b/g, " ");
+  if (/\b(video|clip)\b/.test(mediaText)) return "video";
+  if (/\b(hinh|anh|khuon mat|face)\b/.test(mediaText)) return "image";
   return null;
+}
+
+function requestId(value) {
+  const supplied = String(value || "").trim();
+  return /^[A-Za-z0-9_-]{8,100}$/.test(supplied) ? supplied : crypto.randomUUID();
 }
 
 function requestedMediaCount(question) {
@@ -66,11 +76,11 @@ async function nextIdentification(execute, context = {}, skipActive = false) {
   const remaining = requested.length ? requested : candidates.map((person) => String(person.id));
   const excluded = skipActive ? String(context.activePersonId || "") : "";
   const person = remaining.map((id) => candidates.find((item) => String(item.id) === id)).find((item) => item && String(item.id) !== excluded);
-  if (!person) return { answer: "Đã duyệt hết các nhóm người chưa đặt tên có ảnh đại diện.", attachments: [], conversationContext: null };
+  if (!person) return { answer: "Đã duyệt hết các nhóm người chưa đặt tên có ảnh đại diện.", attachments: [], mediaRequested: true, conversationContext: null };
   const pendingPersonIds = remaining.filter((id) => id !== excluded);
   return {
     answer: `Đây là một nhóm người chưa đặt tên (${Number(person.seen_count) || 0} lần xuất hiện). Bạn hãy trả lời tên hoặc thông tin muốn lưu, ví dụ “Đây là Nam”. Bạn cũng có thể nói “bỏ qua” hoặc “dừng”.`,
-    attachments: [{ eventId: person.preview_event_id, kind: "image", personId: person.id }],
+    attachments: [{ eventId: person.preview_event_id, kind: "image", personId: person.id }], mediaRequested: true,
     conversationContext: { mode: "identify_people", activePersonId: String(person.id), pendingPersonIds },
   };
 }
@@ -121,7 +131,8 @@ export const onRequestGet = withErrorHandling(async ({ request, env, data }) => 
 export const onRequestPost = withErrorHandling(async (context) => {
   const body = await context.request.json().catch(() => null);
   if (!body) return errorJson("Invalid JSON body", 400);
-  if (body.provider && !["auto", "openai", "gemini"].includes(body.provider)) return errorJson("provider không hợp lệ", 400);
+  const clientRequestId = requestId(body.requestId);
+  if (body.provider && !["auto", "schoolsai", "openai", "gemini"].includes(body.provider)) return errorJson("provider không hợp lệ", 400);
 
   if (body.confirmedAction) {
     const { action, args = {} } = body.confirmedAction;
@@ -134,11 +145,11 @@ export const onRequestPost = withErrorHandling(async (context) => {
       const next = await nextIdentification(execute, body.conversationContext, true);
       const answer = `Đã lưu tên “${result.label}”.\n\n${next.answer}`;
       persistTurn(context, null, answer);
-      return json({ ...next, answer, action, result });
+      return json({ ...next, answer, action, result, requestId: clientRequestId });
     }
     const answer = `Đã thực hiện ${action} thành công.`;
     persistTurn(context, null, answer);
-    return json({ answer, action, result });
+    return json({ answer, action, result, requestId: clientRequestId });
   }
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
@@ -148,27 +159,30 @@ export const onRequestPost = withErrorHandling(async (context) => {
     ? Math.max(-720, Math.min(840, Math.trunc(Number(body.timezoneOffsetMinutes))))
     : 420;
   const runtime = { timezoneOffsetMinutes, now: new Date() };
-  const order = body.provider === "openai" ? ["openai"] : body.provider === "gemini" ? ["gemini"] : ["openai", "gemini"];
+  let order = body.provider === "schoolsai" ? ["schoolsai"] : body.provider === "openai" ? ["openai"] : body.provider === "gemini" ? ["gemini"] : ["schoolsai", "openai", "gemini"];
   const failures = [];
   const execute = async (action, args) => responseValue(await executeAgentAction(action, args, context));
   const latestQuestion = [...messages].reverse().find((item) => item?.role === "user")?.content || "";
+  // SchoolsAI is text/tool orchestration only. Preserve the existing vision
+  // providers for automatic image/video inspection when the user chose Auto.
+  if ((!body.provider || body.provider === "auto") && requestedMedia(latestQuestion)) order = ["openai", "gemini"];
   const conversationContext = body.conversationContext?.mode === "identify_people" ? body.conversationContext : null;
   if (wantsIdentifyPeople(latestQuestion)) {
     const next = await nextIdentification(execute);
     persistTurn(context, latestQuestion, next.answer);
-    return json(next);
+    return json({ ...next, requestId: clientRequestId });
   }
   if (conversationContext) {
     const command = normalizedText(latestQuestion);
     if (/^(dung|ket thuc|thoat)$/.test(command)) {
       const answer = "Đã dừng chế độ nhận diện và đặt tên người.";
       persistTurn(context, latestQuestion, answer);
-      return json({ answer, conversationContext: null });
+      return json({ answer, conversationContext: null, requestId: clientRequestId });
     }
     if (/^(bo qua|tiep|nguoi tiep)$/.test(command)) {
       const next = await nextIdentification(execute, conversationContext, true);
       persistTurn(context, latestQuestion, next.answer);
-      return json(next);
+      return json({ ...next, requestId: clientRequestId });
     }
     const label = proposedPersonLabel(latestQuestion);
     if (label) {
@@ -177,14 +191,16 @@ export const onRequestPost = withErrorHandling(async (context) => {
       return json({
         answer,
         proposals: [{ action: "label_person", args: { personId: conversationContext.activePersonId, label } }],
-        attachments: [], conversationContext,
+        attachments: [], conversationContext, requestId: clientRequestId,
       });
     }
   }
   for (const provider of order) {
-    if (!configured[provider]) continue;
+    if (provider === "schoolsai" ? !schoolsAiConfigured(context.env) : !configured[provider]) continue;
     try {
-      const result = provider === "openai"
+      const result = provider === "schoolsai"
+        ? await chatSchoolsOperator(context.env, { requestId: clientRequestId, session: `cameraai-operator-${context.data.accountId}-${clientRequestId}`, messages, execute, runtime })
+        : provider === "openai"
         ? await chatOpenAI(configured.openai, messages, execute, runtime)
         : await chatGemini(configured.gemini, messages, execute, runtime);
       const attachments = await automaticAttachments(latestQuestion, timezoneOffsetMinutes, execute, result.toolResults).catch(() => []);
@@ -193,12 +209,12 @@ export const onRequestPost = withErrorHandling(async (context) => {
         ? `${removeGeneratedMediaLinks(result.answer)}\n\n${attachments.length ? `Đã đính kèm ${attachments.length} ${mediaKind === "video" ? "video" : "ảnh"} thật từ event camera bên dưới.` : `Không tìm thấy ${mediaKind === "video" ? "video đã sẵn sàng" : "ảnh event"} trong khoảng thời gian này.`}`
         : result.answer;
       persistTurn(context, latestQuestion, answer);
-      return json({ ...result, answer, provider, attachments });
+      return json({ ...result, answer, provider, attachments, mediaRequested: Boolean(mediaKind), requestId: clientRequestId });
     } catch (error) {
       console.error(`AI provider ${provider} failed:`, error.message);
       failures.push(error.message);
     }
   }
-  if (!order.some((provider) => configured[provider])) return errorJson("Chưa cấu hình OpenAI API key hoặc Gemini API key", 409);
+  if (!order.some((provider) => provider === "schoolsai" ? schoolsAiConfigured(context.env) : configured[provider])) return errorJson("Chưa cấu hình SchoolsAI, OpenAI hoặc Gemini API key", 409);
   return errorJson(`Không gọi được AI provider: ${failures.join("; ")}`, 424);
 });

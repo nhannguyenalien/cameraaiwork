@@ -46,6 +46,7 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 PERSON_MODEL_PATH = os.path.join(MODELS_DIR, "person_detection.onnx")
 INPUT_SIZE = 640
 PERSON_CLASS_ID = 0  # COCO class 0 = "person"
+VEHICLE_CLASS_IDS = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 CONFIDENCE_THRESHOLD = 0.5
 IOU_THRESHOLD = 0.45  # for de-duplicating overlapping boxes of the same person
 
@@ -66,7 +67,9 @@ _face_app.prepare(ctx_id=0, det_size=(320, 320))  # motion snapshots are small c
 
 class DetectResult(BaseModel):
     hasPerson: bool
+    hasVehicle: bool = False
     boxes: list = Field(default_factory=list)  # [{x1,y1,x2,y2,confidence}, ...] in original image pixels, from YOLO
+    vehicleBoxes: list = Field(default_factory=list)
     faceEmbedding: list | None = None  # 512-dim, largest face found — for clustering "who is this"
     faceEmbeddings: list = Field(default_factory=list)  # every visible face, ordered largest first
 
@@ -103,22 +106,24 @@ def _nms(boxes):
     return kept
 
 
-def _detect_persons(image: Image.Image):
+def _detect_objects(image: Image.Image):
     input_tensor, scale_x, scale_y = _preprocess_person(image)
 
     # Output shape (1, 84, 8400): 4 box coords + 80 COCO class scores, per anchor.
     (output,) = _person_session.run(None, {_person_input_name: input_tensor})
     predictions = output[0].T  # (8400, 84)
 
-    boxes = []
+    boxes, vehicles = [], []
     for pred in predictions:
         cx, cy, w, h = pred[:4]
         class_scores = pred[4:]
         person_score = float(class_scores[PERSON_CLASS_ID])
-        if person_score < CONFIDENCE_THRESHOLD:
+        class_id = int(np.argmax(class_scores))
+        score = float(class_scores[class_id])
+        target = boxes if class_id == PERSON_CLASS_ID else vehicles if class_id in VEHICLE_CLASS_IDS else None
+        if target is None or score < CONFIDENCE_THRESHOLD:
             continue
-        boxes.append(
-            {
+        target.append({
                 # float() — these come out as numpy.float32, which Pydantic
                 # can't JSON-serialize (caught by actually hitting the HTTP
                 # endpoint, not just calling the function directly).
@@ -126,11 +131,11 @@ def _detect_persons(image: Image.Image):
                 "y1": float((cy - h / 2) * scale_y),
                 "x2": float((cx + w / 2) * scale_x),
                 "y2": float((cy + h / 2) * scale_y),
-                "confidence": person_score,
+                "confidence": score,
+                "class": "person" if class_id == PERSON_CLASS_ID else VEHICLE_CLASS_IDS[class_id],
             }
         )
-
-    return _nms(boxes)
+    return _nms(boxes), _nms(vehicles)
 
 
 def _face_embeddings(image: Image.Image):
@@ -156,7 +161,7 @@ def _face_embeddings(image: Image.Image):
 
 def detect_person(image_bytes: bytes) -> DetectResult:
     image = Image.open(io.BytesIO(image_bytes))
-    boxes = _detect_persons(image)
+    boxes, vehicle_boxes = _detect_objects(image)
     has_person = len(boxes) > 0
 
     face_embeddings = _face_embeddings(image) if has_person else []
@@ -165,7 +170,9 @@ def detect_person(image_bytes: bytes) -> DetectResult:
     face_embedding = face_embeddings[0]["embedding"] if face_embeddings else None
     return DetectResult(
         hasPerson=has_person,
+        hasVehicle=len(vehicle_boxes) > 0,
         boxes=boxes,
+        vehicleBoxes=vehicle_boxes,
         faceEmbedding=face_embedding,
         faceEmbeddings=face_embeddings,
     )

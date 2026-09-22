@@ -23,12 +23,23 @@ export const onRequestPost = withErrorHandling(async ({ request, params, env, da
   const found = await resolveCamera(env, data, params);
   if (found.error) return found.error;
   const body = await request.json();
-  if (typeof body?.light !== "boolean") return errorJson("light phải là boolean", 400);
-  const response = await fetch(`${found.site.relay_url}/light/${found.camera.stream}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-relay-secret": found.site.relay_secret },
-    body: JSON.stringify({ enabled: body.light }),
-  });
-  if (!response.ok) return errorJson(response.status === 409 ? "Camera không hỗ trợ điều khiển đèn" : "Relay unreachable", response.status === 409 ? 409 : 502);
-  return json({ ok: true });
+  if (typeof body?.light === "boolean" || ["auto", "on", "off", "blink"].includes(body?.lightMode)) {
+    const response = await fetch(`${found.site.relay_url}/light/${found.camera.stream}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-relay-secret": found.site.relay_secret },
+      body: JSON.stringify({ enabled: body.light, mode: body.lightMode, intervalMs: body.intervalMs }),
+    });
+    if (!response.ok) return errorJson(response.status === 409 ? "Camera không hỗ trợ điều khiển đèn" : "Relay unreachable", response.status === 409 ? 409 : 502);
+    return json(await response.json());
+  }
+  if (typeof body?.alarm === "boolean") {
+    const response = await fetch(`${found.site.relay_url}/alarm/${found.camera.stream}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-relay-secret": found.site.relay_secret },
+      body: JSON.stringify({ enabled: body.alarm }),
+    });
+    if (!response.ok) return errorJson(response.status === 409 ? "Camera không hỗ trợ còi/báo động" : "Relay unreachable", response.status === 409 ? 409 : 502);
+    return json({ ok: true });
+  }
+  return errorJson("light/lightMode hoặc alarm không hợp lệ", 400);
 });

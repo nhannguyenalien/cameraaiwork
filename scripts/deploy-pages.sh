@@ -10,18 +10,19 @@ if [[ ! -f "$VARS_FILE" ]]; then
   exit 1
 fi
 
-echo "==> Kiểm tra code"
-"$ROOT_DIR/scripts/test-all.sh"
-
 echo "==> Tạo bundle relay có checksum"
 "$ROOT_DIR/scripts/build-relay-bundle.sh"
 
 echo "==> Đồng bộ installer đã kiểm tra vào public artifact"
 cp "$ROOT_DIR/apps/relay/install.sh" "$ROOT_DIR/apps/pages/public/install.sh"
 cp "$ROOT_DIR/apps/relay/update.sh" "$ROOT_DIR/apps/pages/public/update.sh"
+cp "$ROOT_DIR/CHANGELOG.md" "$ROOT_DIR/apps/pages/public/CHANGELOG.md"
 
 echo "==> Xuất OpenAPI public cho agent"
 cp "$ROOT_DIR/docs/openapi.yaml" "$ROOT_DIR/apps/pages/public/openapi.yaml"
+
+echo "==> Kiểm tra code và artifact sẽ deploy"
+"$ROOT_DIR/scripts/test-all.sh"
 
 echo "==> Migration Turso (có thể chạy lại an toàn)"
 (cd "$ROOT_DIR/apps/pages" && node --env-file="$VARS_FILE" ../../scripts/migrate-db.mjs)

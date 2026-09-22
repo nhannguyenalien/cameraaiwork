@@ -1,7 +1,6 @@
 import { getIntegration, setIntegration } from "../../_lib/integrations.js";
 import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 import { testS3, validateS3Config } from "../../_lib/s3.js";
-import { testGoogleDrive, validateGoogleDriveConfig } from "../../_lib/googleDrive.js";
 
 function publicConfig(saved) {
   if (!saved?.s3 && !saved?.gdrive) return { backend: "r2", configured: false };
@@ -9,7 +8,7 @@ function publicConfig(saved) {
     backend: "gdrive",
     configured: true,
     folderId: saved.gdrive.folderId,
-    tokenHint: saved.gdrive.accessToken ? `••••${saved.gdrive.accessToken.slice(-4)}` : "",
+    connectedAt: saved.gdrive.connectedAt || null,
   };
   if (!saved.s3) return { backend: "r2", configured: false };
   return {
@@ -28,6 +27,9 @@ export const onRequestGet = withErrorHandling(async ({ env, data }) => {
   return json(publicConfig(await getIntegration(env, data.accountId, "storage")));
 });
 
+// Google Drive is connected via OAuth (google-auth-url.js + google-callback.js
+// in this same directory), not through this PUT — there's no raw token for
+// the customer to paste anymore. Only r2/s3 are handled here.
 export const onRequestPut = withErrorHandling(async ({ request, env, data }) => {
   const body = await request.json().catch(() => null);
   if (body?.backend === "r2") {
@@ -37,15 +39,7 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
     await setIntegration(env, data.accountId, "storage", { backend: "r2", ...retained });
     return json(publicConfig({ backend: "r2", ...retained }));
   }
-  if (body?.backend === "gdrive") {
-    let gdrive;
-    try { gdrive = validateGoogleDriveConfig(body); } catch (error) { return errorJson(error.message, 400); }
-    try { await testGoogleDrive(gdrive); } catch (error) { return errorJson(error.message, 400); }
-    const saved = await getIntegration(env, data.accountId, "storage");
-    await setIntegration(env, data.accountId, "storage", { backend: "gdrive", gdrive, ...(saved?.s3 ? { s3: saved.s3 } : {}) });
-    return json(publicConfig({ backend: "gdrive", gdrive }));
-  }
-  if (body?.backend !== "s3") return errorJson("backend phải là r2, s3 hoặc gdrive", 400);
+  if (body?.backend !== "s3") return errorJson("backend phải là r2 hoặc s3 (Google Drive dùng nút Kết nối OAuth)", 400);
   let s3;
   try { s3 = validateS3Config(body); } catch (error) { return errorJson(error.message, 400); }
   try { await testS3(s3); } catch (error) { return errorJson(error.message, 400); }

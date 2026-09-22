@@ -161,6 +161,13 @@
   .agent-provider-card { padding:.75rem; background:var(--tblr-bg-surface); }
   .agent-provider-card .form-label { margin-bottom:.25rem; font-size:.75rem; }
   .agent-provider-card .form-hint { font-size:.7rem; line-height:1.25; }
+  .support-launcher { position:fixed; right:1.25rem; bottom:1.25rem; z-index:1050; border-radius:999px; box-shadow:0 .5rem 1.5rem rgba(0,0,0,.22); }
+  .support-panel { position:fixed; right:1.25rem; bottom:5rem; z-index:1050; width:min(380px,calc(100vw - 2rem)); height:min(540px,calc(100vh - 7rem)); display:none; flex-direction:column; box-shadow:0 1rem 3rem rgba(0,0,0,.25); }
+  .support-panel.open { display:flex; }
+  .support-messages { flex:1; overflow:auto; background:var(--tblr-bg-surface-secondary); }
+  .support-message { max-width:88%; white-space:pre-wrap; }
+  .support-message.user { margin-left:auto; background:var(--tblr-primary); color:#fff; }
+  .support-message.assistant { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); }
   .agent-key-state { display:inline-flex; align-items:center; gap:.25rem; font-weight:600; }
   .agent-key-state.is-configured { color:var(--tblr-success); }
   .agent-key-state.is-missing { color:var(--tblr-secondary); }
@@ -245,7 +252,7 @@
       </div></div></section>
       <section><div class="container-xl"><div class="landing-cta"><span class="section-eyebrow" style="color:white">Bắt đầu trong vài phút</span><h3>Biến camera hiện có thành hệ thống an ninh biết suy nghĩ.</h3><a class="landing-btn light mt-4" href="#login" onclick="openLoginModal(event)">Tạo tài khoản miễn phí <i class="ti ti-arrow-right"></i></a></div></div></section>
     </main>
-    <footer class="landing-footer"><div class="container-xl d-flex flex-wrap justify-content-between gap-2"><span>© 2026 CameraAIWork</span><span>An ninh thông minh · Vận hành riêng tư</span></div></footer>
+    <footer class="landing-footer"><div class="container-xl d-flex flex-wrap justify-content-between gap-2"><span>© 2026 CameraAIWork</span><span>An ninh thông minh · Vận hành riêng tư</span><span><a href="/privacy/">Quyền riêng tư</a> · <a href="/terms/">Điều khoản</a></span></div></footer>
   </div>
 
   <header id="app-header" class="navbar navbar-expand-md navbar-light d-print-none d-none">
@@ -339,6 +346,12 @@
                     <div class="col-md-2"><label class="form-label">RTSP</label><input id="add-camera-rtsp-port" type="number" class="form-control" min="1" max="65535" value="554" required></div>
                     <div class="col-md-2"><label class="form-label">ONVIF</label><input id="add-camera-onvif-port" type="number" class="form-control" min="1" max="65535" value="2020" required></div>
                     <div class="col-md-6"><label class="form-label">Đường dẫn RTSP</label><input id="add-camera-rtsp-path" class="form-control" value="/stream1" required></div>
+                    <div class="col-12">
+                      <label class="form-check">
+                        <input id="add-camera-no-onvif" class="form-check-input" type="checkbox">
+                        <span class="form-check-label">Camera cũ, không hỗ trợ ONVIF (chỉ dùng RTSP — hệ thống sẽ tự chụp ảnh và chạy AI định kỳ để phát hiện người thay vì nhận motion event từ camera)</span>
+                      </label>
+                    </div>
                     <div class="col-12 d-flex align-items-center gap-3"><button id="add-camera-button" class="btn btn-primary" type="submit">Thêm và kết nối</button><span id="add-camera-status" class="text-secondary small">PC/VPS của site phải đang online và cùng LAN với camera.</span></div>
                   </form>
                 </div>
@@ -422,7 +435,7 @@
               <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <div><h3 class="card-title"><i class="ti ti-message-chatbot me-2"></i>Trợ lý CameraAIWork</h3><div class="text-secondary small">Hỏi camera, sự kiện và điều khiển hệ thống.</div></div>
-                  <select id="agent-provider" class="form-select form-select-sm" style="width:auto"><option value="auto">Tự chọn AI</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select>
+                  <select id="agent-provider" class="form-select form-select-sm" style="width:auto"><option value="auto">Tự chọn AI (SchoolsAI ưu tiên)</option><option value="schoolsai">SchoolsAI</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select>
                 </div>
                 <div class="card-body border-bottom bg-light-subtle">
                   <div id="agent-config-message" class="alert d-none" role="alert"></div>
@@ -513,10 +526,17 @@
                   </div>
                 </div>
                 <div class="col-12">
+                  <form id="video-retention-form" class="card">
+                    <div class="card-header"><h3 class="card-title"><i class="ti ti-calendar-time me-2"></i>Thời gian lưu video sự kiện</h3></div>
+                    <div class="card-body"><div class="row align-items-end g-3"><div class="col-md-4"><label class="form-label" for="video-retention-days">Tự xóa video cũ sau</label><div class="input-group"><input id="video-retention-days" type="number" min="1" max="7" class="form-control" value="7" /><span class="input-group-text">ngày</span></div></div><div class="col-md-8"><div id="video-retention-note" class="text-secondary">Mặc định 7 ngày. Ảnh và thông tin sự kiện vẫn được giữ lại.</div></div></div></div>
+                    <div class="card-footer"><button id="save-video-retention" class="btn btn-primary" type="submit">Lưu thời gian</button></div>
+                  </form>
+                </div>
+                <div class="col-12">
                   <form id="storage-config-form" class="card">
                     <div class="card-header"><h3 class="card-title"><i class="ti ti-cloud-upload me-2"></i>Nơi lưu ảnh và video sự kiện</h3></div>
                     <div class="card-body">
-                      <p class="text-secondary">Chọn đúng một nơi lưu. Event mới chỉ được upload lên R2, S3 hoặc Google Drive đã chọn.</p>
+                      <p class="text-secondary">Bạn có thể cấu hình cả S3 lẫn Google Drive. Mỗi sự kiện mới sẽ thử dịch vụ đang chọn bên dưới trước, nếu lỗi thì tự chuyển sang nơi lưu còn lại, và cuối cùng luôn có Cloudflare R2 làm phương án dự phòng — không mất clip khi một nơi lưu bị sự cố.</p>
                       <div class="mb-3"><label class="form-label">Dịch vụ lưu trữ</label><select id="storage-backend" class="form-select"><option value="r2">Cloudflare R2 của hệ thống</option><option value="s3">S3 của khách hàng / dịch vụ tương thích S3</option><option value="gdrive">Google Drive của khách hàng</option></select></div>
                       <div id="s3-config-fields" class="d-none">
                         <div class="row g-3">
@@ -531,11 +551,8 @@
                         <div id="s3-saved-note" class="form-hint mt-2"></div>
                       </div>
                       <div id="gdrive-config-fields" class="d-none">
-                        <div class="row g-3">
-                          <div class="col-md-6"><label class="form-label">Google OAuth access token</label><input id="gdrive-access-token" type="password" class="form-control" autocomplete="new-password" placeholder="ya29..." /></div>
-                          <div class="col-md-6"><label class="form-label">Google Drive Folder ID</label><input id="gdrive-folder-id" class="form-control" placeholder="ID trong URL thư mục Drive" /></div>
-                        </div>
-                        <div class="form-hint mt-2">Hãy bật Google Drive API và cấp cho token quyền <code>drive.file</code> hoặc <code>drive</code>. Access token Google thường hết hạn; khi đó cần nhập token mới.</div>
+                        <button id="gdrive-connect" class="btn btn-outline-primary" type="button"><i class="ti ti-brand-google me-1"></i>Kết nối Google Drive</button>
+                        <div class="form-hint mt-2">Bấm nút trên để cấp quyền qua Google rồi chọn thư mục Drive ngay trong hộp thoại hiện ra. Chỉ cần làm một lần, hệ thống tự làm mới quyền truy cập — không cần dán token hay Folder ID tay, và không bao giờ hết hạn.</div>
                         <div id="gdrive-saved-note" class="form-hint mt-1"></div>
                       </div>
                     </div>
@@ -569,7 +586,7 @@
                       <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadSites()" data-i18n="refresh">Làm mới</button>
                     </div>
                     <div class="table-responsive">
-                      <table class="table card-table table-vcenter"><thead><tr><th data-i18n="name">Tên</th><th data-i18n="cameras">Camera</th><th data-i18n="relay_address">Địa chỉ relay</th><th></th></tr></thead><tbody id="sites-body"></tbody></table>
+                      <table class="table card-table table-vcenter"><thead><tr><th data-i18n="name">Tên</th><th data-i18n="cameras">Camera</th><th data-i18n="relay_address">Địa chỉ relay</th><th>Cập nhật</th><th></th></tr></thead><tbody id="sites-body"></tbody></table>
                     </div>
                     <div id="sites-empty" class="card-body text-secondary d-none" data-i18n="no_sites">Chưa có site. Chạy bộ cài relay tại máy ở địa điểm cần kết nối.</div>
                   </div>
@@ -724,6 +741,13 @@
     </div>
   </div>
 
+  <button id="support-launcher" class="btn btn-primary support-launcher" type="button" aria-controls="support-panel" aria-expanded="false"><i class="ti ti-message-chatbot me-2"></i>Tư vấn</button>
+  <section id="support-panel" class="card support-panel" aria-label="Trợ lý tư vấn CameraAIWork">
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-message-chatbot me-2"></i>Tư vấn CameraAIWork</h3><button id="support-close" class="btn-close ms-auto" type="button" aria-label="Đóng"></button></div>
+    <div id="support-messages" class="card-body support-messages"><div class="support-message assistant rounded p-2 mb-2">Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.</div></div>
+    <form id="support-form" class="card-footer d-flex gap-2"><input id="support-input" class="form-control" maxlength="2000" autocomplete="off" placeholder="Nhập câu hỏi..." aria-label="Câu hỏi tư vấn" required /><button id="support-send" class="btn btn-primary" type="submit" aria-label="Gửi"><i class="ti ti-send"></i></button></form>
+  </section>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/js/tabler.min.js" integrity="sha384-fSOug2E78eoy8fAFcDbY60mgZb6eboMDErIUzTF1UWHQCmmN7LcTyt+uzxH8upW+" crossorigin="anonymous"></script>
 <script src="/dashboard-i18n.js?v=20260910-6"></script>
@@ -753,6 +777,7 @@
   let agentConversationContext = null;
   let lastAgentMessageId = 0;
   let agentHistoryLoaded = false;
+  let agentRequestInFlight = false;
 
   const getApiKey = () => localStorage.getItem(API_KEY_STORAGE);
   localStorage.removeItem('cameraaiwork_api_key');
@@ -832,6 +857,7 @@
                   <span>${escapeHtml(c.siteName || c.siteId)}</span>
                   <button class="btn btn-ghost-secondary btn-sm p-0" type="button" data-site-id="${escapeHtml(c.siteId)}" onclick="event.stopPropagation(); openResourceRename('site', this.dataset.siteId)" title="${resourceText('rename_site')}" aria-label="${resourceText('rename_site')}"><i class="ti ti-pencil"></i></button>
                 </div>
+                <div class="text-secondary small camera-address" id="camera-address-${i}"><i class="ti ti-network me-1"></i>IP: Đang tải…</div>
                 <div class="text-secondary small camera-diagnostic" id="camera-diagnostic-${i}">Đang kiểm tra kết nối…</div>
               </div>
               <button class="btn btn-sm btn-primary" type="button" onclick="event.stopPropagation(); openCamera(${i})" title="${t('control')}"><i class="ti ti-adjustments-horizontal me-1"></i>${t('control')}</button>
@@ -840,7 +866,21 @@
         </div>`
       )
       .join('');
+    void loadCameraAddresses();
     observeCameraThumbnails();
+  }
+
+  async function loadCameraAddresses() {
+    await Promise.allSettled(cameras.map(async (camera, index) => {
+      const target = document.getElementById(`camera-address-${index}`);
+      if (!target) return;
+      try {
+        const config = await api(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/config`);
+        target.innerHTML = `<i class="ti ti-network me-1"></i>IP: ${escapeHtml(config.ip || 'Chưa cấu hình')}`;
+      } catch (_) {
+        target.innerHTML = '<i class="ti ti-network-off me-1"></i>IP: Chưa khả dụng';
+      }
+    }));
   }
 
   function observeCameraThumbnails() {
@@ -1075,11 +1115,17 @@
         const config = await api(`/api/cameras/${encodeURIComponent(camera.siteId)}/${encodeURIComponent(camera.cameraId)}/config`);
         camera.localAiEnabled = config.localAiEnabled !== false;
         camera.onvifMotionTrusted = config.onvifMotionTrusted === true;
+        camera.hasOnvif = config.hasOnvif !== false;
         // Three real-world modes, one control — avoids exposing the two
         // underlying switches independently, which lets users pick
         // combinations (e.g. AI off + ONVIF untrusted = no detection at all)
         // that don't correspond to an intentional choice.
         const mode = camera.onvifMotionTrusted ? 'onvif' : (camera.localAiEnabled ? 'ai' : 'off');
+        // A camera with no ONVIF service has no motion feed to trust, so that
+        // option would be meaningless — it only ever runs the AI polling loop.
+        const onvifOption = camera.hasOnvif
+          ? `<option value="onvif" ${mode === 'onvif' ? 'selected' : ''}>Tin ONVIF motion — lưu ngay</option>`
+          : '';
         return `<div class="col-md-6">
           <div class="local-ai-camera">
             <div class="local-ai-thumbnail-wrap">
@@ -1089,11 +1135,12 @@
             <div class="flex-fill min-w-0">
               <strong class="d-block text-truncate">${escapeHtml(camera.cameraName || camera.cameraId)}</strong>
               <span class="text-secondary small d-block text-truncate">${escapeHtml(camera.siteName || camera.siteId)}</span>
+              ${!camera.hasOnvif ? '<span class="badge bg-yellow-lt" title="Không có ONVIF — hệ thống tự chụp ảnh và chạy AI định kỳ để phát hiện người">Không ONVIF · polling</span>' : ''}
             </div>
             <select class="form-select form-select-sm w-auto" title="Cách camera này phát hiện người"
               onchange="setDetectionMode(${index}, this.value, this)">
               <option value="ai" ${mode === 'ai' ? 'selected' : ''}>AI local xác nhận (mặc định)</option>
-              <option value="onvif" ${mode === 'onvif' ? 'selected' : ''}>Tin ONVIF motion — lưu ngay</option>
+              ${onvifOption}
               <option value="off" ${mode === 'off' ? 'selected' : ''}>Tắt phát hiện</option>
             </select>
           </div>
@@ -1183,9 +1230,10 @@
     if (!selectedCamera) return;
     checkbox.disabled = true;
     try {
-      await api(`/api/cameras/${encodeURIComponent(selectedCamera.siteId)}/${encodeURIComponent(selectedCamera.cameraId)}/controls`, {
+      const result = await api(`/api/cameras/${encodeURIComponent(selectedCamera.siteId)}/${encodeURIComponent(selectedCamera.cameraId)}/controls`, {
         method: 'POST', body: JSON.stringify({ light: enabled })
       });
+      if (typeof result.enabled === 'boolean') checkbox.checked = result.enabled;
     } catch (error) {
       checkbox.checked = !enabled;
       document.getElementById('camera-control-status').textContent = error.message;
@@ -1698,7 +1746,23 @@
     document.getElementById('account-email').required = !accountSummary.email;
     document.getElementById('account-email-note').textContent = accountSummary.email ? t('email_fixed_note') : t('legacy_email_note');
     document.getElementById('subscribe-btn').classList.toggle('d-none', plan === 'pro');
+    const retention = document.getElementById('video-retention-days');
+    retention.value = accountSummary.videoRetentionDays || 7;
+    retention.max = limits.maxVideoRetentionDays;
+    retention.disabled = plan !== 'pro';
+    document.getElementById('save-video-retention').disabled = plan !== 'pro';
+    document.getElementById('video-retention-note').textContent = plan === 'pro'
+      ? `Gói Pro cho phép chọn từ 1 đến ${limits.maxVideoRetentionDays} ngày (dưới 1 năm). Ảnh và thông tin sự kiện vẫn được giữ lại.`
+      : 'Gói Free tự xóa video sau 7 ngày. Ảnh và thông tin sự kiện vẫn được giữ lại.';
   }
+
+  document.getElementById('video-retention-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button=document.getElementById('save-video-retention'); button.disabled=true;
+    try { await api('/api/settings/video', {method:'PUT', body:JSON.stringify({videoRetentionDays:Number(document.getElementById('video-retention-days').value)})}); await loadAccount(); }
+    catch (error) { alert(error.message); }
+    finally { button.disabled=accountSummary?.plan !== 'pro'; }
+  });
 
   function formatBytes(value) {
     const bytes = Number(value || 0);
@@ -1714,6 +1778,9 @@
     const backend = document.getElementById('storage-backend').value;
     document.getElementById('s3-config-fields').classList.toggle('d-none', backend !== 's3');
     document.getElementById('gdrive-config-fields').classList.toggle('d-none', backend !== 'gdrive');
+    // Google Drive connects via OAuth (the dedicated button below), not via
+    // this form's "Kiểm tra kết nối và lưu" submit — hide it for that case.
+    document.getElementById('save-storage-config').classList.toggle('d-none', backend === 'gdrive');
   }
 
   async function loadStorageConfig() {
@@ -1725,24 +1792,104 @@
     document.getElementById('s3-path-style').checked = config.forcePathStyle !== false;
     document.getElementById('s3-access-key').placeholder = config.accessKeyHint || '';
     document.getElementById('s3-saved-note').textContent = config.configured && config.backend === 's3' ? 'Thông tin bí mật đã được mã hóa. Muốn tiếp tục dùng S3, hãy nhập lại access key và secret key khi lưu thay đổi.' : '';
-    document.getElementById('gdrive-folder-id').value = config.folderId || '';
-    document.getElementById('gdrive-access-token').placeholder = config.tokenHint || 'ya29...';
-    document.getElementById('gdrive-saved-note').textContent = config.configured && config.backend === 'gdrive' ? 'Token đã được mã hóa và không hiển thị lại. Nhập token mới khi cần cập nhật hoặc khi token hết hạn.' : '';
+    document.getElementById('gdrive-saved-note').textContent = config.configured && config.backend === 'gdrive'
+      ? `Đã kết nối tới thư mục Drive (ID: ${config.folderId})${config.connectedAt ? ` lúc ${new Date(config.connectedAt).toLocaleString('vi-VN')}` : ''}. Bấm Kết nối lại để đổi sang thư mục khác.`
+      : '';
     toggleStorageFields();
   }
 
   document.getElementById('storage-backend').addEventListener('change', toggleStorageFields);
+
+  // Loads an external <script> at most once, resolving when it's ready.
+  const loadedScripts = new Map();
+  function loadScript(src) {
+    if (!loadedScripts.has(src)) {
+      loadedScripts.set(src, new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = src;
+        el.onload = () => resolve();
+        el.onerror = () => reject(new Error(`Không tải được ${src}`));
+        document.head.appendChild(el);
+      }));
+    }
+    return loadedScripts.get(src);
+  }
+  // Google Identity Services (the OAuth popup code flow) and the Picker
+  // widget (gapi + its "picker" module) — loaded lazily so accounts not
+  // using Google Drive never fetch them.
+  function ensureGoogleDriveLibs() {
+    return Promise.all([
+      loadScript('https://accounts.google.com/gsi/client'),
+      loadScript('https://apis.google.com/js/api.js').then(() => new Promise((resolve) => gapi.load('picker', resolve))),
+    ]);
+  }
+
+  document.getElementById('gdrive-connect').addEventListener('click', async () => {
+    const button = document.getElementById('gdrive-connect');
+    button.disabled = true;
+    try {
+      const { clientId, pickerApiKey } = await api('/api/settings/storage-config/google-client-info');
+      await ensureGoogleDriveLibs();
+      // 1) Popup OAuth consent (drive.file scope) -> one-time authorization code.
+      const code = await new Promise((resolve, reject) => {
+        const client = google.accounts.oauth2.initCodeClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          ux_mode: 'popup',
+          callback: (response) => response.code ? resolve(response.code) : reject(new Error('Google không trả về mã xác thực')),
+          error_callback: (error) => reject(new Error(error?.message || 'Đã huỷ cấp quyền Google')),
+        });
+        client.requestCode();
+      });
+      // 2) Server exchanges the code for tokens; only a short-lived access
+      // token (for the Picker below) and an opaque `pending` reference come
+      // back — the refresh_token stays server-side.
+      const { accessToken, pending } = await api('/api/settings/storage-config/google-exchange', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      });
+      // 3) Let the user pick the destination folder from their own Drive.
+      const folder = await new Promise((resolve, reject) => {
+        // Google's default Picker dialog size (~1051x650) can exceed small
+        // viewports/windows, clipping the Select/Cancel buttons off-screen
+        // until the user zooms out the whole page. Size it to fit instead.
+        const pickerWidth = Math.max(320, Math.min(1051, window.innerWidth - 32));
+        const pickerHeight = Math.max(400, Math.min(650, window.innerHeight - 32));
+        const picker = new google.picker.PickerBuilder()
+          .addView(new google.picker.DocsView(google.picker.ViewId.FOLDERS).setSelectFolderEnabled(true).setIncludeFolders(true))
+          .setOAuthToken(accessToken)
+          .setDeveloperKey(pickerApiKey)
+          .setTitle('Chọn thư mục Drive lưu ảnh/video sự kiện')
+          .setSize(pickerWidth, pickerHeight)
+          .setCallback((result) => {
+            if (result.action === google.picker.Action.PICKED) resolve(result.docs[0]);
+            else if (result.action === google.picker.Action.CANCEL) reject(new Error('Đã huỷ chọn thư mục Drive'));
+          })
+          .build();
+        picker.setVisible(true);
+      });
+      // 4) Pair the picked folder with the pending refresh_token server-side.
+      await api('/api/settings/storage-config/google-finalize', {
+        method: 'POST',
+        body: JSON.stringify({ pending, folderId: folder.id }),
+      });
+      showSettingsMessage(`Đã kết nối Google Drive: thư mục "${folder.name}".`);
+      await loadStorageConfig();
+    } catch (error) {
+      showSettingsMessage(error.message || 'Kết nối Google Drive thất bại.', false);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   document.getElementById('storage-config-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = document.getElementById('save-storage-config');
     const backend = document.getElementById('storage-backend').value;
+    if (backend === 'gdrive') return; // handled by gdrive-connect above
     button.disabled = true;
     try {
-      const payload = backend === 'r2' ? { backend } : backend === 'gdrive' ? {
-        backend,
-        accessToken: document.getElementById('gdrive-access-token').value,
-        folderId: document.getElementById('gdrive-folder-id').value,
-      } : {
+      const payload = backend === 'r2' ? { backend } : {
         backend,
         endpoint: document.getElementById('s3-endpoint').value,
         region: document.getElementById('s3-region').value,
@@ -1756,8 +1903,7 @@
       document.getElementById('s3-access-key').value = '';
       document.getElementById('s3-secret-key').value = '';
       document.getElementById('s3-session-token').value = '';
-      document.getElementById('gdrive-access-token').value = '';
-      showSettingsMessage(backend === 's3' ? 'Đã kiểm tra và chuyển lưu trữ sang S3.' : backend === 'gdrive' ? 'Đã kiểm tra và chuyển lưu trữ sang Google Drive.' : 'Đã chuyển lưu trữ sang Cloudflare R2.');
+      showSettingsMessage(backend === 's3' ? 'Đã kiểm tra và chuyển lưu trữ sang S3.' : 'Đã chuyển lưu trữ sang Cloudflare R2.');
       await loadStorageConfig();
     } catch (error) { showSettingsMessage(error.message, false); }
     finally { button.disabled = false; }
@@ -1781,7 +1927,12 @@
       summaryElement.classList.remove('d-none');
       const backendLabels = { r2: 'Mặc định (R2)', s3: 'S3', gdrive: 'Google Drive' };
       const backendElement = document.getElementById('storage-backends');
-      backendElement.innerHTML = (storage.backends || []).map(item => `<div class="col-sm-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between"><strong>${backendLabels[item.backend] || escapeHtml(item.backend)}</strong>${item.unavailable ? '<span class="badge bg-warning-lt">Chưa đo được</span>' : ''}</div><div class="h3 my-2">${formatBytes(item.totalBytes)}</div><div class="text-secondary small">${Number(item.eventCount).toLocaleString()} event · ${Number(item.objectCount).toLocaleString()} file đã đo</div>${item.unavailable ? `<div class="text-warning small mt-1">Credential hết hạn hoặc kho không truy cập được.${item.error ? ` (${escapeHtml(item.error)})` : ''}</div>` : ''}</div></div>`).join('');
+      backendElement.innerHTML = (storage.backends || []).map(item => {
+        const quota = Number(item.quotaBytes) || 0;
+        const percent = quota ? Math.min(100, Math.round((Number(item.totalBytes) / quota) * 100)) : 0;
+        const quotaBar = quota ? `<div class="progress progress-sm my-2"><div class="progress-bar ${percent >= 90 ? 'bg-danger' : percent >= 70 ? 'bg-warning' : 'bg-green'}" style="width: ${percent}%" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100"></div></div><div class="text-secondary small">${formatBytes(item.totalBytes)} / ${formatBytes(quota)} (${percent}%) · tự động xóa video cũ khi đầy</div>` : `<div class="h3 my-2">${formatBytes(item.totalBytes)}</div>`;
+        return `<div class="col-sm-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between"><strong>${backendLabels[item.backend] || escapeHtml(item.backend)}</strong>${item.unavailable ? '<span class="badge bg-warning-lt">Chưa đo được</span>' : ''}</div>${quotaBar}<div class="text-secondary small">${Number(item.eventCount).toLocaleString()} event · ${Number(item.objectCount).toLocaleString()} file đã đo</div>${item.unavailable ? `<div class="text-warning small mt-1">Credential hết hạn hoặc kho không truy cập được.${item.error ? ` (${escapeHtml(item.error)})` : ''}</div>` : ''}</div></div>`;
+      }).join('');
       backendElement.classList.remove('d-none');
       document.getElementById('storage-cameras').innerHTML = storage.cameras.map(camera => {
         const total = Number(camera.imageBytes) + Number(camera.videoBytes);
@@ -1811,11 +1962,18 @@
       <td><div class="fw-bold">${escapeHtml(site.name)}</div><div class="text-secondary small">${escapeHtml(site.id)}</div></td>
       <td>${Number(site.camera_count || 0)}</td>
       <td>${site.relay_url ? `<span class="badge bg-green-lt">${t('named_tunnel')}</span>` : `<span class="text-secondary">${t('tunnel_pending')}</span>`}</td>
+      <td>
+        <button class="btn btn-outline-primary btn-sm" type="button" id="site-update-btn-${escapeHtml(site.id)}"
+          data-site-id="${escapeHtml(site.id)}" ${site.relay_url ? '' : 'disabled'}
+          onclick="pushSiteUpdate(this.dataset.siteId)">Đẩy update</button>
+        <div id="site-update-status-${escapeHtml(site.id)}" class="text-secondary small mt-1"></div>
+      </td>
       <td class="text-end"><div class="d-flex gap-1 justify-content-end">
         <button class="btn btn-outline-secondary btn-sm" type="button" data-site-id="${escapeHtml(site.id)}" onclick="openResourceRename('site', this.dataset.siteId)" title="${resourceText('rename_site')}" aria-label="${resourceText('rename_site')}"><i class="ti ti-pencil"></i></button>
         <button class="btn btn-outline-danger btn-sm" type="button" data-site-id="${escapeHtml(site.id)}" data-site-name="${escapeHtml(site.name)}" onclick="deleteSite(this.dataset.siteId, this.dataset.siteName)">${t('delete')}</button>
       </div></td>
     </tr>`).join('');
+    sites.filter((site) => site.relay_url).forEach((site) => refreshSiteUpdateStatus(site.id));
   }
 
   document.getElementById('add-camera-form').addEventListener('submit', async event => {
@@ -1834,6 +1992,7 @@
       rtspPort: Number(document.getElementById('add-camera-rtsp-port').value),
       onvifPort: Number(document.getElementById('add-camera-onvif-port').value),
       rtspPath: document.getElementById('add-camera-rtsp-path').value.trim(),
+      hasOnvif: !document.getElementById('add-camera-no-onvif').checked,
       autoConfigure: document.getElementById('add-camera-ip').dataset.discovered === 'true',
     };
     try {
@@ -1843,6 +2002,7 @@
       document.getElementById('add-camera-rtsp-port').value = 554;
       document.getElementById('add-camera-onvif-port').value = 2020;
       document.getElementById('add-camera-rtsp-path').value = '/stream1';
+      document.getElementById('add-camera-no-onvif').checked = false;
       status.textContent = 'Đã thêm camera. Đang tải lại danh sách…';
       await Promise.all([loadCameras(), loadSites(), loadAccount()]);
       status.textContent = 'Camera đã được lưu và kết nối tại site.';
@@ -1909,7 +2069,7 @@
     }));
   }
 
-  function appendAgentMessage(role, content, proposals = [], toolResults = [], attachments = [], conversationContext = agentConversationContext, source = 'chat') {
+  function appendAgentMessage(role, content, proposals = [], toolResults = [], attachments = [], conversationContext = agentConversationContext, source = 'chat', allowMedia = false) {
     const chat = document.getElementById('agent-chat');
     const wrapper = document.createElement('div');
     wrapper.className = `agent-message ${role} rounded p-3 mt-3${source === 'patrol' ? ' patrol' : ''}`;
@@ -1927,7 +2087,7 @@
       wrapper.appendChild(button);
     });
     chat.appendChild(wrapper);
-    appendAgentMedia(wrapper, toolResults, attachments).catch(() => {});
+    if (allowMedia) appendAgentMedia(wrapper, toolResults, attachments).catch(() => {});
     chat.scrollTop = chat.scrollHeight;
   }
 
@@ -1938,7 +2098,7 @@
     try {
       const result = await api('/api/agent/chat', { method: 'POST', body: JSON.stringify({ confirmedAction: pending.proposal, conversationContext: pending.conversationContext }) });
       agentConversationContext = result.conversationContext || null;
-      appendAgentMessage('assistant', result.answer, result.proposals || [], result.toolResults || [], result.attachments || [], agentConversationContext);
+      appendAgentMessage('assistant', result.answer, result.proposals || [], result.toolResults || [], result.attachments || [], agentConversationContext, 'chat', result.mediaRequested === true);
       agentProposals.delete(id);
       button.remove();
       await Promise.all([loadCameras(), loadSites(), loadEvents()]);
@@ -1975,10 +2135,13 @@
     const input = document.getElementById('agent-input');
     const send = document.getElementById('agent-send');
     const content = input.value.trim();
-    if (!content) return;
+    if (!content || agentRequestInFlight) return;
+    const requestId = crypto.randomUUID();
+    agentRequestInFlight = true;
     agentMessages.push({ role: 'user', content });
     appendAgentMessage('user', content);
     input.value = '';
+    input.disabled = true;
     send.disabled = true;
     try {
       const result = await api('/api/agent/chat', { method: 'POST', body: JSON.stringify({
@@ -1986,12 +2149,14 @@
         provider: document.getElementById('agent-provider').value,
         timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
         conversationContext: agentConversationContext,
+        requestId,
       }) });
+      if (result.requestId !== requestId) throw new Error('Phản hồi AI không khớp với lượt hỏi hiện tại');
       agentConversationContext = result.conversationContext || null;
       agentMessages.push({ role: 'assistant', content: result.answer });
-      appendAgentMessage('assistant', result.answer, result.proposals || [], result.toolResults || [], result.attachments || [], agentConversationContext);
+      appendAgentMessage('assistant', result.answer, result.proposals || [], result.toolResults || [], result.attachments || [], agentConversationContext, 'chat', result.mediaRequested === true);
     } catch (error) { appendAgentMessage('assistant', `Lỗi: ${error.message}`); }
-    finally { send.disabled = false; input.focus(); }
+    finally { agentRequestInFlight = false; input.disabled = false; send.disabled = false; input.focus(); }
   });
 
   function bindInstallCommand(prefix = '') {
@@ -2092,6 +2257,105 @@
       showSettingsMessage(t('site_deleted', { name }));
       await Promise.all([loadSites(), loadAccount(), loadCameras(), loadEvents(), loadStorageConfig(), loadStorageUsage()]);
     } catch (error) { showSettingsMessage(error.message, false); }
+  }
+
+  const UPDATE_STATUS_LABELS = {
+    running: { text: 'Đang cập nhật…', className: 'text-warning' },
+    unreachable: { text: 'Đang khởi động lại relay…', className: 'text-warning' },
+    success: { text: 'Đã cập nhật', className: 'text-success' },
+    failed: { text: 'Cập nhật lỗi', className: 'text-danger' },
+    never_run: { text: '', className: 'text-secondary' },
+    unknown: { text: '', className: 'text-secondary' },
+  };
+
+  function formatVersion(version) {
+    if (!version) return null;
+    const rawDate = version.commitDate && version.commitDate !== 'unknown' ? version.commitDate : version.builtAt;
+    const date = rawDate ? new Date(rawDate).toLocaleDateString() : '?';
+    return `${date} (${version.commit || '?'})${version.dirty ? ' · có thay đổi chưa commit' : ''}`;
+  }
+
+  let changelogText = null;
+  async function loadChangelog() {
+    if (changelogText != null) return changelogText;
+    try {
+      const res = await fetch('/CHANGELOG.md');
+      changelogText = res.ok ? await res.text() : '';
+    } catch { changelogText = ''; }
+    return changelogText;
+  }
+
+  async function toggleChangelog(siteId) {
+    const el = document.getElementById(`site-changelog-${siteId}`);
+    if (!el) return;
+    if (!el.hidden) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = 'Đang tải…';
+    el.textContent = (await loadChangelog()) || 'Không tải được changelog.';
+  }
+
+  function renderSiteUpdateStatus(siteId, status) {
+    const el = document.getElementById(`site-update-status-${siteId}`);
+    if (!el) return;
+    const info = UPDATE_STATUS_LABELS[status.status] || UPDATE_STATUS_LABELS.unknown;
+    const when = status.finishedAt || status.startedAt;
+    const statusLine = info.text
+      ? `<div class="${info.className}"${status.message ? ` title="${escapeHtml(status.message)}"` : ''}>${escapeHtml(info.text)}${when ? ` (${new Date(when).toLocaleString()})` : ''}</div>`
+      : '';
+    const installed = formatVersion(status.installedVersion);
+    const latest = formatVersion(status.latestVersion);
+    const hasUpdate = Boolean(status.installedVersion && status.latestVersion && status.installedVersion.commit !== status.latestVersion.commit);
+    let versionLines = '';
+    if (installed) {
+      versionLines += `<div class="text-secondary">Đang chạy: ${escapeHtml(installed)}</div>`;
+    } else if (status.latestVersion) {
+      versionLines += `<div class="text-secondary">Chưa rõ phiên bản — cập nhật một lần để bắt đầu theo dõi</div>`;
+    }
+    if (hasUpdate) {
+      versionLines += `<div class="text-warning">Có bản mới: ${escapeHtml(latest)} · <a href="#" onclick="toggleChangelog('${siteId}');return false;">Xem thay đổi</a></div>`;
+    } else if (installed && status.latestVersion) {
+      versionLines += `<div class="text-success">Đã là bản mới nhất</div>`;
+    }
+    el.className = 'small mt-1';
+    el.innerHTML = statusLine + versionLines
+      + `<div id="site-changelog-${siteId}" class="text-secondary mt-1" style="white-space:pre-wrap" hidden></div>`;
+  }
+
+  async function refreshSiteUpdateStatus(siteId) {
+    try {
+      const status = await api(`/api/sites/${encodeURIComponent(siteId)}/update`);
+      renderSiteUpdateStatus(siteId, status);
+      return status;
+    } catch {
+      return { status: 'unknown' };
+    }
+  }
+
+  function pollSiteUpdateStatus(siteId, attemptsLeft = 40) {
+    const button = document.getElementById(`site-update-btn-${siteId}`);
+    setTimeout(async () => {
+      const status = await refreshSiteUpdateStatus(siteId);
+      const stillGoing = status.status === 'running' || status.status === 'unreachable';
+      if (stillGoing && attemptsLeft > 0) {
+        pollSiteUpdateStatus(siteId, attemptsLeft - 1);
+      } else if (button) {
+        button.disabled = false;
+      }
+    }, 5000);
+  }
+
+  async function pushSiteUpdate(siteId) {
+    if (!confirm('Đẩy update tới site này? Relay và AI worker sẽ restart trong quá trình cập nhật — live view/PTZ sẽ gián đoạn vài giây.')) return;
+    const button = document.getElementById(`site-update-btn-${siteId}`);
+    if (button) button.disabled = true;
+    try {
+      const result = await api(`/api/sites/${encodeURIComponent(siteId)}/update`, { method: 'POST' });
+      renderSiteUpdateStatus(siteId, result);
+      pollSiteUpdateStatus(siteId);
+    } catch (error) {
+      if (button) button.disabled = false;
+      showSettingsMessage(error.message, false);
+    }
   }
 
   async function saveIntegration(provider, config) {
@@ -2218,7 +2482,47 @@
     render();
   });
 
+  const supportPanel = document.getElementById('support-panel');
+  const supportLauncher = document.getElementById('support-launcher');
+  const supportInput = document.getElementById('support-input');
+  function toggleSupport(open) {
+    supportPanel.classList.toggle('open', open);
+    supportLauncher.setAttribute('aria-expanded', String(open));
+    if (open) supportInput.focus();
+  }
+  supportLauncher.addEventListener('click', () => toggleSupport(!supportPanel.classList.contains('open')));
+  document.getElementById('support-close').addEventListener('click', () => toggleSupport(false));
+  document.getElementById('support-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const question = supportInput.value.trim();
+    if (!question) return;
+    const messages = document.getElementById('support-messages');
+    const addMessage = (role, content) => {
+      const item = document.createElement('div');
+      item.className = `support-message ${role} rounded p-2 mb-2`;
+      item.textContent = content;
+      messages.appendChild(item);
+      messages.scrollTop = messages.scrollHeight;
+      return item;
+    };
+    addMessage('user', question);
+    supportInput.value = '';
+    const send = document.getElementById('support-send');
+    send.disabled = true;
+    const pending = addMessage('assistant', 'Đang trả lời…');
+    try {
+      let session = localStorage.getItem('cameraai_support_session');
+      if (!session) { session = crypto.randomUUID(); localStorage.setItem('cameraai_support_session', session); }
+      const response = await fetch('/api/support/chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session, question }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      pending.textContent = result.answer;
+    } catch (error) { pending.textContent = `Xin lỗi, hiện chưa thể trả lời: ${error.message}`; }
+    finally { send.disabled = false; supportInput.focus(); }
+  });
+
   render();
+
   setInterval(() => {
     if (!getApiKey() || document.hidden) return;
     const activeTab = document.querySelector('[data-bs-toggle="tab"].active')?.getAttribute('href');

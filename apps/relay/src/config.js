@@ -29,6 +29,12 @@ module.exports = {
   // Cameras with broken ONVIF PullPoint support can still trigger alerts by
   // periodically running the local person detector against a snapshot.
   personPollIntervalMs: Number(process.env.PERSON_POLL_INTERVAL_MS || 5000),
+  // Bound snapshot+AI work across the whole site. A slow camera/AI response
+  // must never fan out into an unbounded number of go2rtc/FFmpeg producers.
+  personPollMaxConcurrency: Math.max(1, Number(process.env.PERSON_POLL_MAX_CONCURRENCY || 3)),
+  // go2rtc keeps API-added streams in memory. Re-register missing streams
+  // after an independent go2rtc restart without requiring a relay restart.
+  go2rtcReconcileIntervalMs: Math.max(5000, Number(process.env.GO2RTC_RECONCILE_INTERVAL_MS || 15000)),
   faceBackfillIntervalMs: Number(process.env.FACE_BACKFILL_INTERVAL_MS || 60000),
   faceBackfillBatchSize: Number(process.env.FACE_BACKFILL_BATCH_SIZE || 5),
   faceBackfillFrameIntervalSeconds: Number(process.env.FACE_BACKFILL_FRAME_INTERVAL_SECONDS || 2),

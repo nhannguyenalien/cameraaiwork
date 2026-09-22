@@ -84,6 +84,10 @@ else
 fi
 cd "$INSTALL_DIR"
 
+# go2rtc refuses old FFmpeg (Ubuntu 22.04 ships 4.4), which otherwise makes
+# a camera advertise talkback successfully but every playback fail at runtime.
+bash "$INSTALL_DIR/apps/relay/ensure-ffmpeg.sh"
+
 # Models are served separately because Cloudflare Pages limits each static file
 # to 25 MiB. Existing files are retained to avoid downloading ~28 MiB again.
 declare -a MODEL_FILES=(

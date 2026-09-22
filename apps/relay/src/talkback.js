@@ -95,7 +95,39 @@ function createTalkback({ go2rtcUrl, password, greeting, cooldownMs = 60000 }) {
     }
   }
 
-  return { speak, play };
+  // Generic ONVIF two-way audio (backchannel), for cameras that expose an
+  // ONVIF audio output but aren't a Tapo device — see ptz.js's audioOutput
+  // capability probe, which is what gates whether this ever gets called.
+  async function playOnvif(camera, audio) {
+    if (!camera?.onvif?.ip || !audio?.length) return false;
+    const safeId = String(camera.id).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const unique = randomUUID();
+    const tempName = `${safeId}_onvif_talkback_${unique}`;
+    const input = path.join(os.tmpdir(), `${tempName}.input`);
+    const wav = path.join(os.tmpdir(), `${tempName}.wav`);
+    try {
+      await fs.promises.writeFile(input, audio);
+      await exec("ffmpeg", [
+        "-hide_banner", "-loglevel", "error", "-y", "-i", input,
+        "-ar", "8000", "-ac", "1", "-t", "10", wav,
+      ]);
+      // The registered live stream already contains the camera's RTSP
+      // backchannel (audio sendonly). Reusing it is important for Dahua:
+      // creating a separate ONVIF-only stream may expose video/audio input
+      // but no writable consumer, causing go2rtc to return
+      // "can't find consumer" even though two-way audio is supported.
+      await request("POST", "/api/streams", {
+        dst: camera.stream || camera.id,
+        src: `ffmpeg:${wav}#audio=pcma#input=file`,
+      });
+      await sleep(10500);
+      return true;
+    } finally {
+      for (const file of [input, wav]) fs.promises.unlink(file).catch(() => {});
+    }
+  }
+
+  return { speak, play, playOnvif };
 }
 
 module.exports = { createTalkback };

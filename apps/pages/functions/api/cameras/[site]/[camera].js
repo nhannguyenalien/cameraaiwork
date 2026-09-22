@@ -13,6 +13,7 @@ export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
     stream: camera.stream,
     name: camera.name,
     recordOnPerson: Boolean(Number(camera.record_on_person)),
+    clipDurationSeconds: Number(camera.clip_duration_seconds) || 10,
   });
 });
 

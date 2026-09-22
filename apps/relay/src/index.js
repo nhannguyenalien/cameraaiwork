@@ -39,7 +39,14 @@ const { startNamedTunnel } = require("./tunnel");
 const { parseLiveRequest } = require("./live-auth");
 const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
-const { validateCamera, publicCamera, sameRtspSource, updateGo2rtc, persistCameras } = require("./camera-config");
+const {
+  validateCamera,
+  publicCamera,
+  sameRtspSource,
+  missingStreamIds,
+  updateGo2rtc,
+  persistCameras,
+} = require("./camera-config");
 const { discoverAll, resolveRtsp } = require("./discovery");
 const { createFaceBackfill } = require("./face-backfill");
 
@@ -95,7 +102,10 @@ function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 20 * 1024 * 1
       "-rtsp_transport", "tcp",
       "-i", rtspUrl,
       "-t", String(durationMs / 1000),
-      "-map", "0:v:0", "-c:v", "copy", "-an",
+      // Preserve a camera microphone when present. The optional audio map also
+      // keeps silent/video-only cameras working; AAC makes common ONVIF audio
+      // codecs playable in the MP4 clips served by the dashboard.
+      "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy", "-c:a", "aac", "-b:a", "64k",
       "-movflags", "+faststart",
       "-f", "mp4", "-y", outputPath,
     ], { stdio: ["ignore", "ignore", "pipe"] });
@@ -173,7 +183,10 @@ app.get("/internal/clip.mp4", requireSecret, async (req, res) => {
   const cameraId = String(req.query.src || "");
   if (!config.cameras.some((camera) => camera.id === cameraId)) return res.sendStatus(404);
   try {
-    const clip = await captureLocalClip(cameraId);
+    const requestedSeconds = Number(req.query.duration);
+    const durationSeconds = [10, 30, 60].includes(requestedSeconds) ? requestedSeconds : 10;
+    const maxBytes = Math.max(20, Math.ceil(durationSeconds * 1.25)) * 1024 * 1024;
+    const clip = await captureLocalClip(cameraId, durationSeconds * 1000, maxBytes);
     if (!clip.length) return res.sendStatus(502);
     res.set("Cache-Control", "private, no-store, no-cache, max-age=0");
     res.type("video/mp4").send(clip);
@@ -241,6 +254,8 @@ app.post("/ptz/:camera", requireSecret, async (req, res) => {
   else if (action === "home") result = await ptz.home(camera);
   else if (action === "gotoPreset") result = await ptz.gotoPreset(camera, req.body?.preset);
   else if (action === "setPreset") result = await ptz.setPreset(camera, req.body?.name);
+  else if (action === "startPatrol") result = await ptz.startPatrol(camera, req.body?.presets, req.body?.intervalSeconds);
+  else if (action === "stopPatrol") result = ptz.stopPatrol(camera) || true;
   else return res.status(400).json({ error: "PTZ action không hợp lệ" });
   if (!result) return res.status(409).json({ error: "Camera không hỗ trợ lệnh PTZ này hoặc đang offline" });
   res.json({ ok: true, ...(typeof result === "string" ? { preset: result } : {}) });
@@ -250,6 +265,8 @@ app.get("/controls/:camera", requireSecret, async (req, res) => {
   const camera = config.cameras.find((item) => item.id === req.params.camera);
   if (!camera) return res.sendStatus(404);
   const detected = ptz.capabilities(camera.id);
+  const lightOn = detected.light ? await ptz.lightState(camera.id) : null;
+  const alarmOn = detected.alarm ? await ptz.alarmState(camera.id) : null;
   let streamOnline = detected.online;
   if (!streamOnline) {
     try {
@@ -270,9 +287,25 @@ app.get("/controls/:camera", requireSecret, async (req, res) => {
     // video stream is not incorrectly reported offline.
     online: streamOnline,
     ptz: detected.ptz,
-    talk: Boolean(config.tapoTalkbackPassword && camera.onvif?.ip),
+    talk: Boolean((config.tapoTalkbackPassword || detected.talk) && camera.onvif?.ip),
     light: detected.light,
+    lightOn,
+    lightMode: ptz.lightModeState(camera.id),
+    alarm: detected.alarm,
+    alarmOn,
+    lightModes: detected.lightModes || [],
+    patrol: ptz.patrolState(camera.id),
+    presets: detected.ptz ? await ptz.presets(camera.id) : {},
+    syncedAt: new Date().toISOString(),
   });
+});
+
+app.get("/onvif/:camera", requireSecret, async (req, res) => {
+  const camera = config.cameras.find((item) => item.id === req.params.camera);
+  if (!camera) return res.sendStatus(404);
+  const result = await ptz.inventory(camera.id, req.query.refresh === "1");
+  if (!result) return res.status(409).json({ error: "Camera chưa kết nối được ONVIF" });
+  res.json(result);
 });
 
 app.post("/talk/:camera", requireSecret, express.raw({ type: "audio/*", limit: "3mb" }), async (req, res) => {
@@ -280,7 +313,9 @@ app.post("/talk/:camera", requireSecret, express.raw({ type: "audio/*", limit: "
   if (!camera) return res.sendStatus(404);
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Audio trống" });
   try {
-    const played = await talkback.play(camera, req.body);
+    const played = config.tapoTalkbackPassword
+      ? await talkback.play(camera, req.body)
+      : await talkback.playOnvif(camera, req.body);
     if (!played) return res.status(409).json({ error: "Camera không hỗ trợ đàm thoại" });
     res.json({ ok: true });
   } catch (err) {
@@ -292,8 +327,19 @@ app.post("/talk/:camera", requireSecret, express.raw({ type: "audio/*", limit: "
 app.post("/light/:camera", requireSecret, async (req, res) => {
   const camera = config.cameras.find((item) => item.id === req.params.camera);
   if (!camera) return res.sendStatus(404);
-  const ok = await ptz.setLight(camera.id, Boolean(req.body?.enabled));
+  const mode = req.body?.mode || (req.body?.enabled ? "on" : "off");
+  if (!["auto", "on", "off", "blink"].includes(mode)) return res.status(400).json({ error: "Chế độ đèn không hợp lệ" });
+  const ok = await ptz.setLightMode(camera.id, mode, req.body?.intervalMs);
   if (!ok) return res.status(409).json({ error: "Camera không hỗ trợ điều khiển đèn" });
+  const enabled = await ptz.lightState(camera.id);
+  res.json({ ok: true, mode, enabled: typeof enabled === "boolean" ? enabled : mode !== "off" });
+});
+
+app.post("/alarm/:camera", requireSecret, async (req, res) => {
+  const camera = config.cameras.find((item) => item.id === req.params.camera);
+  if (!camera) return res.sendStatus(404);
+  const ok = await ptz.setAlarm(camera.id, Boolean(req.body?.enabled));
+  if (!ok) return res.status(409).json({ error: "Camera không hỗ trợ còi/báo động ONVIF" });
   res.json({ ok: true });
 });
 
@@ -301,11 +347,71 @@ app.get("/health", requireSecret, (req, res) => res.json({ ok: true, cameras: co
 
 app.post("/discover/cameras", requireSecret, async (_req, res) => {
   try {
-    res.json({ cameras: await discoverAll() });
+    const found = await discoverAll();
+    const existingIps = new Set(config.cameras.map((camera) => camera.onvif.ip));
+    res.json({ cameras: found.filter((camera) => !existingIps.has(camera.ip)) });
   } catch (error) {
     console.error("❌ Quét ONVIF lỗi:", error.message || error);
     res.status(502).json({ error: "Không quét được camera trong mạng LAN của site" });
   }
+});
+
+// Dashboard "Đẩy update tới site này" button (apps/pages/functions/api/sites/[id]/update.js).
+// update.sh restarts this very relay process partway through — a plain file
+// survives that, in-memory state wouldn't — so status is tracked there
+// instead, written by update.sh's own EXIT trap.
+const UPDATE_SCRIPT_PATH = path.resolve(__dirname, "../update.sh");
+const UPDATE_STATUS_PATH = path.resolve(__dirname, "../.update-status.json");
+const UPDATE_LOG_PATH = "/tmp/cameraaiwork-update-trigger.log";
+// Written fresh by scripts/build-relay-bundle.sh into every release archive —
+// absent on a relay that predates this file existing at all.
+const VERSION_PATH = path.resolve(__dirname, "../VERSION.json");
+
+function readUpdateStatus() {
+  try {
+    return JSON.parse(fs.readFileSync(UPDATE_STATUS_PATH, "utf8"));
+  } catch {
+    return { status: "never_run" };
+  }
+}
+
+function readInstalledVersion() {
+  try {
+    return JSON.parse(fs.readFileSync(VERSION_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+app.get("/update/status", requireSecret, (_req, res) => {
+  res.json({ ...readUpdateStatus(), installedVersion: readInstalledVersion() });
+});
+
+app.post("/update", requireSecret, (_req, res) => {
+  if (!fs.existsSync(UPDATE_SCRIPT_PATH)) {
+    return res.status(500).json({ error: "Không tìm thấy update.sh trên máy site" });
+  }
+  if (readUpdateStatus().status === "running") {
+    return res.status(409).json({ error: "Đã có một tiến trình cập nhật đang chạy tại site này" });
+  }
+  const startedAt = new Date().toISOString();
+  try {
+    fs.writeFileSync(UPDATE_STATUS_PATH, JSON.stringify({ status: "running", startedAt }, null, 2));
+  } catch (err) {
+    console.error("❌ Không ghi được trạng thái update:", err.message || err);
+  }
+  const log = fs.openSync(UPDATE_LOG_PATH, "a");
+  fs.writeSync(log, `\n=== Update kích hoạt từ dashboard lúc ${startedAt} ===\n`);
+  // detached + unref: launchctl kickstart -k inside update.sh kills this very
+  // process later on, so the child must not die along with it.
+  const child = spawn("bash", [UPDATE_SCRIPT_PATH], {
+    cwd: path.resolve(__dirname, ".."),
+    detached: true,
+    stdio: ["ignore", log, log],
+  });
+  child.unref();
+  console.log(`🔄 Update kích hoạt qua dashboard (PID ${child.pid}), log tại ${UPDATE_LOG_PATH}`);
+  res.json({ ok: true, status: "running", startedAt });
 });
 
 app.get("/config/cameras/:camera", requireSecret, (req, res) => {
@@ -348,7 +454,11 @@ app.put("/config/cameras/:camera", requireSecret, async (req, res) => {
     else config.cameras.push(camera);
     persistCameras(config.camerasPath, config.cameras);
     if (!camera.localAiEnabled) stopPersonPolling(camera.id);
+    // ptz.reconnect() itself skips the connection attempt when hasOnvif is
+    // false; for those cameras there is no watchMotionOnvif callback to ever
+    // start polling, so kick it off directly here.
     ptz.reconnect(camera, watchMotionOnvif);
+    if (camera.hasOnvif === false) startPersonPolling(camera.id);
     res.json(publicCamera(camera));
   } catch (error) {
     console.error(`❌ Cấu hình camera lỗi (${req.params.camera}):`, error.message);
@@ -376,6 +486,7 @@ app.delete("/config/cameras/:camera", requireSecret, async (req, res) => {
 const cooldowns = new Map(); // camera id -> bool
 const personPollers = new Map(); // camera id -> interval; ONVIF fallback only
 const personPresence = new Map(); // camera id -> { present, missingFrames }
+let activePersonPolls = 0;
 
 function localAiEnabled(cameraId) {
   return config.cameras.find((item) => item.id === cameraId)?.localAiEnabled !== false;
@@ -388,7 +499,7 @@ function stopPersonPolling(cameraId) {
   personPresence.delete(cameraId);
 }
 
-async function notifyMotion(cameraId, trusted) {
+async function notifyMotion(cameraId, trusted, detection = null) {
   if (!config.motionWebhookUrl) {
     console.warn("⚠️ MOTION_WEBHOOK_URL chưa cấu hình, bỏ qua.");
     return;
@@ -396,7 +507,17 @@ async function notifyMotion(cameraId, trusted) {
   try {
     const response = await axios.post(
       config.motionWebhookUrl,
-      { siteId: config.siteId, camera: cameraId, trusted: Boolean(trusted) },
+      {
+        siteId: config.siteId,
+        camera: cameraId,
+        trusted: Boolean(trusted),
+        ...(detection ? {
+          detection: {
+            hasPerson: detection.hasPerson === true,
+            hasVehicle: detection.hasVehicle === true,
+          },
+        } : {}),
+      },
       // Pages fetches a fresh frame and asks the on-site AI to confirm the
       // person before inserting the event, unless `trusted` skips that check
       // (camera's own ONVIF motion is trusted, see onvifMotionTrusted below).
@@ -405,19 +526,22 @@ async function notifyMotion(cameraId, trusted) {
     );
     console.log(
       response.data?.alerted
-        ? `✅ Đã tạo person event (${cameraId})`
-        : `ℹ️ Backend không xác nhận có người (${cameraId})`
+        ? `✅ Đã tạo AI event (${cameraId})`
+        : `ℹ️ Backend không xác nhận có người/xe (${cameraId})`
     );
   } catch (e) {
-    console.error(`❌ Gửi motion webhook thất bại (${cameraId}):`, e.message);
+    console.error(
+      `❌ Gửi motion webhook thất bại (${cameraId}):`,
+      e.response?.data?.error || e.message
+    );
   }
 }
 
-function triggerMotion(cameraId, source, trusted = false) {
+function triggerMotion(cameraId, source, trusted = false, detection = null) {
   if (cooldowns.get(cameraId)) return;
   console.log(`📡 Kích hoạt motion (${cameraId}, ${source})`);
   cooldowns.set(cameraId, true);
-  notifyMotion(cameraId, trusted);
+  notifyMotion(cameraId, trusted, detection);
   setTimeout(() => cooldowns.set(cameraId, false), 30000);
 }
 
@@ -431,12 +555,19 @@ function onvifMotionTrusted(cameraId) {
 // so this only replaces the unreliable motion trigger, not server-side policy.
 function startPersonPolling(cameraId) {
   if (!localAiEnabled(cameraId) || personPollers.has(cameraId) || config.personPollIntervalMs <= 0) return;
+  let polling = false;
 
   const poll = async () => {
     if (!localAiEnabled(cameraId)) {
       stopPersonPolling(cameraId);
       return;
     }
+    // setInterval can fire again while snapshot + AI is still awaiting its
+    // 10s/20s timeouts. Keep one request per camera and a small site-wide
+    // ceiling so a degraded NVR cannot create hundreds of FFmpeg processes.
+    if (polling || activePersonPolls >= config.personPollMaxConcurrency) return;
+    polling = true;
+    activePersonPolls++;
     try {
       const frame = await axios.get(`${config.go2rtc.url}/api/frame.jpeg`, {
         params: { src: cameraId },
@@ -453,11 +584,23 @@ function startPersonPolling(cameraId) {
       });
       const camera = config.cameras.find((item) => item.id === cameraId);
       const state = personPresence.get(cameraId) || { present: false, missingFrames: 0 };
-      if (detected.data?.hasPerson) {
-        triggerMotion(cameraId, "AI polling fallback");
+      if (detected.data?.hasPerson || detected.data?.hasVehicle) {
+        // The on-site classifier has already inspected this exact frame. Pass
+        // its result to the backend so it does not fetch the tunnel and run
+        // the same expensive detection a second time (a frequent source of
+        // intermittent Cloudflare 503s).
+        triggerMotion(
+          cameraId,
+          detected.data?.hasPerson ? "AI person polling" : "AI vehicle polling",
+          true,
+          {
+            hasPerson: detected.data?.hasPerson === true,
+            hasVehicle: detected.data?.hasVehicle === true,
+          }
+        );
         if (!state.present && camera) {
-          state.present = true;
-          talkback.speak(camera)
+          state.present = Boolean(detected.data?.hasPerson);
+          if (detected.data?.hasPerson) talkback.speak(camera)
             .then((played) => played && console.log(`🔊 Đã phát lời chào (${cameraId})`))
             .catch((err) => console.error(`❌ Phát lời chào lỗi (${cameraId}):`, err.message || err));
         }
@@ -470,6 +613,9 @@ function startPersonPolling(cameraId) {
       personPresence.set(cameraId, state);
     } catch (err) {
       console.error(`❌ AI polling lỗi (${cameraId}):`, err.message || err);
+    } finally {
+      activePersonPolls--;
+      polling = false;
     }
   };
 
@@ -490,7 +636,7 @@ function startPersonPolling(cameraId) {
 // Profile S motion topic, the most universally supported one — so this
 // filters to that specifically now instead of alerting on everything.
 // Non-motion topics are still logged, just not treated as motion.
-const MOTION_TOPIC = "CellMotionDetector";
+const MOTION_TOPICS = ["CellMotionDetector", "VideoSource/MotionAlarm"];
 
 // Some cheap camera firmware (observed on a Tapo C200) advertises ONVIF
 // pull-point support but can't actually hold the long-poll HTTP connection
@@ -505,7 +651,7 @@ function watchMotionOnvif(cameraId, cam) {
     consecutiveErrors = 0;
     const topic = message?.topic?._ || "(unknown topic)";
 
-    if (!topic.includes(MOTION_TOPIC)) {
+    if (!MOTION_TOPICS.some((name) => topic.includes(name))) {
       console.log(`📡 ONVIF event bỏ qua (${cameraId}, không phải motion): ${topic}`);
       return;
     }
@@ -517,13 +663,13 @@ function watchMotionOnvif(cameraId, cam) {
     // they only ensure local AI polling is awake, and the poller calls
     // triggerMotion itself once it confirms hasPerson=true.
     //
-    // A camera explicitly marked onvifMotionTrusted (opt-in per camera, see
-    // camera-config.js) is assumed to have a reliable motion feed already —
-    // for it, skip the local AI check entirely and record straight away.
-    // This is the main lever for cutting local PC load: no AI-polling loop
-    // ever starts for a trusted camera as long as its ONVIF feed is healthy.
+    // A trusted ONVIF feed is still only a motion signal; it cannot tell the
+    // dashboard whether the object was a person or a vehicle. When local AI
+    // is enabled, wake the classifier so the event gets the correct type.
+    // Sites that explicitly disable local AI keep the legacy trusted path.
     if (onvifMotionTrusted(cameraId)) {
-      triggerMotion(cameraId, "ONVIF motion (trusted)", true);
+      if (localAiEnabled(cameraId)) startPersonPolling(cameraId);
+      else triggerMotion(cameraId, "ONVIF motion (trusted)", true);
       return;
     }
     startPersonPolling(cameraId);
@@ -566,13 +712,41 @@ async function reconcileConfiguredStreams() {
   });
 }
 
+let go2rtcRecoveryRunning = false;
+async function restoreMissingStreams() {
+  if (go2rtcRecoveryRunning) return;
+  go2rtcRecoveryRunning = true;
+  try {
+    const response = await axios.get(`${config.go2rtc.url}/api/streams`, { timeout: 5000 });
+    const missing = new Set(missingStreamIds(config.cameras, response.data));
+    if (!missing.size) return;
+    console.warn(`♻️  go2rtc thiếu ${missing.size} luồng; đang tự phục hồi...`);
+    for (const camera of config.cameras) {
+      if (missing.has(camera.id)) await updateGo2rtc(config.go2rtc.url, camera);
+    }
+    console.log(`✅ Đã tự phục hồi ${missing.size} luồng go2rtc.`);
+  } catch (error) {
+    console.error("❌ Kiểm tra tự phục hồi go2rtc lỗi:", error.message || error);
+  } finally {
+    go2rtcRecoveryRunning = false;
+  }
+}
+
 // Rebuild go2rtc's dynamic sources on every relay start. This also migrates
 // old NVR entries away from the unsafe shared ONVIF video fallback without
 // changing anything on the NVR itself.
 reconcileConfiguredStreams().finally(() => {
   ptz.connectAll(watchMotionOnvif);
+  // Cameras without ONVIF never get a watchMotionOnvif callback (see ptz.js),
+  // so they never fall into startPersonPolling through the usual ONVIF-error
+  // path — start their snapshot+AI polling directly instead.
+  config.cameras
+    .filter((camera) => camera.hasOnvif === false)
+    .forEach((camera) => startPersonPolling(camera.id));
   createFaceBackfill(config).start();
 });
+const go2rtcRecoveryTimer = setInterval(restoreMissingStreams, config.go2rtcReconcileIntervalMs);
+go2rtcRecoveryTimer.unref();
 const server = app.listen(config.port, "127.0.0.1", () =>
   console.log(`🚀 Relay (${config.siteId}) chạy ở http://127.0.0.1:${config.port}`)
 );

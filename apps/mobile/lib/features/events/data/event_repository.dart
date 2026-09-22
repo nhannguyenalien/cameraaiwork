@@ -27,6 +27,38 @@ final cameraEventsProvider = FutureProvider.autoDispose
       return page.items;
     });
 
+final cameraTimelineEventsProvider = FutureProvider.autoDispose
+    .family<List<CameraEvent>, CameraTimelineQuery>((ref, query) async {
+      final page = await ref
+          .read(eventRepositoryProvider)
+          .list(
+            camera: query.cameraStream,
+            from: query.dayStart,
+            to: query.dayStart.add(const Duration(days: 1)),
+            limit: 100,
+          );
+      return page.items;
+    });
+
+class CameraTimelineQuery {
+  const CameraTimelineQuery({
+    required this.cameraStream,
+    required this.dayStart,
+  });
+
+  final String cameraStream;
+  final DateTime dayStart;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CameraTimelineQuery &&
+      other.cameraStream == cameraStream &&
+      other.dayStart == dayStart;
+
+  @override
+  int get hashCode => Object.hash(cameraStream, dayStart);
+}
+
 class EventRepository {
   const EventRepository(this.client);
   final ApiClient client;
@@ -36,6 +68,8 @@ class EventRepository {
     String? camera,
     String? person,
     String? type,
+    DateTime? from,
+    DateTime? to,
     int limit = 20,
   }) async {
     final response = await client.request<List<dynamic>>(
@@ -46,6 +80,8 @@ class EventRepository {
         if (camera?.isNotEmpty == true) 'camera': camera,
         if (person?.isNotEmpty == true) 'person': person,
         if (type?.isNotEmpty == true) 'type': type,
+        if (from != null) 'from': from.toUtc().toIso8601String(),
+        if (to != null) 'to': to.toUtc().toIso8601String(),
       },
     );
     final items = response.data!

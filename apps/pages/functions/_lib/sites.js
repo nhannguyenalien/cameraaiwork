@@ -47,6 +47,7 @@ export async function listCameras(env, accountId) {
     sql: `
       SELECT cameras.id AS "cameraId", cameras.stream, cameras.name AS "cameraName",
              cameras.record_on_person AS "recordOnPerson",
+             cameras.clip_duration_seconds AS "clipDurationSeconds",
              sites.id AS "siteId", sites.name AS "siteName"
       FROM cameras
       JOIN sites ON sites.id = cameras.site_id

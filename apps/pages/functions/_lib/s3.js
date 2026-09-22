@@ -53,7 +53,7 @@ function objectUrl(config, key = "", query = {}) {
   return base;
 }
 
-export async function s3Request(rawConfig, method, key = "", { body = new Uint8Array(), contentType, range, query } = {}) {
+export async function s3Request(rawConfig, method, key = "", { body = new Uint8Array(), contentType, range, query, signal } = {}) {
   const config = validateS3Config(rawConfig);
   const url = objectUrl(config, key, query);
   const now = new Date();
@@ -79,7 +79,7 @@ export async function s3Request(rawConfig, method, key = "", { body = new Uint8A
   const fetchHeaders = { ...headers, Authorization: authorization };
   delete fetchHeaders.host;
   if (range) fetchHeaders.Range = range;
-  return fetch(url, { method, headers: fetchHeaders, body: method === "PUT" ? payload : undefined });
+  return fetch(url, { method, headers: fetchHeaders, body: method === "PUT" ? payload : undefined, signal });
 }
 
 async function ensureOk(response, action) {
@@ -95,7 +95,7 @@ export async function testS3(config) {
   if (!head) throw new Error("Kiểm tra S3 thất bại: không đọc lại được file thử");
   await deleteS3(config, key);
 }
-export async function putS3(config, key, body, contentType) { await ensureOk(await s3Request(config, "PUT", key, { body, contentType }), "Upload"); }
+export async function putS3(config, key, body, contentType, signal) { await ensureOk(await s3Request(config, "PUT", key, { body, contentType, signal }), "Upload"); }
 export async function getS3(config, key, range) { const response = await s3Request(config, "GET", key, { range }); return response.status === 404 ? null : ensureOk(response, "Đọc"); }
 export async function headS3(config, key) { const response = await s3Request(config, "HEAD", key); return response.status === 404 ? null : ensureOk(response, "Đọc metadata"); }
 export async function deleteS3(config, key) { const response = await s3Request(config, "DELETE", key); if (response.status !== 404) await ensureOk(response, "Xóa"); }

@@ -10,11 +10,16 @@
 //   /api/health — unauthenticated so uptime monitors can hit it.
 //   /api/auth/* — obviously can't require an API key, since the whole
 //   point is exchanging a Google sign-in for one (see functions/api/auth/google/).
+//
+//   Google Drive's OAuth connect flow (functions/api/settings/storage-config/
+//   google-exchange.js + google-finalize.js) runs entirely as authenticated
+//   API calls from the dashboard's own JS (Google Identity Services' popup
+//   code flow, not a full-page redirect), so it needs no exemption here.
 import { getDb } from "./_lib/db.js";
 import { sha256Hex } from "./_lib/ids.js";
 import { readSessionToken } from "./_lib/session.js";
 
-const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/internal/patrol", "/api/install/claim"];
+const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/internal/patrol", "/api/install/claim", "/api/support/chat"];
 const PUBLIC_AUTH_PATHS = ["/api/auth/signup", "/api/auth/login", "/api/auth/stripe-webhook"];
 
 function isPublic(request, url) {
