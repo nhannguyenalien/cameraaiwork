@@ -3,17 +3,21 @@ import { getDb } from "../../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../../_lib/http.js";
 import { validateResourceName } from "../../../_lib/resourceNames.js";
 import { deleteObjects } from "../../../_lib/objectStorage.js";
+import { accountUsage, normalizeClipDuration } from "../../../_lib/plans.js";
 
 export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
   const camera = await getCamera(env, data.accountId, params.site, params.camera);
   if (!camera) return errorJson("Camera not found", 404);
+  const summary = await accountUsage(env, data.accountId);
+  const override = camera.clip_duration_seconds == null ? null : Number(camera.clip_duration_seconds);
   return json({
     cameraId: camera.id,
     siteId: camera.site_id,
     stream: camera.stream,
     name: camera.name,
     recordOnPerson: Boolean(Number(camera.record_on_person)),
-    clipDurationSeconds: Number(camera.clip_duration_seconds) || 10,
+    clipDurationSeconds: normalizeClipDuration(summary.plan, override ?? summary.clipDurationSeconds),
+    clipDurationOverrideSeconds: override,
   });
 });
 

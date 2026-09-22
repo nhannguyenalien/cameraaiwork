@@ -12,7 +12,7 @@ export function limitsFor(plan) {
 export async function accountUsage(env, accountId) {
   const db = getDb(env);
   const [accountResult, siteResult, cameraResult] = await Promise.all([
-    db.execute({ sql: "SELECT plan, subscription_status, video_retention_days FROM accounts WHERE id = ?", args: [accountId] }),
+    db.execute({ sql: "SELECT plan, subscription_status, video_retention_days, clip_duration_seconds FROM accounts WHERE id = ?", args: [accountId] }),
     db.execute({ sql: "SELECT COUNT(*) AS count FROM sites WHERE account_id = ?", args: [accountId] }),
     db.execute({ sql: "SELECT COUNT(*) AS count FROM cameras WHERE account_id = ?", args: [accountId] }),
   ]);
@@ -25,6 +25,7 @@ export async function accountUsage(env, accountId) {
     subscriptionStatus: account.subscription_status,
     limits,
     videoRetentionDays: Math.min(Math.max(savedRetention, 1), limits.maxVideoRetentionDays),
+    clipDurationSeconds: normalizeClipDuration(effectivePlan, account.clip_duration_seconds),
     usage: { sites: Number(siteResult.rows[0].count), cameras: Number(cameraResult.rows[0].count) },
   };
 }
@@ -45,6 +46,16 @@ export async function effectivePlanForAccount(env, accountId) {
     args: [accountId],
   });
   return effectivePlanForAccountRow(result.rows[0]);
+}
+
+export async function effectiveVideoSettingsForAccount(env, accountId) {
+  const result = await getDb(env).execute({
+    sql: "SELECT plan, subscription_status, clip_duration_seconds FROM accounts WHERE id = ?",
+    args: [accountId],
+  });
+  const account = result.rows[0] || {};
+  const plan = effectivePlanForAccountRow(account);
+  return { plan, clipDurationSeconds: normalizeClipDuration(plan, account.clip_duration_seconds) };
 }
 
 export async function assertCapacity(env, accountId, resource) {

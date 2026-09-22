@@ -47,10 +47,18 @@ export async function listCameras(env, accountId) {
     sql: `
       SELECT cameras.id AS "cameraId", cameras.stream, cameras.name AS "cameraName",
              cameras.record_on_person AS "recordOnPerson",
-             cameras.clip_duration_seconds AS "clipDurationSeconds",
+             CASE
+               WHEN accounts.plan = 'pro'
+                 AND accounts.subscription_status IN ('active', 'trialing')
+                 AND COALESCE(cameras.clip_duration_seconds, accounts.clip_duration_seconds, 10) IN (10, 30, 60)
+               THEN COALESCE(cameras.clip_duration_seconds, accounts.clip_duration_seconds, 10)
+               ELSE 10
+             END AS "clipDurationSeconds",
+             cameras.clip_duration_seconds AS "clipDurationOverrideSeconds",
              sites.id AS "siteId", sites.name AS "siteName"
       FROM cameras
       JOIN sites ON sites.id = cameras.site_id
+      JOIN accounts ON accounts.id = cameras.account_id
       WHERE cameras.account_id = ?
       ORDER BY sites.id, cameras.id
     `,

@@ -12,13 +12,22 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
   if (!camera) return errorJson("Camera not found", 404);
 
   const summary = await accountUsage(env, data.accountId);
-  const requestedDuration = body.clipDurationSeconds === undefined ? Number(camera.clip_duration_seconds) || 10 : Number(body.clipDurationSeconds);
-  const duration = normalizeClipDuration(summary.plan, requestedDuration);
-  if (duration !== requestedDuration) return errorJson("Thời lượng clip này chỉ dành cho gói Pro", 402);
+  const savedOverride = camera.clip_duration_seconds == null ? null : Number(camera.clip_duration_seconds);
+  let duration = savedOverride;
+  if (body.clipDurationSeconds !== undefined) {
+    const requestedDuration = body.clipDurationSeconds === null ? null : Number(body.clipDurationSeconds);
+    duration = requestedDuration === null ? null : normalizeClipDuration(summary.plan, requestedDuration);
+    if (requestedDuration !== null && duration !== requestedDuration) return errorJson("Thời lượng clip này chỉ dành cho gói Pro", 402);
+  }
   const recordOnPerson = body.recordOnPerson === undefined ? Boolean(Number(camera.record_on_person)) : body.recordOnPerson;
   await getDb(env).execute({
     sql: "UPDATE cameras SET record_on_person = ?, clip_duration_seconds = ? WHERE id = ? AND site_id = ? AND account_id = ?",
     args: [recordOnPerson ? 1 : 0, duration, camera.id, params.site, data.accountId],
   });
-  return json({ ok: true, recordOnPerson, clipDurationSeconds: duration });
+  return json({
+    ok: true,
+    recordOnPerson,
+    clipDurationOverrideSeconds: duration,
+    clipDurationSeconds: normalizeClipDuration(summary.plan, duration ?? summary.clipDurationSeconds),
+  });
 });

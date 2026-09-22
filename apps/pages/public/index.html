@@ -528,8 +528,8 @@
                 <div class="col-12">
                   <form id="video-retention-form" class="card">
                     <div class="card-header"><h3 class="card-title"><i class="ti ti-calendar-time me-2"></i>Thời gian lưu video sự kiện</h3></div>
-                    <div class="card-body"><div class="row align-items-end g-3"><div class="col-md-4"><label class="form-label" for="video-retention-days">Tự xóa video cũ sau</label><div class="input-group"><input id="video-retention-days" type="number" min="1" max="7" class="form-control" value="7" /><span class="input-group-text">ngày</span></div></div><div class="col-md-8"><div id="video-retention-note" class="text-secondary">Mặc định 7 ngày. Ảnh và thông tin sự kiện vẫn được giữ lại.</div></div></div></div>
-                    <div class="card-footer"><button id="save-video-retention" class="btn btn-primary" type="submit">Lưu thời gian</button></div>
+                    <div class="card-body"><div class="row align-items-end g-3"><div class="col-md-4"><label class="form-label" for="default-clip-duration">Thời lượng clip mặc định</label><select id="default-clip-duration" class="form-select"><option value="10">10 giây</option><option value="30">30 giây · Pro</option><option value="60">1 phút · Pro</option></select><div class="form-hint">Áp dụng cho mọi camera không có cấu hình riêng.</div></div><div class="col-md-4"><label class="form-label" for="video-retention-days">Tự xóa video cũ sau</label><div class="input-group"><input id="video-retention-days" type="number" min="1" max="7" class="form-control" value="7" /><span class="input-group-text">ngày</span></div></div><div class="col-md-4"><div id="video-retention-note" class="text-secondary">Mặc định 7 ngày. Ảnh và thông tin sự kiện vẫn được giữ lại.</div></div></div></div>
+                    <div class="card-footer"><button id="save-video-retention" class="btn btn-primary" type="submit">Lưu cấu hình video</button></div>
                   </form>
                 </div>
                 <div class="col-12">
@@ -1747,6 +1747,9 @@
     document.getElementById('account-email-note').textContent = accountSummary.email ? t('email_fixed_note') : t('legacy_email_note');
     document.getElementById('subscribe-btn').classList.toggle('d-none', plan === 'pro');
     const retention = document.getElementById('video-retention-days');
+    const defaultClipDuration = document.getElementById('default-clip-duration');
+    defaultClipDuration.value = String(accountSummary.clipDurationSeconds || 10);
+    [...defaultClipDuration.options].forEach(option => { option.disabled = !limits.clipDurations.includes(Number(option.value)); });
     retention.value = accountSummary.videoRetentionDays || 7;
     retention.max = limits.maxVideoRetentionDays;
     retention.disabled = plan !== 'pro';
@@ -1759,7 +1762,7 @@
   document.getElementById('video-retention-form').addEventListener('submit', async event => {
     event.preventDefault();
     const button=document.getElementById('save-video-retention'); button.disabled=true;
-    try { await api('/api/settings/video', {method:'PUT', body:JSON.stringify({videoRetentionDays:Number(document.getElementById('video-retention-days').value)})}); await loadAccount(); }
+    try { await api('/api/settings/video', {method:'PUT', body:JSON.stringify({videoRetentionDays:Number(document.getElementById('video-retention-days').value), clipDurationSeconds:Number(document.getElementById('default-clip-duration').value)})}); await loadAccount(); }
     catch (error) { alert(error.message); }
     finally { button.disabled=accountSummary?.plan !== 'pro'; }
   });

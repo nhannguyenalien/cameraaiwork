@@ -13,7 +13,7 @@ import { getIntegration } from "../_lib/integrations.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
 import { triggerGpuScan } from "../_lib/gpuWorker.js";
 import { resolveStorageChain } from "../_lib/objectStorage.js";
-import { effectivePlanForAccount, normalizeClipDuration } from "../_lib/plans.js";
+import { effectiveVideoSettingsForAccount, normalizeClipDuration } from "../_lib/plans.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil }) => {
   let body;
@@ -39,8 +39,8 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   // Open the MP4 stream before the slower snapshot/AI/Telegram/DB path only
   // when this camera is configured to retain person-event video.
   const shouldRecord = Number(cameraConfig.record_on_person ?? 1) === 1;
-  const plan = shouldRecord ? await effectivePlanForAccount(env, site.account_id) : "free";
-  const clipSeconds = normalizeClipDuration(plan, cameraConfig.clip_duration_seconds);
+  const videoSettings = shouldRecord ? await effectiveVideoSettingsForAccount(env, site.account_id) : { plan: "free", clipDurationSeconds: 10 };
+  const clipSeconds = normalizeClipDuration(videoSettings.plan, cameraConfig.clip_duration_seconds ?? videoSettings.clipDurationSeconds);
   const clipPromise = shouldRecord ? captureClip(site, camera, clipSeconds) : null;
   const frame = await getFrame(env, site, camera);
   // A camera the relay marked onvifMotionTrusted already made the person

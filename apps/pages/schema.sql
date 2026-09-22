@@ -25,9 +25,11 @@ CREATE TABLE IF NOT EXISTS accounts (
     subscription_status TEXT DEFAULT 'inactive',
     stripe_customer_id TEXT,
     stripe_subscription_id TEXT,
-    video_retention_days INTEGER NOT NULL DEFAULT 7
+    video_retention_days INTEGER NOT NULL DEFAULT 7,
+    clip_duration_seconds INTEGER
 );
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS video_retention_days INTEGER NOT NULL DEFAULT 7;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS clip_duration_seconds INTEGER;
 -- SQLite can't add a UNIQUE column via ALTER TABLE, so uniqueness is a
 -- separate index instead (NULLs don't collide, so accounts without an
 -- email — e.g. seeded manually — are unaffected).
@@ -111,9 +113,11 @@ CREATE TABLE IF NOT EXISTS cameras (
     stream TEXT NOT NULL,              -- go2rtc stream name at that site
     name TEXT,
     record_on_person INTEGER NOT NULL DEFAULT 1, -- upload an R2 clip for person events
-    clip_duration_seconds INTEGER NOT NULL DEFAULT 10
+    clip_duration_seconds INTEGER
 );
 ALTER TABLE cameras ADD COLUMN IF NOT EXISTS clip_duration_seconds INTEGER NOT NULL DEFAULT 10;
+ALTER TABLE cameras ALTER COLUMN clip_duration_seconds DROP NOT NULL;
+ALTER TABLE cameras ALTER COLUMN clip_duration_seconds DROP DEFAULT;
 
 -- One row per distinct face the system has clustered together — not
 -- necessarily named yet ("Người lạ #3" until the account owner labels
