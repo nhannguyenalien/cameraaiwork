@@ -141,6 +141,7 @@ if ! "$POST_RESTART"; then
     --exclude='.git/' \
     --exclude='.env' \
     --exclude='.env.*' \
+    --exclude='apps/relay/data/' \
     --exclude='cameras.json' \
     --exclude='node_modules/' \
     --exclude='.venv/' \

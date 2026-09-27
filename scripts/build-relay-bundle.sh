@@ -36,6 +36,7 @@ COPYFILE_DISABLE=1 tar -czf "$archive" \
   --exclude='.env' \
   --exclude='.dev.vars' \
   --exclude='cameras.json' \
+  --exclude='*/apps/relay/data' \
   --exclude='node_modules' \
   --exclude='.venv' \
   --exclude='__pycache__' \

@@ -48,6 +48,7 @@ const {
   persistCameras,
 } = require("./camera-config");
 const { discoverAll, resolveRtsp } = require("./discovery");
+const { startOfflineEvents } = require("./offline-events");
 const { createFaceBackfill } = require("./face-backfill");
 
 const app = express();
@@ -107,6 +108,7 @@ function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 20 * 1024 * 1
       // codecs playable in the MP4 clips served by the dashboard.
       "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy", "-c:a", "aac", "-b:a", "64k",
       "-movflags", "+faststart",
+      "-fs", String(maxBytes + 1),
       "-f", "mp4", "-y", outputPath,
     ], { stdio: ["ignore", "ignore", "pipe"] });
 
@@ -499,49 +501,21 @@ function stopPersonPolling(cameraId) {
   personPresence.delete(cameraId);
 }
 
-async function notifyMotion(cameraId, trusted, detection = null) {
-  if (!config.motionWebhookUrl) {
-    console.warn("⚠️ MOTION_WEBHOOK_URL chưa cấu hình, bỏ qua.");
-    return;
-  }
+const eventOutbox = startOfflineEvents(config, captureLocalClip);
+
+async function notifyMotion(cameraId, trusted, detection = null, frame = null) {
   try {
-    const response = await axios.post(
-      config.motionWebhookUrl,
-      {
-        siteId: config.siteId,
-        camera: cameraId,
-        trusted: Boolean(trusted),
-        ...(detection ? {
-          detection: {
-            hasPerson: detection.hasPerson === true,
-            hasVehicle: detection.hasVehicle === true,
-          },
-        } : {}),
-      },
-      // Pages fetches a fresh frame and asks the on-site AI to confirm the
-      // person before inserting the event, unless `trusted` skips that check
-      // (camera's own ONVIF motion is trusted, see onvifMotionTrusted below).
-      // On a tunnel the AI round trip can exceed 5s.
-      { headers: { "x-relay-secret": config.relaySecret }, timeout: 30000 }
-    );
-    console.log(
-      response.data?.alerted
-        ? `✅ Đã tạo AI event (${cameraId})`
-        : `ℹ️ Backend không xác nhận có người/xe (${cameraId})`
-    );
-  } catch (e) {
-    console.error(
-      `❌ Gửi motion webhook thất bại (${cameraId}):`,
-      e.response?.data?.error || e.message
-    );
+    await eventOutbox.enqueue({ camera: cameraId, trusted: Boolean(trusted), detection }, frame);
+  } catch (error) {
+    console.error(`❌ Không lưu được event local (${cameraId}):`, error.message);
   }
 }
 
-function triggerMotion(cameraId, source, trusted = false, detection = null) {
+function triggerMotion(cameraId, source, trusted = false, detection = null, frame = null) {
   if (cooldowns.get(cameraId)) return;
   console.log(`📡 Kích hoạt motion (${cameraId}, ${source})`);
   cooldowns.set(cameraId, true);
-  notifyMotion(cameraId, trusted, detection);
+  notifyMotion(cameraId, trusted, detection, frame);
   setTimeout(() => cooldowns.set(cameraId, false), 30000);
 }
 
@@ -551,8 +525,8 @@ function onvifMotionTrusted(cameraId) {
 
 // A number of low-cost cameras expose ONVIF/PTZ correctly but abort every
 // PullMessages request. Once that failure is proven, poll the local snapshot
-// and local AI worker instead. The backend still re-checks the current frame,
-// so this only replaces the unreliable motion trigger, not server-side policy.
+// and local AI worker instead. Save this exact detection/frame locally so
+// cloud ingestion does not depend on the tunnel or a later live frame.
 function startPersonPolling(cameraId) {
   if (!localAiEnabled(cameraId) || personPollers.has(cameraId) || config.personPollIntervalMs <= 0) return;
   let polling = false;
@@ -573,6 +547,7 @@ function startPersonPolling(cameraId) {
         params: { src: cameraId },
         responseType: "arraybuffer",
         timeout: 10000,
+        maxContentLength: 2 * 1024 ** 2,
       });
       const jpeg = Buffer.from(frame.data);
       if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) {
@@ -596,7 +571,8 @@ function startPersonPolling(cameraId) {
           {
             hasPerson: detected.data?.hasPerson === true,
             hasVehicle: detected.data?.hasVehicle === true,
-          }
+          },
+          jpeg
         );
         if (!state.present && camera) {
           state.present = Boolean(detected.data?.hasPerson);

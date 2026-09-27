@@ -10,6 +10,7 @@
     "deploy": "wrangler pages deploy public --project-name cameraaiwork"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "wrangler": "^3.78.0"
   },
   "dependencies": {

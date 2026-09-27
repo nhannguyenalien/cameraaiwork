@@ -1,3 +1,4 @@
+import { ingestOfflineEvent, offlinePolicy } from '../_lib/offlineEvents.js';
 // Webhook receiver: called by a site's relay (apps/relay) whenever go2rtc
 // reports motion on one of its cameras. Body: { siteId, camera }.
 // Authenticated per-site (not per-account — the relay holds a site secret,
@@ -16,6 +17,7 @@ import { resolveStorageChain } from "../_lib/objectStorage.js";
 import { effectiveVideoSettingsForAccount, normalizeClipDuration } from "../_lib/plans.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil }) => {
+  if (request.headers.get("content-type")?.startsWith("multipart/form-data")) return ingestOfflineEvent({ request, env, waitUntil });
   let body;
   try {
     body = await request.json();
@@ -158,3 +160,5 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
 
   return json({ ok: true, alerted: true, type: eventType, personId, personIds });
 });
+
+export const onRequestGet = withErrorHandling(offlinePolicy);

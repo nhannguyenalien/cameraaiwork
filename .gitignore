@@ -34,3 +34,6 @@ npm-debug.log*
 # local tooling
 .claude/
 apps/pages/.wrangler/
+
+# Durable relay queue contains private camera footage.
+apps/relay/data/

@@ -15,7 +15,16 @@ const cameras = JSON.parse(fs.readFileSync(camerasPath, "utf8"));
 const go2rtcUrl = process.env.GO2RTC_URL || "http://127.0.0.1:1984";
 const pagesApiUrl = (process.env.PAGES_API_URL || "").replace(/\/$/, "");
 
+function positiveNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 module.exports = {
+  eventOutboxDir: path.resolve(process.env.EVENT_OUTBOX_DIR || path.join(__dirname, '../data/event-outbox')),
+  offlineRetentionHours: positiveNumber('OFFLINE_RETENTION_HOURS', 24),
+  offlineMaxBytes: positiveNumber('OFFLINE_MAX_BYTES', 2 * 1024 ** 3),
+  offlineUploadBytesPerSecond: positiveNumber('OFFLINE_UPLOAD_BYTES_PER_SECOND', 512 * 1024),
   port: Number(process.env.RELAY_PORT || 4000),
   relaySecret: process.env.RELAY_SECRET || "",
   siteId: process.env.SITE_ID || "",

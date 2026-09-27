@@ -273,3 +273,8 @@ CREATE INDEX IF NOT EXISTS idx_events_gpu_face_scan ON events(site_id, gpu_face_
 -- INSERT INTO cameras (id, site_id, account_id, stream, name)
 --   VALUES ('cam-tapo01', 'st-nhachinh01', 'acct_owner', 'tapo', 'Camera chính');
 -- Then run scripts/generate-api-key.js to create acct_owner's API key.
+
+-- Relay durable outbox: UUID remains stable across retries and restarts.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS source_event_id TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS relay_sync_complete BOOLEAN NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_relay_source ON events(site_id, source_event_id);

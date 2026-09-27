@@ -12,7 +12,7 @@ Start at [docs/README.md](docs/README.md). The machine-readable API contract is
 
 ```
 apps/relay/           Node — runs ON-SITE, next to the cameras. ONVIF PTZ
-                       + motion webhook forwarding ONLY. No UI/DB/Telegram.
+                       + durable offline event queue and cloud sync. No UI/DB/Telegram.
 apps/pages/            Cloudflare Pages: static Tabler dashboard + Functions
                        (the entire API — auth, DB, AI orchestration, jobs).
 ai/worker/             Python: local lightweight "is there a person" service,
@@ -176,3 +176,7 @@ curl -X POST "$API/api/agent/actions" -H "Authorization: Bearer $TOKEN" \
 - Signup/login, Stripe billing hooks, enforced plan limits and encrypted
   customer integrations are implemented. Stripe remains platform-owned;
   Telegram and RunPod are customer BYOK settings in the dashboard.
+
+### Offline camera events
+
+Relay lưu event và media cục bộ, mặc định tối đa 24 giờ / 2 GiB, rồi tự đồng bộ khi cloud truy cập được. Xem [cấu hình, giới hạn và thứ tự triển khai](docs/OFFLINE-EVENTS.md).
