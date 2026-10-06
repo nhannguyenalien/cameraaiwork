@@ -13,7 +13,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const bearer = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!env.MAINTENANCE_SECRET || bearer !== env.MAINTENANCE_SECRET) return errorJson("Unauthorized", 401);
 
-  const rows = await getDb(env).execute({
+  const rows = await getDb(env, "api.internal.maintenance").execute({
     sql: "SELECT cloudflare_tunnel_id FROM sites WHERE cloudflare_tunnel_id IS NOT NULL",
     args: [],
   });

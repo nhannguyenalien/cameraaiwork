@@ -31,7 +31,7 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
   } catch (error) {
     return errorJson(error.message, 400);
   }
-  await getDb(env).execute({
+  await getDb(env, "api.cameras.[site].[camera]").execute({
     sql: "UPDATE cameras SET name = ? WHERE id = ? AND site_id = ? AND account_id = ?",
     args: [name, camera.id, params.site, data.accountId],
   });
@@ -49,7 +49,7 @@ export const onRequestDelete = withErrorHandling(async ({ params, env, data }) =
     });
     if (!relayResponse.ok && relayResponse.status !== 404) return errorJson("Không xóa được cấu hình camera tại máy site", 502);
   }
-  const db = getDb(env);
+  const db = getDb(env, "api.cameras.[site].[camera]");
   const events = await db.execute({
     sql: "SELECT image_key, video_key, storage_backend FROM events WHERE account_id = ? AND site_id = ? AND camera = ?",
     args: [data.accountId, params.site, camera.stream],

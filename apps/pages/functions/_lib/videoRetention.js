@@ -2,7 +2,7 @@ import { getDb } from "./db.js";
 import { deleteObjects } from "./objectStorage.js";
 
 export async function cleanupExpiredVideos(env, batchSize = 250) {
-  const db = getDb(env);
+  const db = getDb(env, "_lib.videoRetention");
   const limit = Math.min(Math.max(Number(batchSize) || 250, 1), 1000);
   const result = await db.execute({
     sql: `SELECT e.id, e.account_id, e.video_key, e.storage_backend

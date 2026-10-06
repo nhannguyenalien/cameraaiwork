@@ -17,7 +17,7 @@ export const onRequestGet = withErrorHandling(async ({ request, env }) => {
   const siteId = url.searchParams.get("siteId") || "";
   const site = await authenticate(request, env, siteId);
   if (!site) return errorJson("Unauthorized", 401);
-  const db = getDb(env);
+  const db = getDb(env, "api.face-backfill");
 
   if (url.searchParams.get("action") === "media") {
     const eventId = Number(url.searchParams.get("eventId"));
@@ -83,12 +83,17 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   if (!site) return errorJson("Unauthorized", 401);
   const eventId = Number(body.eventId);
   if (!Number.isSafeInteger(eventId) || eventId <= 0) return errorJson("eventId không hợp lệ", 400);
-  const db = getDb(env);
+  const db = getDb(env, "api.face-backfill");
   const event = await db.execute({
-    sql: "SELECT id FROM events WHERE id = ? AND site_id = ? AND account_id = ?",
+    sql: "SELECT id, face_scan_status FROM events WHERE id = ? AND site_id = ? AND account_id = ?",
     args: [eventId, site.id, site.account_id],
   });
   if (!event.rows.length) return errorJson("Event not found", 404);
+
+  if (event.rows[0].face_scan_status === 'completed') {
+    const links = await db.execute({ sql: 'SELECT person_id FROM event_people WHERE event_id = ?', args: [eventId] });
+    return json({ ok: true, personIds: links.rows.map(row => row.person_id), alreadyCompleted: true });
+  }
 
   if (body.error) {
     await db.execute({
@@ -105,7 +110,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const personIds = [];
   const personBoxes = new Map();
   for (const detection of detections) {
-    const id = await findOrCreatePerson(env, site.account_id, detection.embedding);
+    const id = await findOrCreatePerson(env, site.account_id, detection.embedding, "local", 0.30, false);
     if (id && !personIds.includes(id)) personIds.push(id);
     if (id && detection.box && !personBoxes.has(id)) personBoxes.set(id, detection.box);
   }

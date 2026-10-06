@@ -158,7 +158,7 @@ export const onRequestPost = withErrorHandling(async (context) => {
   const timezoneOffsetMinutes = Number.isFinite(Number(body.timezoneOffsetMinutes))
     ? Math.max(-720, Math.min(840, Math.trunc(Number(body.timezoneOffsetMinutes))))
     : 420;
-  const runtime = { timezoneOffsetMinutes, now: new Date() };
+  const runtime = { timezoneOffsetMinutes, now: new Date(), language: body.language };
   let order = body.provider === "schoolsai" ? ["schoolsai"] : body.provider === "openai" ? ["openai"] : body.provider === "gemini" ? ["gemini"] : ["schoolsai", "openai", "gemini"];
   const failures = [];
   const execute = async (action, args) => responseValue(await executeAgentAction(action, args, context));

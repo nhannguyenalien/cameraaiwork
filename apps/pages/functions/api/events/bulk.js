@@ -8,7 +8,7 @@ export const onRequestDelete = withErrorHandling(async ({ request, env, data }) 
   const ids = [...new Set(body.ids)].filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0).map(Number);
   if (!ids.length || ids.length > 100) return errorJson("ids phải chứa từ 1 đến 100 event hợp lệ", 400);
   const placeholders = ids.map(() => "?").join(",");
-  const db = getDb(env);
+  const db = getDb(env, "api.events.bulk");
   const found = await db.execute({
     sql: `SELECT id, image_key, video_key, storage_backend FROM events WHERE account_id = ? AND id IN (${placeholders})`,
     args: [data.accountId, ...ids],

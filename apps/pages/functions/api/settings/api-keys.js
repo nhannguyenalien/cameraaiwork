@@ -14,7 +14,7 @@ export const onRequestGet = withErrorHandling(async ({ env, data }) => {
   // left visible here has no revoke button that would do anything (the
   // DELETE handler only matches revoked_at IS NULL) and just clutters the
   // list looking identical to an active key.
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "api.settings.api-keys").execute({
     sql: `SELECT id, label, scope, created_at, expires_at FROM api_keys
           WHERE account_id = ? AND label NOT LIKE ? AND revoked_at IS NULL
           ORDER BY created_at DESC`,
@@ -41,7 +41,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
   const apiKey = `key-${randomSecret()}`;
   const id = await sha256Hex(apiKey);
   const expiresAt = input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86400000).toISOString() : null;
-  const db = getDb(env);
+  const db = getDb(env, "api.settings.api-keys");
   const inserted = await db.execute({
     sql: "INSERT INTO api_keys (id, account_id, label, scope, expires_at) VALUES (?, ?, ?, ?, ?) RETURNING created_at",
     args: [id, data.accountId, input.label, input.scope, expiresAt],

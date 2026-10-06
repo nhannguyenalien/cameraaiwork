@@ -1,6 +1,7 @@
+import { agentLanguageInstruction } from "./agentLanguage.js";
 import { actionTools, requiresAgentConfirmation, validateAgentAction } from "./agentActions.js";
 
-const SYSTEM = `Bạn là AI Agent quản trị CameraAIWork. Luôn trả lời tiếng Việt, ngắn gọn và chính xác.
+const SYSTEM = `Bạn là AI Agent quản trị CameraAIWork. Trả lời ngắn gọn và chính xác.
 Bạn có thể dùng tool để đọc site, camera, event, người, trạng thái, cấu hình, ảnh snapshot và media của event; quét camera trong LAN; hoặc đề xuất thao tác quản trị.
 Luôn dùng tool thay vì đoán ID hay trạng thái. Không bao giờ yêu cầu hoặc lặp lại API key. Không suy đoán danh tính người chưa được đặt tên.
 Khi hỏi số người hoặc "bao nhiêu", luôn dùng summarize_events thay vì tự đếm list_recent_events. Hãy phân biệt: số người duy nhất, tổng lượt khuôn mặt được nhận diện, và số event camera phát hiện người. Một event có thể chứa nhiều người.
@@ -13,7 +14,7 @@ function systemPrompt(runtime = {}) {
   const now = runtime.now instanceof Date ? runtime.now : new Date();
   const local = new Date(now.getTime() + offset * 60_000);
   const localIso = `${local.toISOString().slice(0, 19)}${offset < 0 ? "-" : "+"}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, "0")}:${String(Math.abs(offset) % 60).padStart(2, "0")}`;
-  return `${SYSTEM}\nThời gian hiện tại: ${now.toISOString()} UTC; giờ địa phương người dùng: ${localIso}. Với “sáng nay”, truy vấn từ 00:00 giờ địa phương đến thời điểm hiện tại (không vượt quá 12:00). Luôn truyền from/to dạng ISO có múi giờ vào summarize_events hoặc list_recent_events.`;
+  return `${SYSTEM}\n${agentLanguageInstruction(runtime.language)}\nThời gian hiện tại: ${now.toISOString()} UTC; giờ địa phương người dùng: ${localIso}. Với “sáng nay”, truy vấn từ 00:00 giờ địa phương đến thời điểm hiện tại (không vượt quá 12:00). Luôn truyền from/to dạng ISO có múi giờ vào summarize_events hoặc list_recent_events.`;
 }
 
 async function providerError(response, provider) {

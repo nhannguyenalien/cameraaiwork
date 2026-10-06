@@ -6,7 +6,7 @@ import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 export const onRequestGet = withErrorHandling(async ({ env, data }) => {
   const [summary, accountResult] = await Promise.all([
     accountUsage(env, data.accountId),
-    getDb(env).execute({ sql: "SELECT email FROM accounts WHERE id = ?", args: [data.accountId] }),
+    getDb(env, "api.settings.account").execute({ sql: "SELECT email FROM accounts WHERE id = ?", args: [data.accountId] }),
   ]);
   return json({ ...summary, email: accountResult.rows[0]?.email || "" });
 });

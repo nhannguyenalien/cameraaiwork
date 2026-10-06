@@ -7,7 +7,7 @@ function clientIp(request) {
 
 export async function checkAuthRateLimit(env, request, scope, identity, limit, windowMinutes) {
   const key = await sha256Hex(`${scope}:${clientIp(request)}:${String(identity || "").trim().toLowerCase()}`);
-  const db = getDb(env);
+  const db = getDb(env, "_lib.rateLimit");
   const result = await db.execute({
     sql: `INSERT INTO auth_rate_limits (id, attempts, window_started, blocked_until)
           VALUES (?, 1, CURRENT_TIMESTAMP, NULL)
@@ -26,5 +26,5 @@ export async function checkAuthRateLimit(env, request, scope, identity, limit, w
 }
 
 export async function clearAuthRateLimit(env, key) {
-  await getDb(env).execute({ sql: "DELETE FROM auth_rate_limits WHERE id = ?", args: [key] });
+  await getDb(env, "_lib.rateLimit").execute({ sql: "DELETE FROM auth_rate_limits WHERE id = ?", args: [key] });
 }

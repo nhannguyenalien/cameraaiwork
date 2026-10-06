@@ -20,7 +20,7 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
     if (requestedDuration !== null && duration !== requestedDuration) return errorJson("Thời lượng clip này chỉ dành cho gói Pro", 402);
   }
   const recordOnPerson = body.recordOnPerson === undefined ? Boolean(Number(camera.record_on_person)) : body.recordOnPerson;
-  await getDb(env).execute({
+  await getDb(env, "api.cameras.[site].[camera].settings").execute({
     sql: "UPDATE cameras SET record_on_person = ?, clip_duration_seconds = ? WHERE id = ? AND site_id = ? AND account_id = ?",
     args: [recordOnPerson ? 1 : 0, duration, camera.id, params.site, data.accountId],
   });

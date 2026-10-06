@@ -113,7 +113,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const end = new Date();
   const range = { start: new Date(end.getTime() - minutes * 60_000), end, timezoneOffsetMinutes: DEFAULT_TIMEZONE_OFFSET_MINUTES };
 
-  const db = getDb(env);
+  const db = getDb(env, "api.internal.patrol");
   const ids = await accountIdsWithSites(db);
   const results = [];
   for (const accountId of ids) {

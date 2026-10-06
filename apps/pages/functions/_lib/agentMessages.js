@@ -6,7 +6,7 @@ const MAX_CONTENT_LENGTH = 8000;
 export async function saveAgentMessage(env, accountId, role, content, source = "chat") {
   const text = String(content || "").trim().slice(0, MAX_CONTENT_LENGTH);
   if (!text) return null;
-  const db = getDb(env);
+  const db = getDb(env, "_lib.agentMessages");
   const inserted = await db.execute({
     sql: "INSERT INTO agent_messages (account_id, role, content, source) VALUES (?, ?, ?, ?) RETURNING id, created_at",
     args: [accountId, role === "assistant" ? "assistant" : "user", text, source === "patrol" ? "patrol" : "chat"],
@@ -18,7 +18,7 @@ export async function saveAgentMessage(env, accountId, role, content, source = "
 // landed after its last render — e.g. a patrol digest that arrived while
 // the tab was open — instead of re-fetching and re-rendering everything.
 export async function listAgentMessages(env, accountId, { limit = 50, since = null } = {}) {
-  const db = getDb(env);
+  const db = getDb(env, "_lib.agentMessages");
   const cappedLimit = Math.max(1, Math.min(Number(limit) || 50, MAX_LIST_LIMIT));
   if (since) {
     const result = await db.execute({

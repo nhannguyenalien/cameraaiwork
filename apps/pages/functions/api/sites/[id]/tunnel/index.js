@@ -27,7 +27,7 @@ export const onRequestPost = withErrorHandling(async ({ params, env, data }) => 
     urls = created;
   }
 
-  const db = getDb(env);
+  const db = getDb(env, "api.sites.[id].tunnel.index");
   await db.execute({
     sql: "UPDATE sites SET go2rtc_url = ?, relay_url = ?, ai_worker_url = ?, cloudflare_tunnel_id = ? WHERE id = ?",
     args: [urls.go2rtcUrl, urls.relayUrl, urls.aiWorkerUrl, tunnelId, params.id],

@@ -69,7 +69,7 @@ export function normalizeEmail(email) {
 
 export async function setLegacyAccountEmail(env, accountId, email) {
   const normalized = normalizeEmail(email);
-  const db = getDb(env);
+  const db = getDb(env, "_lib.auth");
   const current = await db.execute({ sql: "SELECT email FROM accounts WHERE id = ?", args: [accountId] });
   if (!current.rows[0]) throw new Error("ACCOUNT_NOT_FOUND");
   if (current.rows[0].email) return current.rows[0].email;
@@ -81,7 +81,7 @@ export async function setLegacyAccountEmail(env, accountId, email) {
 
 export async function updateAccountPassword(env, accountId, password) {
   validateNewPassword(password);
-  const db = getDb(env);
+  const db = getDb(env, "_lib.auth");
   const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
   const passwordHash = await derivePassword(password, salt);
   await db.execute({
@@ -98,7 +98,7 @@ export async function updateAccountPassword(env, accountId, password) {
 
 export async function createAccount(env, input) {
   const { normalizedEmail, password, normalizedName } = validateSignupInput(input);
-  const db = getDb(env);
+  const db = getDb(env, "_lib.auth");
   const existing = await db.execute({ sql: "SELECT id FROM accounts WHERE email = ?", args: [normalizedEmail] });
   if (existing.rows[0]) throw new Error("EMAIL_EXISTS");
 
@@ -116,7 +116,7 @@ export async function createAccount(env, input) {
 
 export async function login(env, { email, password }) {
   if (typeof email !== "string" || typeof password !== "string") return null;
-  const db = getDb(env);
+  const db = getDb(env, "_lib.auth");
   const result = await db.execute({
     sql: "SELECT a.id, c.password_salt, c.password_hash, c.password_iterations FROM accounts a JOIN auth_credentials c ON c.account_id = a.id WHERE a.email = ?",
     args: [email.trim().toLowerCase()],

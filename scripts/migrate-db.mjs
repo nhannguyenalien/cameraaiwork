@@ -1,3 +1,4 @@
+import { statements as networkTransferStatements } from '../apps/pages/migrations/001-network-transfer.mjs';
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 
@@ -82,5 +83,7 @@ if (process.env.TUNNEL_BASE_DOMAIN) {
     [process.env.TUNNEL_BASE_DOMAIN],
   );
 }
+
+for (const statement of networkTransferStatements) await pg.query(statement);
 
 console.log("Database migration hoàn tất.");

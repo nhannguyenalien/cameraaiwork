@@ -22,6 +22,6 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const session = String(body?.session || "").trim();
   if (!question || question.length > 2_000) return errorJson("Câu hỏi phải từ 1 đến 2000 ký tự", 400);
   if (!/^[a-zA-Z0-9_-]{8,100}$/.test(session)) return errorJson("Session không hợp lệ", 400);
-  const result = await chatSchoolsSupport(env, { session: `cameraai-support-${session}`, question });
+  const result = await chatSchoolsSupport(env, { session: `cameraai-support-${session}`, question, language: ["vi", "en", "ja", "fr", "ko", "es"].includes(body?.language) ? body.language : undefined });
   return json(result, { headers: { "Cache-Control": "no-store" } });
 });

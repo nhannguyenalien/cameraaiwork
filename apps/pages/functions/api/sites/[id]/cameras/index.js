@@ -24,7 +24,7 @@ export const onRequestPost = withErrorHandling(async ({ request, params, env, da
   const cameraId = randomId("cam");
   const stream = cameraId;
 
-  const db = getDb(env);
+  const db = getDb(env, "api.sites.[id].cameras.index");
   const relayResponse = await fetch(`${site.relay_url}/config/cameras/${encodeURIComponent(stream)}`, {
     method: "PUT",
     headers: { "content-type": "application/json", "x-relay-secret": site.relay_secret },

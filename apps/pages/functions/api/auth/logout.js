@@ -6,7 +6,7 @@ import { clearSessionCookie, readSessionToken } from "../../_lib/session.js";
 export const onRequestPost = withErrorHandling(async ({ request, env, data }) => {
   const token = readSessionToken(request);
   if (token) {
-    await getDb(env).execute({
+    await getDb(env, "api.auth.logout").execute({
       sql: "UPDATE api_keys SET revoked_at = datetime('now') WHERE id = ? AND account_id = ?",
       args: [await sha256Hex(token), data.accountId],
     });

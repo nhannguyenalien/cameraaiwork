@@ -8,7 +8,7 @@ import { getObject, headObject } from "../../../_lib/objectStorage.js";
 // API key auth as every other /api/* route (functions/_middleware.js)
 // instead of relying on an unguessable object key.
 export const onRequestGet = withErrorHandling(async ({ request, params, env, data }) => {
-  const db = getDb(env);
+  const db = getDb(env, "api.events.[id].video");
   const result = await db.execute({
     sql: "SELECT video_key, storage_backend FROM events WHERE id = ? AND account_id = ?",
     args: [params.id, data.accountId],

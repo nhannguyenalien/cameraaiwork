@@ -20,7 +20,7 @@ export const onRequestGet = withErrorHandling(async ({ request, params, env, dat
   if (!timeZone) return errorJson("Múi giờ không hợp lệ", 400);
 
   const dayExpression = "TO_CHAR(timestamp AT TIME ZONE ?, 'YYYY-MM-DD')";
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "api.cameras.[site].[camera].video-days").execute({
     sql: `
       SELECT ${dayExpression} AS day,
              MAX(timestamp) AS "lastVideoAt",

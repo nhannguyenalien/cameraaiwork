@@ -859,7 +859,7 @@ document.getElementById('delete-camera').addEventListener('click', async () => {
 document.getElementById('logout-btn').addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'});}catch(_){}localStorage.removeItem(API_KEY_STORAGE);location.href='/';});
 window.addEventListener('beforeunload',()=>{ imageObserver?.disconnect(); objectUrls.forEach(URL.revokeObjectURL); });
 init().catch(showError);
-setInterval(()=>{ if(camera && !document.hidden && localDateValue(timelineDate)===localDateValue(new Date())) loadEvents().catch(()=>{}); },15000);
+setInterval(()=>{ if(camera && !document.hidden && localDateValue(timelineDate)===localDateValue(new Date())) loadEvents().catch(()=>{}); },30000);
 </script>
 </body>
 </html>

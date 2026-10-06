@@ -14,7 +14,7 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
 
   const source = new URL(request.url).searchParams.get("source") === "gpu" ? "gpu" : "local";
   const table = source === "gpu" ? "gpu_people" : "people";
-  const db = getDb(env);
+  const db = getDb(env, "api.people.[id]");
   const existing = await db.execute({
     sql: `SELECT id FROM ${table} WHERE id = ? AND account_id = ?`,
     args: [params.id, data.accountId],

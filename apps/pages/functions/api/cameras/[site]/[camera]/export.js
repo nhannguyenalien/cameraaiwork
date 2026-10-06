@@ -10,7 +10,7 @@ function csvCell(value) {
 export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
   const camera = await getCamera(env, data.accountId, params.site, params.camera);
   if (!camera) return errorJson("Camera not found", 404);
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "api.cameras.[site].[camera].export").execute({
     sql: `SELECT events.id, events.timestamp, events.type, people.label AS person,
                  events.video_status, events.video_error,
                  CASE WHEN events.image_key IS NULL THEN 0 ELSE 1 END AS has_image,

@@ -14,7 +14,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
   if (body.provider && !["auto", "openai", "gemini"].includes(body.provider)) return errorJson("provider không hợp lệ", 400);
 
   const range = resolveTimeRange(question, { timezoneOffsetMinutes: body.timezoneOffsetMinutes });
-  const db = getDb(env);
+  const db = getDb(env, "api.agent.query");
   const [cameraResult, eventResult] = await Promise.all([
     db.execute({
       sql: `SELECT c.id AS camera_id, c.stream, c.name AS camera_name, c.record_on_person,

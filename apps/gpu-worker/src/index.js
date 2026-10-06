@@ -1,4 +1,6 @@
 import { neon } from "@neondatabase/serverless";
+import { findOrCreatePerson, validEmbedding } from "../../pages/functions/_lib/faceMatch.js";
+import { measureDb } from "../../pages/functions/_lib/dbMetrics.js";
 
 const GPU_URL = "https://vision-api.schoolsai.work/v1/faces/embed";
 
@@ -8,32 +10,12 @@ function cosine(a, b) {
   return aa > 0 && bb > 0 ? dot / Math.sqrt(aa * bb) : 0;
 }
 
-function randomId() {
-  return `person-${crypto.randomUUID().replaceAll("-", "")}`;
-}
-
 async function acquireLease(sql) {
   await sql`INSERT INTO gpu_worker_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
   const rows = await sql`UPDATE gpu_worker_state
     SET locked_until = CURRENT_TIMESTAMP + INTERVAL '4 minutes', updated_at = CURRENT_TIMESTAMP
     WHERE id = 1 AND locked_until <= CURRENT_TIMESTAMP RETURNING id`;
   return rows.length > 0;
-}
-
-async function findOrCreate(sql, accountId, embedding, threshold) {
-  const people = await sql`SELECT id, embedding FROM gpu_people WHERE account_id = ${accountId}`;
-  let bestId = null, bestScore = -1;
-  for (const row of people) {
-    let known;
-    try { known = JSON.parse(row.embedding); } catch { continue; }
-    if (!Array.isArray(known) || known.length !== embedding.length) continue;
-    const score = cosine(known, embedding);
-    if (score > bestScore) { bestScore = score; bestId = row.id; }
-  }
-  if (bestId && bestScore >= threshold) return bestId;
-  const id = randomId();
-  await sql`INSERT INTO gpu_people (id, account_id, embedding) VALUES (${id}, ${accountId}, ${JSON.stringify(embedding)})`;
-  return id;
 }
 
 async function scanEvent(env, sql, event, threshold) {
@@ -50,8 +32,9 @@ async function scanEvent(env, sql, event, threshold) {
 
     for (const face of (payload.faces || []).slice(0, 20)) {
       const embedding = face.embedding;
-      if (!Array.isArray(embedding) || !embedding.length || embedding.some((n) => !Number.isFinite(n))) continue;
-      const personId = await findOrCreate(sql, event.account_id, embedding, threshold);
+      if (!validEmbedding(embedding)) continue;
+      const personId = await findOrCreatePerson(env, event.account_id, embedding, "gpu", threshold, false);
+      if (!personId) continue;
       const box = Array.isArray(face.bbox_xyxy) ? JSON.stringify(face.bbox_xyxy) : null;
       await sql`INSERT INTO event_gpu_people (event_id, person_id, face_box)
         VALUES (${event.id}, ${personId}, ${box})
@@ -72,7 +55,8 @@ async function scanEvent(env, sql, event, threshold) {
 
 async function run(env, requestedEventId = null) {
   if (!env.DATABASE_URL || !env.VISION_API_TOKEN || !env.EVENTS_BUCKET) throw new Error("Missing worker binding/secret");
-  const sql = neon(env.DATABASE_URL);
+  const rawSql = neon(env.DATABASE_URL);
+  const sql = (strings, ...values) => measureDb(env, "gpu.queue", strings.join("?"), () => rawSql(strings, ...values));
   if (!await acquireLease(sql)) return;
   try {
     const limit = Math.max(1, Math.min(5, Number(env.GPU_MAX_EVENTS_PER_RUN || 1)));

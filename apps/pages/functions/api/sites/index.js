@@ -12,7 +12,7 @@ import { createSiteTunnel } from "../../_lib/cloudflareTunnel.js";
 import { assertCapacity } from "../../_lib/plans.js";
 
 export const onRequestGet = withErrorHandling(async ({ env, data }) => {
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "api.sites.index").execute({
     sql: `SELECT s.id, s.name, s.go2rtc_url, s.relay_url, s.ai_worker_url,
                  COUNT(c.id) AS camera_count
           FROM sites s LEFT JOIN cameras c ON c.site_id = s.id
@@ -37,7 +37,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
 
   const { tunnelId, tunnelToken, go2rtcUrl, relayUrl, aiWorkerUrl } = await createSiteTunnel(env, siteId);
 
-  const db = getDb(env);
+  const db = getDb(env, "api.sites.index");
   await db.execute({
     sql: "INSERT INTO sites (id, account_id, name, go2rtc_url, relay_url, ai_worker_url, relay_secret, cloudflare_tunnel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     args: [siteId, data.accountId, name, go2rtcUrl, relayUrl, aiWorkerUrl, relaySecret, tunnelId],

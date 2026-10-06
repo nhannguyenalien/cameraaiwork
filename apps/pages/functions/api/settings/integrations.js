@@ -31,6 +31,6 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
 export const onRequestDelete = withErrorHandling(async ({ request, env, data }) => {
   const { provider } = await request.json().catch(() => ({}));
   if (!["telegram", "runpod", "openai", "gemini"].includes(provider)) return errorJson("Provider không hợp lệ", 400);
-  await getDb(env).execute({ sql: "DELETE FROM account_integrations WHERE account_id = ? AND provider = ?", args: [data.accountId, provider] });
+  await getDb(env, "api.settings.integrations").execute({ sql: "DELETE FROM account_integrations WHERE account_id = ? AND provider = ?", args: [data.accountId, provider] });
   return json({ ok: true });
 });

@@ -96,7 +96,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   // snapshot/clip upload resolves (see the waitUntil blocks below).
   const storageChain = await resolveStorageChain(env, site.account_id);
 
-  const db = getDb(env);
+  const db = getDb(env, "api.motion");
   const inserted = await db.execute({
     sql: "INSERT INTO events (account_id, site_id, camera, person_id, type, video_link, storage_backend, video_status, face_scan_status, face_scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP) RETURNING id",
     args: [site.account_id, site.id, camera, personId, eventType, link, storageChain[0], shouldRecord ? "recording" : "disabled"],

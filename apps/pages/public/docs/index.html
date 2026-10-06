@@ -82,25 +82,18 @@
                   <li>Node.js 20+, Git, Python 3.10+ với <code>venv</code>, <code>curl</code>; Linux cần <code>sudo</code>.</li>
                   <li>Camera đã bật RTSP + ONVIF, có IP cố định/DHCP reservation và tài khoản riêng.</li>
                   <li>Outbound HTTPS/WSS tới Cloudflare, GitHub và dashboard; không mở port router.</li>
-                  <li>MVP yêu cầu nhập IP camera, chưa tự động quét camera trong LAN.</li>
+                  <li>Sau khi site online, dùng “Quét camera” để khám phá camera ONVIF trong LAN hoặc nhập IP thủ công.</li>
                 </ul>
-                <div id="private-repo-note" class="alert alert-warning mb-0"><strong>Repo private:</strong> tạo GitHub deploy key chỉ-đọc cho từng máy site. Không chép PAT cá nhân lên máy khách.</div>
+                <div id="private-repo-note" class="alert alert-warning mb-0">Cài đặt bằng token dùng một lần, hết hạn sau 15 phút. Không cần tài khoản GitHub hoặc deploy key.</div>
               </div>
             </section>
 
             <section id="install" class="card doc-section">
               <div class="card-body">
                 <h2 id="install-title">2. Cài đặt</h2>
-                <p id="install-desc">Đăng ký public key của máy trong GitHub Repository → Settings → Deploy keys, không bật quyền write.</p>
-                <pre><code>ssh-keygen -t ed25519 -C cameraai-site -f "$HOME/.ssh/cameraai_deploy" -N ''
-cat "$HOME/.ssh/cameraai_deploy.pub"
-
-git clone --depth 1 git@github.com:nhannguyenalien/cameraaiwork.git
-cd cameraaiwork
-CAMERAAIWORK_REPO=git@github.com:nhannguyenalien/cameraaiwork.git \
-CAMERAAIWORK_API=https://cameraaiwork.pages.dev \
-./apps/relay/install.sh</code></pre>
-                <p id="install-note" class="text-secondary mt-3 mb-0">Installer hỏi API key account, tên site, IP/ONVIF camera; sau đó đăng ký site, tạo Named Tunnel và cài go2rtc, relay, AI thành service.</p>
+                <p id="install-desc">Đăng nhập dashboard → Cấu hình → Cài relay lên VPS → Tạo lệnh cài. Sao chép lệnh và chạy trên máy macOS/Linux cùng mạng với camera.</p>
+                <p><a href="/?tab=settings">Dashboard → Settings</a> · <a href="/docs/agent-guide.txt">CameraAIWork setup guide (VI)</a></p>
+                <p id="install-note" class="text-secondary mt-3 mb-0">Installer hỏi tên site và thông tin camera, rồi cài go2rtc, relay và AI thành service. Nhập mật khẩu camera tại máy site; không gửi vào chat.</p>
               </div>
             </section>
 
@@ -151,7 +144,7 @@ curl -fsS "$CAMERAAI_API/api/cameras" \
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script src="/docs/i18n.js"></script>
+  <script src="/docs/i18n.js?v=20261003-2"></script>
   <script>
     window.addEventListener('DOMContentLoaded', () => SwaggerUIBundle({
       url: '/openapi.yaml',

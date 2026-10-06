@@ -41,7 +41,7 @@ function emptyBucket(siteId, siteName, camera, cameraName) {
 }
 
 export async function storageUsage(env, accountId) {
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "_lib.storageUsage").execute({
     sql: `SELECT events.id, events.site_id, events.camera, events.image_key, events.video_key,
                  events.video_status, events.storage_backend, sites.name AS site_name, cameras.name AS camera_name
           FROM events

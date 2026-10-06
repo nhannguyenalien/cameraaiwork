@@ -39,7 +39,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
   const runpodData = await res.json();
   const jobId = `runpod-${runpodData.id}`;
 
-  const db = getDb(env);
+  const db = getDb(env, "api.jobs.index");
   await db.execute({
     sql: "INSERT INTO jobs (id, account_id, type) VALUES (?, ?, ?)",
     args: [jobId, data.accountId, task || null],

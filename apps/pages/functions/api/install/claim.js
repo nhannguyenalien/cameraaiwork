@@ -13,7 +13,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const stream = String(body?.stream || "cam1").trim();
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(stream)) return errorJson("Tên stream không hợp lệ", 400);
 
-  const db = getDb(env);
+  const db = getDb(env, "api.install.claim");
   const tokenHash = await sha256Hex(token);
   const found = await db.execute({
     sql: "SELECT account_id FROM install_tokens WHERE id = ? AND used_at IS NULL AND expires_at > datetime('now')",
@@ -25,7 +25,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   await assertCapacity(env, accountId, "sites");
   await assertCapacity(env, accountId, "cameras");
   const consumed = await db.execute({
-    sql: "UPDATE install_tokens SET used_at = datetime('now') WHERE id = ? AND used_at IS NULL AND expires_at > datetime('now')",
+    sql: "UPDATE install_tokens SET used_at = datetime('now') WHERE id = ? AND used_at IS NULL AND expires_at > datetime('now') RETURNING id",
     args: [tokenHash],
   });
   if (Number(consumed.rowsAffected || 0) !== 1) return errorJson("Mã cài đặt đã được sử dụng", 409);

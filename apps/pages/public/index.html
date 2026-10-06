@@ -151,7 +151,10 @@
   .ptz-pad { display:grid; grid-template-columns:repeat(3,3.25rem); gap:.4rem; justify-content:center; }
   .ptz-pad .btn { height:3.25rem; }
   .talk-button.is-recording { animation: talk-pulse 1s infinite; }
-  .agent-chat { height:min(62vh, 620px); overflow-y:auto; background:var(--tblr-bg-surface-secondary); }
+  #tab-agent > .card { height:calc(100dvh - var(--agent-top, 180px) - 16px); min-height:400px; overflow:hidden; }
+  #tab-agent > .card > .card-header, #agent-form { flex-shrink:0; }
+  #tab-agent .agent-config { flex:0 0 auto; max-height:40%; overflow:auto; }
+  .agent-chat { flex:1 1 0; min-height:0; overflow-y:auto; background:var(--tblr-bg-surface-secondary); }
   .agent-message { max-width:85%; white-space:pre-wrap; }
   .agent-message.user { margin-left:auto; background:var(--tblr-primary); color:white; }
   .agent-message.assistant { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); }
@@ -162,9 +165,10 @@
   .agent-provider-card .form-label { margin-bottom:.25rem; font-size:.75rem; }
   .agent-provider-card .form-hint { font-size:.7rem; line-height:1.25; }
   .support-launcher { position:fixed; right:1.25rem; bottom:1.25rem; z-index:1050; border-radius:999px; box-shadow:0 .5rem 1.5rem rgba(0,0,0,.22); }
-  .support-panel { position:fixed; right:1.25rem; bottom:5rem; z-index:1050; width:min(380px,calc(100vw - 2rem)); height:min(540px,calc(100vh - 7rem)); display:none; flex-direction:column; box-shadow:0 1rem 3rem rgba(0,0,0,.25); }
+  .support-panel { position:fixed; right:0; top:0; bottom:0; z-index:1050; width:min(480px,100vw); height:100dvh; display:none; flex-direction:column; box-shadow:0 1rem 3rem rgba(0,0,0,.25); }
   .support-panel.open { display:flex; }
-  .support-messages { flex:1; overflow:auto; background:var(--tblr-bg-surface-secondary); }
+  .support-panel > .card-header, .support-panel > .card-footer { flex-shrink:0; }
+  .support-messages { flex:1; min-height:0; overflow:auto; background:var(--tblr-bg-surface-secondary); }
   .support-message { max-width:88%; white-space:pre-wrap; }
   .support-message.user { margin-left:auto; background:var(--tblr-primary); color:#fff; }
   .support-message.assistant { background:var(--tblr-bg-surface); border:1px solid var(--tblr-border-color); }
@@ -437,7 +441,7 @@
                   <div><h3 class="card-title"><i class="ti ti-message-chatbot me-2"></i>Trợ lý CameraAIWork</h3><div class="text-secondary small">Hỏi camera, sự kiện và điều khiển hệ thống.</div></div>
                   <select id="agent-provider" class="form-select form-select-sm" style="width:auto"><option value="auto">Tự chọn AI (SchoolsAI ưu tiên)</option><option value="schoolsai">SchoolsAI</option><option value="openai">OpenAI</option><option value="gemini">Gemini</option></select>
                 </div>
-                <div class="card-body border-bottom bg-light-subtle">
+                <details class="agent-config border-bottom bg-light-subtle"><summary class="p-3">OpenAI / Gemini · API key</summary><div class="card-body">
                   <div id="agent-config-message" class="alert d-none" role="alert"></div>
                   <div class="row g-2">
                     <div class="col-lg-6">
@@ -459,6 +463,7 @@
                   </div>
                   <div class="form-hint mt-2"><i class="ti ti-lock me-1"></i>Key được mã hóa và không hiển thị lại. Ảnh: OpenAI/Gemini · video ≤15MB: Gemini.</div>
                 </div>
+                </details>
                 <div id="agent-chat" class="agent-chat card-body"><div class="agent-message assistant rounded p-3">Xin chào! Bạn có thể nói: “Hôm nay ai đến?”, “Liệt kê camera offline”, hoặc “Quét camera ở Nhà chính”.</div></div>
                 <form id="agent-form" class="card-footer d-flex gap-2">
                   <input id="agent-input" class="form-control" maxlength="4000" autocomplete="off" placeholder="Nhập yêu cầu cho AI Agent…" required />
@@ -751,7 +756,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/js/tabler.min.js" integrity="sha384-fSOug2E78eoy8fAFcDbY60mgZb6eboMDErIUzTF1UWHQCmmN7LcTyt+uzxH8upW+" crossorigin="anonymous"></script>
 <script src="/dashboard-i18n.js?v=20260910-6"></script>
-<script src="/ui-i18n-fallback.js?v=20260910-6"></script>
+<script src="/ui-i18n-fallback.js?v=20261003-3"></script>
 <script>
   function resourceText(key) {
     const language = document.documentElement.lang || 'vi';
@@ -1302,6 +1307,12 @@
   // --- People grid ---
   let peopleRenderSignature = '';
   let peopleItems = [];
+  let peopleFilteredCount = 0;
+  let peopleRequest = 0;
+  let eventsRequest = 0;
+  let eventsCache = new Map();
+  let eventsCacheKey = '';
+  let dashboardPolling = false;
   let peopleSource = 'local';
   let peopleFilter = 'all';
   let peoplePage = 1;
@@ -1315,30 +1326,34 @@
   }
 
   async function loadPeople() {
-    const people = await api(`/api/people?source=${peopleSource}`);
-    document.getElementById('people-empty').classList.toggle('d-none', people.length > 0);
-    const signature = JSON.stringify([document.documentElement.lang, peopleSource, people]);
+    const requestId = ++peopleRequest;
+    const accountKey = getApiKey();
+    const params = new URLSearchParams({ source: peopleSource, page: peoplePage, limit: PEOPLE_PAGE_SIZE,
+      filter: peopleFilter, search: document.getElementById('people-search').value.trim() });
+    const response = await fetch(`/api/people?${params}`, { headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store' });
+    if (response.status === 401) { clearApiKey(); render(); throw new Error('Unauthorized'); }
+    const people = await response.json();
+    if (!response.ok) throw new Error(people.error || `HTTP ${response.status}`);
+    if (requestId !== peopleRequest || accountKey !== getApiKey()) return;
+    const total = Number(response.headers.get('X-Total-Count'));
+    peopleFilteredCount = Number(response.headers.get('X-Filtered-Count'));
+    const pageCount = Math.max(1, Math.ceil(peopleFilteredCount / PEOPLE_PAGE_SIZE));
+    if (peoplePage > pageCount) { peoplePage = pageCount; return loadPeople(); }
+    document.getElementById('people-empty').classList.toggle('d-none', total > 0);
+    document.getElementById('people-total').textContent = total;
+    document.getElementById('people-unnamed').textContent = response.headers.get('X-Unnamed-Count');
+    const signature = JSON.stringify([document.documentElement.lang, params.toString(), total, peopleFilteredCount, people]);
     if (signature === peopleRenderSignature) return;
     peopleRenderSignature = signature;
     peopleItems = people;
-    document.getElementById('people-total').textContent = people.length;
-    document.getElementById('people-unnamed').textContent = people.filter((person) => !person.label?.trim()).length;
     await renderPeople();
   }
 
   async function renderPeople() {
     const grid = document.getElementById('people-grid');
-    const query = document.getElementById('people-search').value.trim().toLocaleLowerCase();
-    const filtered = peopleItems.filter((person) => {
-      const hasName = Boolean(person.label?.trim());
-      if (peopleFilter === 'named' && !hasName) return false;
-      if (peopleFilter === 'unnamed' && hasName) return false;
-      return !query || (person.label || '').toLocaleLowerCase().includes(query);
-    });
-    const pageCount = Math.max(1, Math.ceil(filtered.length / PEOPLE_PAGE_SIZE));
-    peoplePage = Math.min(peoplePage, pageCount);
+    const pageCount = Math.max(1, Math.ceil(peopleFilteredCount / PEOPLE_PAGE_SIZE));
     const start = (peoplePage - 1) * PEOPLE_PAGE_SIZE;
-    const visiblePeople = filtered.slice(start, start + PEOPLE_PAGE_SIZE);
+    const visiblePeople = peopleItems;
     const markup = visiblePeople
       .map(
         (p) => `
@@ -1370,10 +1385,10 @@
       .join('');
     revokeBlobImages(grid);
     grid.innerHTML = markup;
-    document.getElementById('people-filter-empty').classList.toggle('d-none', filtered.length > 0 || peopleItems.length === 0);
+    document.getElementById('people-filter-empty').classList.toggle('d-none', peopleFilteredCount > 0);
     const pagination = document.getElementById('people-pagination');
-    pagination.classList.toggle('d-none', filtered.length <= PEOPLE_PAGE_SIZE);
-    document.getElementById('people-page-info').textContent = filtered.length ? `Hiển thị ${start + 1}–${Math.min(start + PEOPLE_PAGE_SIZE, filtered.length)} / ${filtered.length} nhóm` : '';
+    pagination.classList.toggle('d-none', peopleFilteredCount <= PEOPLE_PAGE_SIZE);
+    document.getElementById('people-page-info').textContent = peopleFilteredCount ? `Hiển thị ${start + 1}–${Math.min(start + PEOPLE_PAGE_SIZE, peopleFilteredCount)} / ${peopleFilteredCount} nhóm` : '';
     document.getElementById('people-prev').disabled = peoplePage <= 1;
     document.getElementById('people-next').disabled = peoplePage >= pageCount;
     await Promise.all([...grid.querySelectorAll('[data-person-image]')].map(async (image) => {
@@ -1424,17 +1439,18 @@
       : 'Kết quả nhận diện trên máy local.';
     loadPeople().catch((error) => showToast(error.message, 'danger'));
   });
-  document.getElementById('people-search').addEventListener('input', () => { peoplePage = 1; renderPeople(); });
+  let peopleSearchTimer;
+  document.getElementById('people-search').addEventListener('input', () => { peoplePage = 1; ++peopleRequest; clearTimeout(peopleSearchTimer); peopleSearchTimer = setTimeout(() => loadPeople().catch(() => {}), 350); });
   document.getElementById('people-filter').addEventListener('click', (event) => {
     const button = event.target.closest('[data-people-filter]');
     if (!button) return;
     peopleFilter = button.dataset.peopleFilter;
     peoplePage = 1;
     document.querySelectorAll('[data-people-filter]').forEach((item) => item.classList.toggle('active', item === button));
-    renderPeople();
+    loadPeople().catch(() => {});
   });
-  document.getElementById('people-prev').addEventListener('click', () => { if (peoplePage > 1) { peoplePage -= 1; renderPeople(); } });
-  document.getElementById('people-next').addEventListener('click', () => { peoplePage += 1; renderPeople(); });
+  document.getElementById('people-prev').addEventListener('click', () => { if (peoplePage > 1) { peoplePage -= 1; loadPeople().catch(() => {}); } });
+  document.getElementById('people-next').addEventListener('click', () => { peoplePage += 1; loadPeople().catch(() => {}); });
 
   async function loadProtectedImage(image, url) {
     const response = await fetch(url, { headers: { Authorization: `Bearer ${getApiKey()}` }, cache: 'no-store' });
@@ -1540,16 +1556,24 @@
   }
 
   async function loadEvents() {
-    const response = await fetch(`/api/events?limit=${EVENTS_PAGE_SIZE}&page=${eventsPage}`, {
+    const requestId = ++eventsRequest;
+    const cacheKey = `${getApiKey()}:${eventsPage}`;
+    if (cacheKey !== eventsCacheKey) { eventsCache = new Map(); eventsCacheKey = cacheKey; }
+    const known = Object.fromEntries([...eventsCache].map(([id, row]) => [id, row._version]));
+    const params = new URLSearchParams({ limit: EVENTS_PAGE_SIZE, page: eventsPage, delta: '1', known: JSON.stringify(known) });
+    const response = await fetch(`/api/events?${params}`, {
       credentials: 'same-origin',
       headers: { Authorization: `Bearer ${getApiKey()}` },
     });
     if (response.status === 401) { clearApiKey(); render(); throw new Error('Unauthorized'); }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-    const events = Array.isArray(payload) ? payload : [];
-    const total = Number(response.headers.get('X-Total-Count') || events.length);
-    const totalPages = Math.max(1, Number(response.headers.get('X-Total-Pages') || 1));
+    if (requestId !== eventsRequest || cacheKey !== `${getApiKey()}:${eventsPage}`) return;
+    for (const row of payload.rows) eventsCache.set(String(row.id), row);
+    const events = payload.manifest.map(item => eventsCache.get(String(item.id))).filter(Boolean);
+    eventsCache = new Map(events.map(row => [String(row.id), row]));
+    const total = Number(payload.total);
+    const totalPages = Math.max(1, Math.ceil(total / EVENTS_PAGE_SIZE));
     if (eventsPage > totalPages) { eventsPage = totalPages; return loadEvents(); }
     const pagination = document.getElementById('events-pagination');
     pagination.classList.toggle('d-none', total <= EVENTS_PAGE_SIZE);
@@ -2045,6 +2069,45 @@
     document.getElementById('discovered-cameras').classList.add('d-none');
   });
 
+  function enlargeAgentMedia(source, kind) {
+    const modalElement = document.createElement('div');
+    modalElement.className = 'modal fade';
+    modalElement.tabIndex = -1;
+    modalElement.setAttribute('aria-label', kind === 'video' ? 'Xem video phóng to' : 'Xem ảnh phóng to');
+    modalElement.innerHTML = `<div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-sm-down"><div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">${kind === 'video' ? 'Video camera' : 'Ảnh camera'}</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button></div>
+      <div class="modal-body p-2 text-center"></div></div></div>`;
+    const enlarged = document.createElement(kind === 'video' ? 'video' : 'img');
+    enlarged.style.cssText = 'display:block;width:100%;max-height:80vh;object-fit:contain;background:#111';
+    if (kind === 'video') {
+      const position = source.currentTime;
+      source.pause();
+      enlarged.controls = true;
+      enlarged.playsInline = true;
+      enlarged.addEventListener('loadedmetadata', () => {
+        if (Number.isFinite(position)) enlarged.currentTime = position;
+      }, { once: true });
+    } else enlarged.alt = source.alt;
+    enlarged.src = source.src;
+    modalElement.querySelector('.modal-body').appendChild(enlarged);
+    document.body.appendChild(modalElement);
+    const modal = new bootstrap.Modal(modalElement);
+    modalElement.addEventListener('hide.bs.modal', () => {
+      if (kind === 'video') {
+        enlarged.pause();
+        if (source.readyState >= 1 && Number.isFinite(enlarged.currentTime)) source.currentTime = enlarged.currentTime;
+      }
+    });
+    modalElement.addEventListener('hidden.bs.modal', () => {
+      enlarged.removeAttribute('src');
+      if (kind === 'video') enlarged.load();
+      modal.dispose();
+      modalElement.remove();
+      source.parentElement?.querySelector('button')?.focus();
+    }, { once: true });
+    modal.show();
+  }
+
   async function appendAgentMedia(wrapper, toolResults = [], attachments = []) {
     const inspected = toolResults
       .filter(item => item.action === 'inspect_event_media' && item.result?.mediaAttached && item.result?.source?.eventId)
@@ -2067,7 +2130,18 @@
       element.alt = kind === 'video' ? 'Video event camera' : 'Ảnh event camera';
       if (kind === 'video') { element.controls = true; element.preload = 'metadata'; }
       else element.loading = 'lazy';
-      grid.appendChild(element);
+      const card = document.createElement('div');
+      const enlargeButton = document.createElement('button');
+      enlargeButton.type = 'button';
+      enlargeButton.className = 'btn btn-outline-primary btn-sm w-100 mt-2';
+      enlargeButton.textContent = kind === 'video' ? 'Phóng to video' : 'Phóng to ảnh';
+      enlargeButton.addEventListener('click', () => enlargeAgentMedia(element, kind));
+      if (kind === 'image') {
+        element.style.cursor = 'zoom-in';
+        element.addEventListener('click', () => enlargeButton.click());
+      } else element.playsInline = true;
+      card.append(element, enlargeButton);
+      grid.appendChild(card);
       document.getElementById('agent-chat').scrollTop = document.getElementById('agent-chat').scrollHeight;
     }));
   }
@@ -2150,6 +2224,7 @@
       const result = await api('/api/agent/chat', { method: 'POST', body: JSON.stringify({
         messages: agentMessages.slice(-20),
         provider: document.getElementById('agent-provider').value,
+        language: window.dashboardLanguage?.() || document.documentElement.lang || 'vi',
         timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
         conversationContext: agentConversationContext,
         requestId,
@@ -2485,6 +2560,13 @@
     render();
   });
 
+  function resizeAgentChat() {
+    const card = document.querySelector('#tab-agent > .card');
+    if (card?.getClientRects().length) card.style.setProperty('--agent-top', `${Math.max(0, card.getBoundingClientRect().top)}px`);
+  }
+  window.addEventListener('resize', resizeAgentChat);
+  document.addEventListener('shown.bs.tab', resizeAgentChat);
+  requestAnimationFrame(resizeAgentChat);
   const supportPanel = document.getElementById('support-panel');
   const supportLauncher = document.getElementById('support-launcher');
   const supportInput = document.getElementById('support-input');
@@ -2516,7 +2598,7 @@
     try {
       let session = localStorage.getItem('cameraai_support_session');
       if (!session) { session = crypto.randomUUID(); localStorage.setItem('cameraai_support_session', session); }
-      const response = await fetch('/api/support/chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session, question }) });
+      const response = await fetch('/api/support/chat', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session, question, language: document.documentElement.lang || "vi" }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
       pending.textContent = result.answer;
@@ -2526,13 +2608,16 @@
 
   render();
 
-  setInterval(() => {
-    if (!getApiKey() || document.hidden) return;
-    const activeTab = document.querySelector('[data-bs-toggle="tab"].active')?.getAttribute('href');
-    if (activeTab === '#tab-events') loadEvents().catch(() => {});
-    if (activeTab === '#tab-people') loadPeople().catch(() => {});
-    if (activeTab === '#tab-agent') loadAgentMessages().catch(() => {});
-  }, 5000);
+  setInterval(async () => {
+    if (!getApiKey() || document.hidden || dashboardPolling) return;
+    const activeTab = document.querySelector('.nav-link.active[data-bs-toggle="tab"]')?.getAttribute('href');
+    dashboardPolling = true;
+    try {
+      if (activeTab === '#tab-events') await loadEvents();
+      if (activeTab === '#tab-people') await loadPeople();
+      if (activeTab === '#tab-agent') await loadAgentMessages();
+    } catch {} finally { dashboardPolling = false; }
+  }, 30000);
 </script>
 </body>
 </html>

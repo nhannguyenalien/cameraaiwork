@@ -101,11 +101,19 @@ class EventRepository {
   }
 
   Future<List<EventPerson>> people() async {
-    final response = await client.request<List<dynamic>>('/api/people');
-    return response.data!
-        .whereType<Map>()
-        .map((row) => EventPerson.fromJson(row.cast<String, dynamic>()))
-        .toList(growable: false);
+    final items = <EventPerson>[];
+    for (var page = 1; ; page++) {
+      final response = await client.request<List<dynamic>>(
+        '/api/people', queryParameters: {'page': page, 'limit': 100},
+      );
+      final rows = response.data!;
+      items.addAll(rows.whereType<Map>().map(
+        (row) => EventPerson.fromJson(row.cast<String, dynamic>()),
+      ));
+      final total = int.tryParse(response.headers.value('x-filtered-count') ?? '');
+      if (rows.length < 100 || (total != null && items.length >= total)) break;
+    }
+    return items;
   }
 
   Future<Uint8List> image(int id) async {

@@ -3,7 +3,7 @@ import { consolidateSiteTunnel } from "../../../../_lib/cloudflareTunnel.js";
 import { json, errorJson, withErrorHandling } from "../../../../_lib/http.js";
 
 export const onRequestPost = withErrorHandling(async ({ env, data, params }) => {
-  const db = getDb(env);
+  const db = getDb(env, "api.sites.[id].tunnel.upgrade");
   const found = await db.execute({
     sql: "SELECT id, cloudflare_tunnel_id FROM sites WHERE id = ? AND account_id = ?",
     args: [params.id, data.accountId],

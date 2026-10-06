@@ -10,7 +10,7 @@ export function limitsFor(plan) {
 }
 
 export async function accountUsage(env, accountId) {
-  const db = getDb(env);
+  const db = getDb(env, "_lib.plans");
   const [accountResult, siteResult, cameraResult] = await Promise.all([
     db.execute({ sql: "SELECT plan, subscription_status, video_retention_days, clip_duration_seconds FROM accounts WHERE id = ?", args: [accountId] }),
     db.execute({ sql: "SELECT COUNT(*) AS count FROM sites WHERE account_id = ?", args: [accountId] }),
@@ -41,7 +41,7 @@ export function effectivePlanForAccountRow(account = {}) {
 }
 
 export async function effectivePlanForAccount(env, accountId) {
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "_lib.plans").execute({
     sql: "SELECT plan, subscription_status FROM accounts WHERE id = ?",
     args: [accountId],
   });
@@ -49,7 +49,7 @@ export async function effectivePlanForAccount(env, accountId) {
 }
 
 export async function effectiveVideoSettingsForAccount(env, accountId) {
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "_lib.plans").execute({
     sql: "SELECT plan, subscription_status, clip_duration_seconds FROM accounts WHERE id = ?",
     args: [accountId],
   });

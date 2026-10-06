@@ -3,7 +3,7 @@ import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 import { getIntegration } from "../../_lib/integrations.js";
 
 export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
-  const db = getDb(env);
+  const db = getDb(env, "api.jobs.[id]");
   const result = await db.execute({
     sql: "SELECT * FROM jobs WHERE id = ? AND account_id = ?",
     args: [params.id, data.accountId],

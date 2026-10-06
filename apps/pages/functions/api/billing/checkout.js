@@ -4,7 +4,7 @@ import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 
 export const onRequestPost = withErrorHandling(async ({ request, env, data }) => {
   if (!env.STRIPE_PRICE_ID) return errorJson("Stripe price chưa được cấu hình", 503);
-  const account = (await getDb(env).execute({ sql: "SELECT * FROM accounts WHERE id = ?", args: [data.accountId] })).rows[0];
+  const account = (await getDb(env, "api.billing.checkout").execute({ sql: "SELECT * FROM accounts WHERE id = ?", args: [data.accountId] })).rows[0];
   const origin = new URL(request.url).origin;
   const session = await stripeRequest(env, "checkout/sessions", {
     mode: "subscription",

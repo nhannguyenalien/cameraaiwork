@@ -3,7 +3,7 @@ import { errorJson, withErrorHandling } from "../../../_lib/http.js";
 import { getObject } from "../../../_lib/objectStorage.js";
 
 export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
-  const db = getDb(env);
+  const db = getDb(env, "api.events.[id].image");
   const result = await db.execute({
     sql: "SELECT image_key, storage_backend FROM events WHERE id = ? AND account_id = ?",
     args: [params.id, data.accountId],

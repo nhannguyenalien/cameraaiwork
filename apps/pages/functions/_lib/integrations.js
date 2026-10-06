@@ -33,7 +33,7 @@ export async function decryptConfig(env, value) {
 }
 
 export async function setIntegration(env, accountId, provider, config) {
-  const db = getDb(env);
+  const db = getDb(env, "_lib.integrations");
   await db.execute({
     sql: `INSERT INTO account_integrations (account_id, provider, encrypted_config, updated_at)
           VALUES (?, ?, ?, datetime('now'))
@@ -43,7 +43,7 @@ export async function setIntegration(env, accountId, provider, config) {
 }
 
 export async function getIntegration(env, accountId, provider) {
-  const db = getDb(env);
+  const db = getDb(env, "_lib.integrations");
   const result = await db.execute({
     sql: "SELECT encrypted_config FROM account_integrations WHERE account_id = ? AND provider = ?",
     args: [accountId, provider],
@@ -66,7 +66,7 @@ export async function loadAiCredentials(env, accountId) {
 }
 
 export async function integrationStatus(env, accountId) {
-  const db = getDb(env);
+  const db = getDb(env, "_lib.integrations");
   const result = await db.execute({
     sql: "SELECT provider, encrypted_config, updated_at FROM account_integrations WHERE account_id = ?",
     args: [accountId],

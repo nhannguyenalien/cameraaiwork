@@ -27,12 +27,12 @@ export const onRequestPut = withErrorHandling(async ({ request, env, data }) => 
   if (body.clipDurationSeconds !== undefined) {
     const duration = Number(body.clipDurationSeconds);
     if (!summary.limits.clipDurations.includes(duration)) return errorJson("Thời lượng clip này chỉ dành cho gói Pro", 402);
-    const db = getDb(env);
+    const db = getDb(env, "api.settings.video");
     const current = await db.execute({ sql: "SELECT clip_duration_seconds FROM accounts WHERE id = ?", args: [data.accountId] });
     updates.push({ sql: "UPDATE accounts SET clip_duration_seconds = ? WHERE id = ?", args: [duration, data.accountId] });
     if (current.rows[0]?.clip_duration_seconds == null) updates.push({ sql: "UPDATE cameras SET clip_duration_seconds = NULL WHERE account_id = ?", args: [data.accountId] });
   }
-  await getDb(env).batch(updates);
+  await getDb(env, "api.settings.video").batch(updates);
   const saved = await accountUsage(env, data.accountId);
   return json({ ok: true, videoRetentionDays: saved.videoRetentionDays, clipDurationSeconds: saved.clipDurationSeconds });
 });

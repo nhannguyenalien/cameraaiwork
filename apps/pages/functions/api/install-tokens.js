@@ -5,7 +5,7 @@ import { randomSecret, sha256Hex } from "../_lib/ids.js";
 export const onRequestPost = withErrorHandling(async ({ env, data }) => {
   const token = `install-${randomSecret()}`;
   const tokenHash = await sha256Hex(token);
-  const db = getDb(env);
+  const db = getDb(env, "api.install-tokens");
   await db.execute({
     sql: "DELETE FROM install_tokens WHERE account_id = ? AND (used_at IS NOT NULL OR expires_at <= datetime('now'))",
     args: [data.accountId],

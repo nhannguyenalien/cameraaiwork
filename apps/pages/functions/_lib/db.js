@@ -1,3 +1,4 @@
+import { measureDb } from "./dbMetrics.js";
 import { neon } from "@neondatabase/serverless";
 
 function postgresSql(sql) {
@@ -15,29 +16,27 @@ function normalize(statement) {
   return { sql: postgresSql(statement.sql), args: statement.args || [] };
 }
 
-function resultShape(result) {
-  return {
-    rows: result.rows || [],
-    rowsAffected: result.rowCount || 0,
-    lastInsertRowid: result.rows?.[0]?.id,
-  };
+// Neon's default (non-fullResults) mode returns a bare row array, which skips
+// the per-query field metadata and keeps the HTTP payload smaller.
+function resultShape(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  return { rows: list, rowsAffected: list.length, lastInsertRowid: list[0]?.id };
 }
 
-export function getDb(env) {
+export function getDb(env, flow = "other") {
   if (!env.DATABASE_URL) throw new Error("Thiếu DATABASE_URL cho Neon PostgreSQL");
-  const sql = neon(env.DATABASE_URL, { fullResults: true });
+  const sql = neon(env.DATABASE_URL);
 
   return {
     async execute(statement) {
       const query = normalize(statement);
-      return resultShape(await sql.query(query.sql, query.args));
+      return resultShape(await measureDb(env, flow, query.sql, () => sql.query(query.sql, query.args)));
     },
     async batch(statements) {
       const queries = statements.map(normalize);
-      const results = await sql.transaction(
+      const results = await measureDb(env, flow, queries.map(q => q.sql).join(";"), () => sql.transaction(
         (tx) => queries.map((query) => tx.query(query.sql, query.args)),
-        { fullResults: true },
-      );
+      ));
       return results.map(resultShape);
     },
   };

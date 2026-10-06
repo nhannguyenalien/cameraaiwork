@@ -68,7 +68,7 @@ async function summarizeEvents(env, accountId, args) {
   const values = [accountId, args.from, args.to];
   if (args.siteId) { conditions.push("e.site_id = ?"); values.push(args.siteId); }
   if (args.camera) { conditions.push("e.camera = ?"); values.push(args.camera); }
-  const result = await getDb(env).execute({
+  const result = await getDb(env, "api.agent.actions").execute({
     sql: `WITH filtered_events AS (
             SELECT e.* FROM events e WHERE ${conditions.join(" AND ")}
           ), event_counts AS (

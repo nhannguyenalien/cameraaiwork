@@ -133,6 +133,57 @@
   const attrs = ['placeholder', 'aria-label', 'alt', 'title'];
   const originalText = new WeakMap();
   const originalAttrs = new WeakMap();
+  // Agent copy must cover every language offered by the dashboard.
+  Object.assign(localizedCopy.ja, {
+  "Trợ lý CameraAIWork": "CameraAIWork アシスタント",
+  "Hỏi camera, sự kiện và điều khiển hệ thống.": "カメラ、イベント、システム操作について質問できます。",
+  "Tự chọn AI (SchoolsAI ưu tiên)": "AI自動選択（SchoolsAI優先）",
+  "Chưa có key": "キー未登録",
+  "Nhập key để tự tải model.": "キーを入力するとモデルを自動取得します。",
+  "Lưu / đổi key": "キーを保存 / 変更",
+  "Xóa": "削除",
+  "Key được mã hóa và không hiển thị lại. Ảnh: OpenAI/Gemini · video ≤15MB: Gemini.": "キーは暗号化され、再表示されません。画像：OpenAI/Gemini・15MB以下の動画：Gemini。",
+  "Xin chào! Bạn có thể nói: “Hôm nay ai đến?”, “Liệt kê camera offline”, hoặc “Quét camera ở Nhà chính”.": "こんにちは！「今日誰が来た？」「オフラインのカメラを一覧表示」「自宅のカメラを検索」などと質問できます。",
+  "Nhập yêu cầu cho AI Agent…": "AIエージェントへのリクエストを入力…",
+  "Gửi": "送信"
+});
+  Object.assign(localizedCopy.fr, {
+  "Trợ lý CameraAIWork": "Assistant CameraAIWork",
+  "Hỏi camera, sự kiện và điều khiển hệ thống.": "Posez des questions sur les caméras, les événements et les commandes du système.",
+  "Tự chọn AI (SchoolsAI ưu tiên)": "Sélection automatique (SchoolsAI prioritaire)",
+  "Chưa có key": "Aucune clé enregistrée",
+  "Nhập key để tự tải model.": "Saisissez une clé pour charger les modèles automatiquement.",
+  "Lưu / đổi key": "Enregistrer / remplacer la clé",
+  "Xóa": "Supprimer",
+  "Key được mã hóa và không hiển thị lại. Ảnh: OpenAI/Gemini · video ≤15MB: Gemini.": "Les clés sont chiffrées et ne sont jamais réaffichées. Images : OpenAI/Gemini · vidéos ≤15 Mo : Gemini.",
+  "Xin chào! Bạn có thể nói: “Hôm nay ai đến?”, “Liệt kê camera offline”, hoặc “Quét camera ở Nhà chính”.": "Bonjour ! Essayez « Qui est venu aujourd’hui ? », « Lister les caméras hors ligne » ou « Rechercher les caméras à la maison principale ».",
+  "Nhập yêu cầu cho AI Agent…": "Saisissez une demande pour l’agent IA…",
+  "Gửi": "Envoyer"
+});
+  Object.assign(localizedCopy.es, {
+  "Trợ lý CameraAIWork": "Asistente CameraAIWork",
+  "Hỏi camera, sự kiện và điều khiển hệ thống.": "Consulta cámaras, eventos y controles del sistema.",
+  "Tự chọn AI (SchoolsAI ưu tiên)": "Selección automática (prioridad a SchoolsAI)",
+  "Chưa có key": "No hay clave guardada",
+  "Nhập key để tự tải model.": "Introduce una clave para cargar los modelos automáticamente.",
+  "Lưu / đổi key": "Guardar / cambiar clave",
+  "Xóa": "Eliminar",
+  "Key được mã hóa và không hiển thị lại. Ảnh: OpenAI/Gemini · video ≤15MB: Gemini.": "Las claves se cifran y no vuelven a mostrarse. Imágenes: OpenAI/Gemini · vídeos ≤15 MB: Gemini.",
+  "Xin chào! Bạn có thể nói: “Hôm nay ai đến?”, “Liệt kê camera offline”, hoặc “Quét camera ở Nhà chính”.": "¡Hola! Prueba «¿Quién vino hoy?», «Mostrar cámaras sin conexión» o «Buscar cámaras en Casa principal».",
+  "Nhập yêu cầu cho AI Agent…": "Escribe una solicitud para el agente de IA…",
+  "Gửi": "Enviar"
+});
+  copy.set('Tự chọn AI (SchoolsAI ưu tiên)', 'Auto-select AI (SchoolsAI preferred)');
+  localizedCopy.ko['Tự chọn AI (SchoolsAI ưu tiên)'] = 'AI 자동 선택 (SchoolsAI 우선)';
+
+  // Support widget copy follows the dashboard locale, including pending/error states.
+  for (const [source, target] of Object.entries({"Tư vấn": "Support", "Tư vấn CameraAIWork": "CameraAIWork Support", "Trợ lý tư vấn CameraAIWork": "CameraAIWork support assistant", "Đóng": "Close", "Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.": "Hello! I can help you with CameraAIWork features, pricing, and setup.", "Nhập câu hỏi...": "Enter your question...", "Câu hỏi tư vấn": "Support question", "Gửi": "Send", "Đang trả lời…": "Replying…"})) copy.set(source, target);
+  Object.assign(localizedCopy.ja, {"Tư vấn": "サポート", "Tư vấn CameraAIWork": "CameraAIWork サポート", "Trợ lý tư vấn CameraAIWork": "CameraAIWork サポートアシスタント", "Đóng": "閉じる", "Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.": "こんにちは！CameraAIWorkの機能、料金、設定方法についてご案内します。", "Nhập câu hỏi...": "質問を入力...", "Câu hỏi tư vấn": "サポートへの質問", "Gửi": "送信", "Đang trả lời…": "回答中…"});
+  Object.assign(localizedCopy.fr, {"Tư vấn": "Assistance", "Tư vấn CameraAIWork": "Assistance CameraAIWork", "Trợ lý tư vấn CameraAIWork": "Assistant CameraAIWork", "Đóng": "Fermer", "Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.": "Bonjour ! Je peux vous aider avec les fonctionnalités, les tarifs et la configuration de CameraAIWork.", "Nhập câu hỏi...": "Saisissez votre question...", "Câu hỏi tư vấn": "Question à l’assistance", "Gửi": "Envoyer", "Đang trả lời…": "Réponse en cours…"});
+  Object.assign(localizedCopy.ko, {"Tư vấn": "상담", "Tư vấn CameraAIWork": "CameraAIWork 상담", "Trợ lý tư vấn CameraAIWork": "CameraAIWork 상담 도우미", "Đóng": "닫기", "Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.": "안녕하세요! CameraAIWork의 기능, 요금 및 설정 방법을 안내해 드립니다.", "Nhập câu hỏi...": "질문을 입력하세요...", "Câu hỏi tư vấn": "상담 질문", "Gửi": "보내기", "Đang trả lời…": "답변 중…"});
+  Object.assign(localizedCopy.es, {"Tư vấn": "Ayuda", "Tư vấn CameraAIWork": "Ayuda de CameraAIWork", "Trợ lý tư vấn CameraAIWork": "Asistente de CameraAIWork", "Đóng": "Cerrar", "Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.": "¡Hola! Puedo ayudarte con las funciones, los precios y la configuración de CameraAIWork.", "Nhập câu hỏi...": "Escribe tu pregunta...", "Câu hỏi tư vấn": "Pregunta de soporte", "Gửi": "Enviar", "Đang trả lời…": "Respondiendo…"});
+  const supportErrors = {"en": "Sorry, I cannot reply right now: ", "ja": "申し訳ありません。現在回答できません：", "fr": "Désolé, je ne peux pas répondre pour le moment : ", "ko": "죄송합니다. 지금은 답변할 수 없습니다: ", "es": "Lo siento, no puedo responder ahora: "};
+
   const storageKey = 'cameraaiwork_docs_language';
   const supported = new Set(['vi', 'en', 'ja', 'fr', 'ko', 'es']);
   const requested = new URLSearchParams(location.search).get('lang');
@@ -146,6 +197,7 @@
   function translate(value) {
     const trimmed = value.trim();
     const locale = currentLocale();
+    if (trimmed.startsWith('Xin lỗi, hiện chưa thể trả lời: ')) return value.replace('Xin lỗi, hiện chưa thể trả lời: ', supportErrors[locale] || 'Xin lỗi, hiện chưa thể trả lời: ');
     let translated = localizedCopy[locale]?.[trimmed] || copy.get(trimmed);
     if (!translated && trimmed.startsWith('Nhận diện khuôn mặt') && trimmed.includes('Bảo mật riêng tư')) translated = 'Face recognition  ✦  Motion detection  ✦  Instant alerts  ✦  AI Agent  ✦  Live view anywhere  ✦  Privacy-first security  ✦';
     if (!translated) for (const [pattern, replacement] of localizedDynamic[locale] || []) if (pattern.test(trimmed)) { translated = trimmed.replace(pattern, replacement); break; }

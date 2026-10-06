@@ -18,7 +18,7 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
   } catch (error) {
     return errorJson(error.message, 400);
   }
-  await getDb(env).execute({
+  await getDb(env, "api.sites.[id]").execute({
     sql: "UPDATE sites SET name = ? WHERE id = ? AND account_id = ?",
     args: [name, params.id, data.accountId],
   });
@@ -33,7 +33,7 @@ export const onRequestDelete = withErrorHandling(async ({ params, env, data }) =
     await deleteSiteTunnel(env, params.id, site.cloudflare_tunnel_id);
   }
 
-  const db = getDb(env);
+  const db = getDb(env, "api.sites.[id]");
   await db.execute({ sql: "DELETE FROM events WHERE site_id = ?", args: [params.id] });
   await db.execute({ sql: "DELETE FROM cameras WHERE site_id = ?", args: [params.id] });
   await db.execute({ sql: "DELETE FROM sites WHERE id = ?", args: [params.id] });

@@ -15,57 +15,21 @@ export const SIMILARITY_THRESHOLD = 0.30;
 import { getDb } from "./db.js";
 import { randomId } from "./ids.js";
 
-function cosineSimilarity(a, b) {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom > 0 ? dot / denom : 0;
+export function validEmbedding(embedding) {
+  return Array.isArray(embedding) && embedding.length > 0 && embedding.length <= 16000
+    && embedding.every(Number.isFinite) && embedding.some(value => value !== 0);
 }
 
-// Returns the matched/created person's id, or null if no embedding was
-// given (AI worker not deployed, or no face found in the frame).
-export async function findOrCreatePerson(env, accountId, embedding, source = "local") {
-  if (!Array.isArray(embedding) || embedding.length === 0 || embedding.some((value) => !Number.isFinite(value))) return null;
-
-  const table = source === "gpu" ? "gpu_people" : "people";
-
-  const db = getDb(env);
-  const existing = await db.execute({
-    sql: `SELECT id, embedding FROM ${table} WHERE account_id = ?`,
-    args: [accountId],
+// Matching and insertion are one database transaction, serialized per account/model.
+// No embedding rows leave PostgreSQL. GPU and local models remain separate.
+export async function findOrCreatePerson(env, accountId, embedding, source = "local", threshold = SIMILARITY_THRESHOLD, increment = true) {
+  if (!validEmbedding(embedding)) return null;
+  if (!["local", "gpu"].includes(source)) throw new Error("Invalid face source");
+  if (!Number.isFinite(threshold) || threshold < -1 || threshold > 1) throw new Error("Invalid face threshold");
+  const db = getDb(env, `face.${source}`);
+  const result = await db.execute({
+    sql: "SELECT id, score FROM camera_match_person(?, ?, ?, ?, ?, ?)",
+    args: [accountId, JSON.stringify(embedding), source, threshold, randomId("person"), increment],
   });
-
-  let best = null;
-  let bestScore = -1;
-  for (const row of existing.rows) {
-    let stored;
-    try { stored = JSON.parse(row.embedding); } catch { continue; }
-    if (!Array.isArray(stored) || stored.length !== embedding.length) continue;
-    const score = cosineSimilarity(embedding, stored);
-    if (score > bestScore) {
-      bestScore = score;
-      best = row;
-    }
-  }
-
-  if (best && bestScore >= SIMILARITY_THRESHOLD) {
-    await db.execute({
-      sql: `UPDATE ${table} SET last_seen_at = datetime('now','localtime'), seen_count = seen_count + 1 WHERE id = ?`,
-      args: [best.id],
-    });
-    return best.id;
-  }
-
-  const personId = randomId("person");
-  await db.execute({
-    sql: `INSERT INTO ${table} (id, account_id, embedding) VALUES (?, ?, ?)`,
-    args: [personId, accountId, JSON.stringify(embedding)],
-  });
-  return personId;
+  return result.rows[0]?.id || null;
 }

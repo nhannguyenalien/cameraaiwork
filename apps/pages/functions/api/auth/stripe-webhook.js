@@ -10,7 +10,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env }) => {
   const event = JSON.parse(payload);
   const update = subscriptionUpdateForEvent(event);
   if (update) {
-    await getDb(env).execute({
+    await getDb(env, "api.auth.stripe-webhook").execute({
       sql: "UPDATE accounts SET stripe_customer_id = COALESCE(?, stripe_customer_id), stripe_subscription_id = COALESCE(?, stripe_subscription_id), subscription_status = ?, plan = ? WHERE id = ?",
       args: [update.customerId, update.subscriptionId, update.status, update.plan, update.accountId],
     });

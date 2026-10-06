@@ -40,7 +40,7 @@ export async function r2AccountUsageBytes(env, accountId) {
 export async function ensureR2Capacity(env, accountId, incomingBytes) {
   if (!env.EVENTS_BUCKET || !accountId) return;
   const need = Number(incomingBytes) || 0;
-  const db = getDb(env);
+  const db = getDb(env, "_lib.storageQuota");
 
   for (let round = 0; round < MAX_EVICTION_ROUNDS; round += 1) {
     const usage = await r2AccountUsageBytes(env, accountId);
