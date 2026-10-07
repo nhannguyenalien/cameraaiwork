@@ -1,3 +1,4 @@
+import { withCacheBump } from "../../../_lib/edgeCache.js";
 import { getDb } from "../../../_lib/db.js";
 import { errorJson, json, withErrorHandling } from "../../../_lib/http.js";
 import { deleteObjects } from "../../../_lib/objectStorage.js";
@@ -25,7 +26,7 @@ export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
   return json({ ...event, people: people.rows });
 });
 
-export const onRequestPatch = withErrorHandling(async ({ request, params, env, data }) => {
+export const onRequestPatch = withCacheBump(withErrorHandling(async ({ request, params, env, data }) => {
   const event = await findEvent(env, data.accountId, params.id);
   if (!event) return errorJson("Event not found", 404);
   const body = await request.json().catch(() => null);
@@ -39,12 +40,12 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
     args: [acknowledged, note, params.id, data.accountId],
   });
   return json({ ok: true, acknowledged: Boolean(acknowledged), note });
-});
+}));
 
-export const onRequestDelete = withErrorHandling(async ({ params, env, data }) => {
+export const onRequestDelete = withCacheBump(withErrorHandling(async ({ params, env, data }) => {
   const event = await findEvent(env, data.accountId, params.id);
   if (!event) return errorJson("Event not found", 404);
   await deleteObjects(env, data.accountId, event.storage_backend || "r2", [event.image_key, event.video_key].filter(Boolean));
   await getDb(env, "api.events.[id].index").execute({ sql: "DELETE FROM events WHERE id = ? AND account_id = ?", args: [params.id, data.accountId] });
   return json({ ok: true });
-});
+}));

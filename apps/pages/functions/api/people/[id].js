@@ -1,10 +1,11 @@
+import { withCacheBump } from "../../_lib/edgeCache.js";
 // PATCH /api/people/:id  { "label": "Bố" }
 // Names a clustered person. Pass "" or null to clear the label back to
 // unnamed.
 import { getDb } from "../../_lib/db.js";
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 
-export const onRequestPatch = withErrorHandling(async ({ request, params, env, data }) => {
+export const onRequestPatch = withCacheBump(withErrorHandling(async ({ request, params, env, data }) => {
   let body;
   try {
     body = await request.json();
@@ -28,4 +29,4 @@ export const onRequestPatch = withErrorHandling(async ({ request, params, env, d
   });
 
   return json({ ok: true, label });
-});
+}));

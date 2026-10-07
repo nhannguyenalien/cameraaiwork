@@ -1,9 +1,10 @@
+import { withEdgeCache, withCacheBump } from "../../_lib/edgeCache.js";
 import { parseKnown } from "../../_lib/delta.js";
 import { getDb } from "../../_lib/db.js";
 import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 import { encodeEventCursor, eventWhere, parseEventQuery, validDate } from "../../_lib/events.js";
 
-export const onRequestGet = withErrorHandling(async ({ request, env, data }) => {
+export const onRequestGet = withEdgeCache(withErrorHandling(async ({ request, env, data }) => {
   const url = new URL(request.url);
   let known;
   try { known = parseKnown(url); } catch { return errorJson("known không hợp lệ", 400); }
@@ -74,4 +75,4 @@ export const onRequestGet = withErrorHandling(async ({ request, env, data }) => 
     } : {}),
     "Access-Control-Expose-Headers": "X-Next-Cursor, X-Has-More, X-Total-Count, X-Total-Pages, X-Current-Page",
   } });
-});
+}));

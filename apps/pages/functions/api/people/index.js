@@ -1,3 +1,4 @@
+import { withEdgeCache, withCacheBump } from "../../_lib/edgeCache.js";
 // GET /api/people
 // Lists a bounded page of clustered people for the account, most recently seen
 // first. `label` is null until named via PATCH /api/people/:id — the UI
@@ -5,7 +6,7 @@
 import { getDb } from "../../_lib/db.js";
 import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 
-export const onRequestGet = withErrorHandling(async ({ request, env, data }) => {
+export const onRequestGet = withEdgeCache(withErrorHandling(async ({ request, env, data }) => {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || 1);
   const limit = Number(url.searchParams.get("limit") || 12);
@@ -44,4 +45,4 @@ export const onRequestGet = withErrorHandling(async ({ request, env, data }) => 
     "X-Filtered-Count": String(counts.rows[0].filtered), "Cache-Control": "no-store",
     "Access-Control-Expose-Headers": "X-Total-Count, X-Unnamed-Count, X-Filtered-Count",
   } });
-});
+}));
