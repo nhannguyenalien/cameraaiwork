@@ -1,9 +1,8 @@
-import { withCacheBump } from "../../_lib/edgeCache.js";
 import { getDb } from "../../_lib/db.js";
 import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 import { deleteObjects } from "../../_lib/objectStorage.js";
 
-export const onRequestDelete = withCacheBump(withErrorHandling(async ({ request, env, data }) => {
+export const onRequestDelete = withErrorHandling(async ({ request, env, data }) => {
   const body = await request.json().catch(() => null);
   if (!Array.isArray(body?.ids)) return errorJson("ids phải là một mảng", 400);
   const ids = [...new Set(body.ids)].filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0).map(Number);
@@ -26,4 +25,4 @@ export const onRequestDelete = withCacheBump(withErrorHandling(async ({ request,
     });
   }
   return json({ ok: true, deleted: found.rows.length });
-}));
+});

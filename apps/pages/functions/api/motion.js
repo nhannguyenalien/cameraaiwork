@@ -11,7 +11,6 @@ import { findOrCreatePerson } from "../_lib/faceMatch.js";
 import { sendPhotoAlert } from "../_lib/telegram.js";
 import { captureClip, uploadClip, uploadSnapshot } from "../_lib/r2.js";
 import { getIntegration } from "../_lib/integrations.js";
-import { bumpCacheVersion } from "../_lib/edgeCache.js";
 import { json, errorJson, withErrorHandling } from "../_lib/http.js";
 import { triggerGpuScan } from "../_lib/gpuWorker.js";
 import { resolveStorageChain } from "../_lib/objectStorage.js";
@@ -103,7 +102,6 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
     args: [site.account_id, site.id, camera, personId, eventType, link, storageChain[0], shouldRecord ? "recording" : "disabled"],
   });
   const eventId = Number(inserted.lastInsertRowid);
-  await bumpCacheVersion(site.account_id);
   for (const id of personIds) {
     await db.execute({
       sql: "INSERT INTO event_people (event_id, person_id, face_box) VALUES (?, ?, ?) ON CONFLICT (event_id, person_id) DO UPDATE SET face_box = COALESCE(event_people.face_box, EXCLUDED.face_box)",

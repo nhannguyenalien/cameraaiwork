@@ -2608,7 +2608,7 @@
 
   render();
 
-  async function pollDashboard() {
+  setInterval(async () => {
     if (!getApiKey() || document.hidden || dashboardPolling) return;
     const activeTab = document.querySelector('.nav-link.active[data-bs-toggle="tab"]')?.getAttribute('href');
     dashboardPolling = true;
@@ -2617,10 +2617,7 @@
       if (activeTab === '#tab-people') await loadPeople();
       if (activeTab === '#tab-agent') await loadAgentMessages();
     } catch {} finally { dashboardPolling = false; }
-  }
-  setInterval(pollDashboard, 30000);
-  // Refresh right away when the tab comes back so the 30s interval never shows stale data.
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollDashboard(); });
+  }, 30000);
 </script>
 </body>
 </html>
