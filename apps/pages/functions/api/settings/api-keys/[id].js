@@ -1,4 +1,5 @@
 import { getDb } from "../../../_lib/db.js";
+import { forgetAuth } from "../../../_lib/authCache.js";
 import { json, errorJson, withErrorHandling } from "../../../_lib/http.js";
 
 export const onRequestDelete = withErrorHandling(async ({ params, env, data }) => {
@@ -9,5 +10,6 @@ export const onRequestDelete = withErrorHandling(async ({ params, env, data }) =
     args: [params.id, data.accountId],
   });
   if (!result.rows.length) return errorJson("API key not found", 404);
+  await forgetAuth(env, params.id);
   return json({ ok: true });
 });
