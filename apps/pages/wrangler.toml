@@ -11,9 +11,3 @@ compatibility_date = "2026-08-01"
 [[r2_buckets]]
 binding = "EVENTS_BUCKET"
 bucket_name = "cameraaiwork-events"
-
-# Shared cache for API-key auth lookups (see functions/_lib/authCache.js).
-# Optional at runtime: without the binding the code falls back to Neon.
-[[kv_namespaces]]
-binding = "CACHE"
-id = "7f85d72708414d2bafeace1959b03c92"

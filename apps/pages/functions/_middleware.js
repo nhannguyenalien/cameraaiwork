@@ -17,11 +17,16 @@
 //   code flow, not a full-page redirect), so it needs no exemption here.
 import { getDb } from "./_lib/db.js";
 import { sha256Hex } from "./_lib/ids.js";
-import { getCachedAuth, setCachedAuth } from "./_lib/authCache.js";
 import { readSessionToken } from "./_lib/session.js";
 
 const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/internal/patrol", "/api/install/claim", "/api/support/chat"];
 const PUBLIC_AUTH_PATHS = ["/api/auth/signup", "/api/auth/login", "/api/auth/stripe-webhook"];
+
+// Per-isolate cache of resolved API keys so each request doesn't cost a Neon
+// round trip. Revocation/expiry takes effect within AUTH_CACHE_MS.
+const AUTH_CACHE_MS = 30_000;
+const AUTH_CACHE_MAX = 500;
+const authCache = new Map();
 
 function isPublic(request, url) {
   return PUBLIC_PATHS.includes(url.pathname) || PUBLIC_AUTH_PATHS.includes(url.pathname);
@@ -55,7 +60,7 @@ function unauthorized() {
   });
 }
 
-export async function onRequest({ request, next, env, data, waitUntil }) {
+export async function onRequest({ request, next, env, data }) {
   const url = new URL(request.url);
   const cors = corsHeaders(env, request);
 
@@ -72,15 +77,21 @@ export async function onRequest({ request, next, env, data, waitUntil }) {
 
   try {
     const keyHash = await sha256Hex(token);
-    let row = await getCachedAuth(env, keyHash);
-    if (!row) {
-      const result = await getDb(env, "_middleware").execute({
+    let row;
+    const cached = authCache.get(keyHash);
+    if (cached && cached.until > Date.now()) {
+      row = cached.row;
+    } else {
+      authCache.delete(keyHash);
+      const db = getDb(env, "_middleware");
+      const result = await db.execute({
         sql: "SELECT account_id, scope FROM api_keys WHERE id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)",
         args: [keyHash],
       });
       row = result.rows[0];
       if (!row) return withCors(unauthorized(), cors);
-      await setCachedAuth(env, keyHash, row, waitUntil);
+      if (authCache.size >= AUTH_CACHE_MAX) authCache.delete(authCache.keys().next().value);
+      authCache.set(keyHash, { row, until: Date.now() + AUTH_CACHE_MS });
     }
 
     // A 'read' key (see functions/api/settings/api-keys.js) may only issue
