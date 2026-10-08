@@ -1,9 +1,9 @@
 // Extension point: if AI_WORKER_URL is set (tunneled Python service
 // on-site, see ai/worker/), ask it whether the frame has a person — and
 // if so, its face embedding for clustering "who is this" (see
-// _lib/faceMatch.js). Unset AI_WORKER_URL -> every motion event alerts
+// _lib/faceMatch.js) — only when `faces` is true; off by default. Unset AI_WORKER_URL -> every motion event alerts
 // with no face data (safe default, matches original behavior).
-export async function detectPerson(env, site, frameBuffer) {
+export async function detectPerson(env, site, frameBuffer, { faces = false } = {}) {
   const workerUrls = detectionWorkerUrls(env, site);
   if (workerUrls.length === 0) {
     return { hasPerson: true, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] };
@@ -12,7 +12,7 @@ export async function detectPerson(env, site, frameBuffer) {
   const failures = [];
   for (const workerUrl of workerUrls) {
     try {
-      const res = await fetch(`${workerUrl}/detect`, {
+      const res = await fetch(`${workerUrl}/detect${faces ? "?faces=1" : ""}`, {
         method: "POST",
         headers: {
           "Content-Type": "image/jpeg",

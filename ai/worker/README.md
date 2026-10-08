@@ -20,6 +20,10 @@ Then set `AI_WORKER_URL` in the Cloudflare Pages project's env vars to this
 service's tunneled URL. If unset, every motion event is treated as an alert
 with no face data (safe default).
 
+Face recognition is **off by default**: `POST /detect` only returns face
+embeddings when called with `?faces=1` (used by the face backfill; motion
+requests can opt in with `"faces": true`).
+
 ## Status
 
 Working, tested against a real live camera feed (not just sample images):

@@ -41,7 +41,7 @@ function createFaceBackfill(config, log = console) {
   const headers = { "x-relay-secret": config.relaySecret };
 
   async function detect(jpeg) {
-    const result = await axios.post(`${config.aiWorkerUrl}/detect`, jpeg, {
+    const result = await axios.post(`${config.aiWorkerUrl}/detect?faces=1`, jpeg, {
       headers: { "content-type": "image/jpeg" }, timeout: 30000,
     });
     return result.data?.faceEmbeddings || (result.data?.faceEmbedding ? [result.data.faceEmbedding] : []);

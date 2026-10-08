@@ -159,12 +159,12 @@ def _face_embeddings(image: Image.Image):
     ]
 
 
-def detect_person(image_bytes: bytes) -> DetectResult:
+def detect_person(image_bytes: bytes, faces: bool = False) -> DetectResult:
     image = Image.open(io.BytesIO(image_bytes))
     boxes, vehicle_boxes = _detect_objects(image)
     has_person = len(boxes) > 0
 
-    face_embeddings = _face_embeddings(image) if has_person else []
+    face_embeddings = _face_embeddings(image) if has_person and faces else []
     # Keep the singular field during rollout so an older cloud backend can
     # still identify the most prominent face.
     face_embedding = face_embeddings[0]["embedding"] if face_embeddings else None
@@ -181,7 +181,9 @@ def detect_person(image_bytes: bytes) -> DetectResult:
 @app.post("/detect", response_model=DetectResult)
 async def detect(request: Request):
     image_bytes = await request.body()
-    return detect_person(image_bytes)
+    # Face recognition is off unless the caller asks for it (?faces=1).
+    faces = request.query_params.get("faces", "").lower() in ("1", "true", "yes")
+    return detect_person(image_bytes, faces)
 
 
 @app.get("/health")

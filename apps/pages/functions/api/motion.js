@@ -63,7 +63,7 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
     : null;
   const { hasPerson, hasVehicle = false, faceEmbedding, faceEmbeddings = [], faceDetections = [] } = trusted === true
     ? (trustedResult || { hasPerson: true, hasVehicle: false, faceEmbedding: null, faceEmbeddings: [], faceDetections: [] })
-    : await detectPerson(env, site, frame);
+    : await detectPerson(env, site, frame, { faces: body.faces === true });
 
   if (!hasPerson && !hasVehicle) {
     return json({ ok: true, alerted: false });
