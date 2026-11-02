@@ -106,6 +106,13 @@
             <label class="form-label mt-3" for="clip-duration">Thời lượng mỗi clip</label>
             <select id="clip-duration" class="form-select"><option value="default">Theo cấu hình chung</option><option value="10">10 giây</option><option value="30">30 giây · Pro</option><option value="60">1 phút · Pro</option></select>
             <div id="clip-duration-note" class="form-hint"></div>
+            <hr class="my-3" />
+            <label class="form-check form-switch m-0"><input id="gate-butler" class="form-check-input" type="checkbox" /><span class="form-check-label"><strong>High security · quản gia cổng</strong><br><span class="text-secondary small">Khi có người đến, camera chào và hỏi qua loa (nói chuyện theo lượt), rồi tóm tắt cho chủ nhà. Quản gia chỉ trò chuyện và báo cáo, không mở được cổng.</span></span></label>
+            <div id="gate-butler-key-row" class="mt-2">
+              <label class="form-label" for="gate-butler-key">Khóa API SchoolsAI của camera này</label>
+              <div class="input-group"><input id="gate-butler-key" class="form-control" type="password" autocomplete="off" placeholder="sk_..." /><button id="gate-butler-key-save" class="btn btn-outline-primary" type="button">Lưu khóa</button></div>
+              <div id="gate-butler-note" class="form-hint"></div>
+            </div>
           </div></div>
         </div>
       </div>
@@ -251,6 +258,7 @@ async function init() {
   document.getElementById('camera-name').textContent = camera.cameraName || camera.cameraId;
   document.getElementById('camera-name-input').value = camera.cameraName || '';
   document.getElementById('record-person').checked = Number(camera.recordOnPerson ?? 1) === 1;
+  renderGateButler();
   const duration = document.getElementById('clip-duration');
   duration.value = camera.clipDurationOverrideSeconds == null ? 'default' : String(camera.clipDurationOverrideSeconds);
   [...duration.options].forEach(option => { option.disabled = option.value !== 'default' && !account.limits.clipDurations.includes(Number(option.value)); });
@@ -368,6 +376,29 @@ document.getElementById('camera-alarm').addEventListener('change', async event =
   try { await api(endpoint('controls'), {method:'POST', body:JSON.stringify({alarm:input.checked})}); }
   catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
   finally { input.disabled=false; }
+});
+
+function renderGateButler() {
+  document.getElementById('gate-butler').checked = camera.securityLevel === 'high';
+  document.getElementById('gate-butler').disabled = !camera.voiceConfigured;
+  document.getElementById('gate-butler-note').textContent = camera.voiceConfigured
+    ? 'Đã có khóa. Bật công tắc phía trên để kích hoạt.' : 'Tạo một workspace SchoolsAI riêng cho camera này rồi dán khóa API vào đây.';
+}
+document.getElementById('gate-butler').addEventListener('change', async event => {
+  const input = event.currentTarget; input.disabled = true;
+  try {
+    const saved = await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({securityLevel: input.checked ? 'high' : 'normal'})});
+    camera.securityLevel = saved.securityLevel;
+  } catch (error) { input.checked = !input.checked; document.getElementById('camera-status').textContent = error.message; }
+  finally { renderGateButler(); }
+});
+document.getElementById('gate-butler-key-save').addEventListener('click', async event => {
+  const button = event.currentTarget; const field = document.getElementById('gate-butler-key'); button.disabled = true;
+  try {
+    const saved = await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({voiceApiKey: field.value.trim() || null})});
+    camera.voiceConfigured = saved.voiceConfigured; camera.securityLevel = saved.securityLevel; field.value = '';
+  } catch (error) { document.getElementById('camera-status').textContent = error.message; }
+  finally { button.disabled = false; renderGateButler(); }
 });
 
 document.getElementById('record-person').addEventListener('change', async event => {

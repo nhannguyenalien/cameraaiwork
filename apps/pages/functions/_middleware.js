@@ -19,7 +19,7 @@ import { getDb } from "./_lib/db.js";
 import { sha256Hex } from "./_lib/ids.js";
 import { readSessionToken } from "./_lib/session.js";
 
-const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/internal/patrol", "/api/install/claim", "/api/support/chat"];
+const PUBLIC_PATHS = ["/api/motion", "/api/face-backfill", "/api/health", "/api/internal/maintenance", "/api/internal/patrol", "/api/install/claim", "/api/support/chat", "/api/voice/greeting", "/api/voice/turn", "/api/voice/finish"];
 const PUBLIC_AUTH_PATHS = ["/api/auth/signup", "/api/auth/login", "/api/auth/stripe-webhook"];
 
 // Per-isolate cache of resolved API keys so each request doesn't cost a Neon

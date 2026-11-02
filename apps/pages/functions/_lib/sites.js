@@ -47,6 +47,8 @@ export async function listCameras(env, accountId) {
     sql: `
       SELECT cameras.id AS "cameraId", cameras.stream, cameras.name AS "cameraName",
              cameras.record_on_person AS "recordOnPerson",
+             cameras.security_level AS "securityLevel",
+             (cameras.voice_key_enc IS NOT NULL) AS "voiceConfigured",
              CASE
                WHEN accounts.plan = 'pro'
                  AND accounts.subscription_status IN ('active', 'trialing')

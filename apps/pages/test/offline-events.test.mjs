@@ -66,7 +66,7 @@ test('policy endpoint authenticates per site and applies account clip limits; un
   try {
     await pg.exec(`CREATE TABLE sites(id text, account_id text, relay_secret text);
       CREATE TABLE accounts(id text, plan text, subscription_status text, clip_duration_seconds integer);
-      CREATE TABLE cameras(site_id text, account_id text, stream text, record_on_person integer, clip_duration_seconds integer);
+      CREATE TABLE cameras(site_id text, account_id text, stream text, record_on_person integer, clip_duration_seconds integer, security_level text DEFAULT 'normal', voice_key_enc text);
       INSERT INTO sites VALUES ('a','account-a','secret-a'),('b','account-b','secret-b');
       INSERT INTO accounts VALUES ('account-a','free','inactive',60),('account-b','pro','active',30);
       INSERT INTO cameras VALUES ('a','account-a','front',1,60),('a','account-a','private',0,10),('b','account-b','other',1,30);`);
@@ -78,7 +78,7 @@ test('policy endpoint authenticates per site and applies account clip limits; un
     let response = await onRequestGet(context('a','secret-a'));
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.deepEqual(await response.json(), { cameras: { front: { recordOnPerson: true, clipDurationSeconds: 10 }, private: { recordOnPerson: false, clipDurationSeconds: 10 } } });
+    assert.deepEqual(await response.json(), { cameras: { front: { recordOnPerson: true, clipDurationSeconds: 10, gateButler: false }, private: { recordOnPerson: false, clipDurationSeconds: 10, gateButler: false } } });
     assert.equal((await onRequestGet(context('b','secret-a'))).status, 401);
     const unauthorized = context('a','wrong','POST');
     assert.equal((await onRequestPost(unauthorized)).status, 401);

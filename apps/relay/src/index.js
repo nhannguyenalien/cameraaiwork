@@ -39,6 +39,7 @@ const { startNamedTunnel } = require("./tunnel");
 const { parseLiveRequest } = require("./live-auth");
 const { createViewerLimiter } = require("./viewer-limit");
 const { createTalkback } = require("./talkback");
+const { createVoiceGuard } = require("./voice-guard");
 const {
   validateCamera,
   publicCamera,
@@ -80,6 +81,12 @@ const talkback = createTalkback({
   greeting: config.tapoGreeting,
   cooldownMs: config.tapoGreetingCooldownMs,
 });
+
+const voiceGuard = createVoiceGuard({
+  config,
+  play: (camera, audio) => (config.tapoTalkbackPassword ? talkback.play(camera, audio) : talkback.playOnvif(camera, audio)),
+});
+voiceGuard.start();
 
 function captureLocalClip(cameraId, durationMs = 10000, maxBytes = 20 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -576,9 +583,15 @@ function startPersonPolling(cameraId) {
         );
         if (!state.present && camera) {
           state.present = Boolean(detected.data?.hasPerson);
-          if (detected.data?.hasPerson) talkback.speak(camera)
-            .then((played) => played && console.log(`🔊 Đã phát lời chào (${cameraId})`))
-            .catch((err) => console.error(`❌ Phát lời chào lỗi (${cameraId}):`, err.message || err));
+          // High-security cameras hand the visitor to the gate butler; every
+          // other camera keeps the fixed greeting.
+          if (detected.data?.hasPerson) {
+            const butler = voiceGuard.enabled(camera);
+            Promise.resolve(butler ? voiceGuard.maybeStart(camera) : false)
+              .then((started) => (started ? true : !butler && talkback.speak(camera)))
+              .then((played) => played && console.log(`🔊 Đã phát lời chào (${cameraId})`))
+              .catch((err) => console.error(`❌ Phát lời chào lỗi (${cameraId}):`, err.message || err));
+          }
         }
         state.missingFrames = 0;
       } else if (++state.missingFrames >= 3) {

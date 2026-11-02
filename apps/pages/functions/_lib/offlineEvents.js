@@ -20,12 +20,13 @@ export async function offlinePolicy({ request, env }) {
   if (!site) return errorJson('Unauthorized', 401);
   const settings = await effectiveVideoSettingsForAccount(env, site.account_id);
   const result = await getDb(env, 'api.motion.policy').execute({
-    sql: 'SELECT stream, record_on_person, clip_duration_seconds FROM cameras WHERE site_id = ? AND account_id = ?',
+    sql: 'SELECT stream, record_on_person, clip_duration_seconds, security_level, voice_key_enc FROM cameras WHERE site_id = ? AND account_id = ?',
     args: [site.id, site.account_id],
   });
   const cameras = Object.fromEntries(result.rows.map(camera => [camera.stream, {
     recordOnPerson: Number(camera.record_on_person ?? 1) === 1,
     clipDurationSeconds: normalizeClipDuration(settings.plan, camera.clip_duration_seconds ?? settings.clipDurationSeconds),
+    gateButler: camera.security_level === 'high' && Boolean(camera.voice_key_enc),
   }]));
   return json({ cameras }, { headers: { 'Cache-Control': 'no-store' } });
 }
