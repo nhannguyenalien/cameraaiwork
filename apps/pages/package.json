@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
-    "@neondatabase/serverless": "^1.1.0",
-    "jose": "^6.2.7"
+    "jose": "^6.2.7",
+    "postgres": "^3.4.5"
   }
 }

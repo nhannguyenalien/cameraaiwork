@@ -1,6 +1,7 @@
 name = "cameraaiwork"
 pages_build_output_dir = "public"
 compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
 
 # Event clips (motion-triggered, bounded-length MP4s) — see
 # functions/_lib/r2.js and functions/api/events/[id]/video.js.
@@ -11,3 +12,8 @@ compatibility_date = "2026-08-01"
 [[r2_buckets]]
 binding = "EVENTS_BUCKET"
 bucket_name = "cameraaiwork-events"
+
+# Coolify Postgres (pg-camera.schoolsai.work via Cloudflare Tunnel + Access).
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "e62ee12d27de462db4d627605349ff31"

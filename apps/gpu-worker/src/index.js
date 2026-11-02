@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 import { findOrCreatePerson, validEmbedding } from "../../pages/functions/_lib/faceMatch.js";
 import { measureDb } from "../../pages/functions/_lib/dbMetrics.js";
 
@@ -54,8 +54,9 @@ async function scanEvent(env, sql, event, threshold) {
 }
 
 async function run(env, requestedEventId = null) {
-  if (!env.DATABASE_URL || !env.VISION_API_TOKEN || !env.EVENTS_BUCKET) throw new Error("Missing worker binding/secret");
-  const rawSql = neon(env.DATABASE_URL);
+  const dbUrl = env.HYPERDRIVE?.connectionString || env.DATABASE_URL;
+  if (!dbUrl || !env.VISION_API_TOKEN || !env.EVENTS_BUCKET) throw new Error("Missing worker binding/secret");
+  const rawSql = postgres(dbUrl, { max: 1, fetch_types: false, idle_timeout: 20 });
   const sql = (strings, ...values) => measureDb(env, "gpu.queue", strings.join("?"), () => rawSql(strings, ...values));
   if (!await acquireLease(sql)) return;
   try {
@@ -75,6 +76,7 @@ async function run(env, requestedEventId = null) {
     for (const event of events) await scanEvent(env, sql, event, threshold);
   } finally {
     await sql`UPDATE gpu_worker_state SET locked_until=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=1`;
+    await rawSql.end();
   }
 }
 

@@ -3,13 +3,14 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 
 const require = createRequire(new URL("../apps/pages/package.json", import.meta.url));
-const { neon } = require("@neondatabase/serverless");
+const postgres = require("postgres");
 const { createClient } = require("@libsql/client");
 
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("Thiếu DATABASE_URL của Neon");
+if (!databaseUrl) throw new Error("Thiếu DATABASE_URL của PostgreSQL");
 
-const pg = neon(databaseUrl, { fullResults: true });
+const sql = postgres(databaseUrl, { max: 1 });
+const pg = { query: async (text, args = []) => ({ rows: await sql.unsafe(text, args) }) };
 const schema = await readFile(new URL("../apps/pages/schema.sql", import.meta.url), "utf8");
 const statements = schema
   .replace(/^\s*--.*$/gm, "")
@@ -18,7 +19,7 @@ const statements = schema
   .filter(Boolean);
 
 for (const statement of statements) await pg.query(statement);
-console.log(`= Neon schema sẵn sàng (${statements.length} statements)`);
+console.log(`= PostgreSQL schema sẵn sàng (${statements.length} statements)`);
 
 const tursoUrl = process.env.TURSO_DB_URL;
 const tursoToken = process.env.TURSO_AUTH_TOKEN;
@@ -87,3 +88,4 @@ if (process.env.TUNNEL_BASE_DOMAIN) {
 for (const statement of networkTransferStatements) await pg.query(statement);
 
 console.log("Database migration hoàn tất.");
+await sql.end();

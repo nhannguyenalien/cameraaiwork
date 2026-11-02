@@ -1,5 +1,5 @@
 import { measureDb } from "./dbMetrics.js";
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
 function postgresSql(sql) {
   let index = 0;
@@ -16,28 +16,35 @@ function normalize(statement) {
   return { sql: postgresSql(statement.sql), args: statement.args || [] };
 }
 
-// Neon's default (non-fullResults) mode returns a bare row array, which skips
-// the per-query field metadata and keeps the HTTP payload smaller.
 function resultShape(rows) {
   const list = Array.isArray(rows) ? rows : [];
   return { rows: list, rowsAffected: list.length, lastInsertRowid: list[0]?.id };
 }
 
+// Hyperdrive (env.HYPERDRIVE) pools connections to the Coolify Postgres;
+// DATABASE_URL is the direct fallback for local dev and scripts.
+export function connect(env) {
+  if (env.DB_CLIENT) return env.DB_CLIENT; // test seam (see test/helpers/pgliteClient.mjs)
+  const url = env.HYPERDRIVE?.connectionString || env.DATABASE_URL;
+  if (!url) throw new Error("Thiếu HYPERDRIVE hoặc DATABASE_URL cho PostgreSQL");
+  return postgres(url, { max: 5, fetch_types: false, idle_timeout: 20 });
+}
+
 export function getDb(env, flow = "other") {
-  if (!env.DATABASE_URL) throw new Error("Thiếu DATABASE_URL cho Neon PostgreSQL");
-  const sql = neon(env.DATABASE_URL);
+  const sql = connect(env);
 
   return {
     async execute(statement) {
       const query = normalize(statement);
-      return resultShape(await measureDb(env, flow, query.sql, () => sql.query(query.sql, query.args)));
+      return resultShape(await measureDb(env, flow, query.sql, () => sql.unsafe(query.sql, query.args)));
     },
     async batch(statements) {
       const queries = statements.map(normalize);
-      const results = await measureDb(env, flow, queries.map(q => q.sql).join(";"), () => sql.transaction(
-        (tx) => queries.map((query) => tx.query(query.sql, query.args)),
+      const results = await measureDb(env, flow, queries.map(q => q.sql).join(";"), () => sql.begin(
+        (tx) => queries.map((query) => tx.unsafe(query.sql, query.args)),
       ));
       return results.map(resultShape);
     },
+    close: () => sql.end(),
   };
 }

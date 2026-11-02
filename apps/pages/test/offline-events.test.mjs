@@ -60,10 +60,9 @@ test('multipart validation accepts original media and rejects invalid identity, 
 });
 
 test('policy endpoint authenticates per site and applies account clip limits; unauthorized uploads are rejected before parsing', async () => {
-  const { neonConfig } = await import('@neondatabase/serverless');
+  const { pgliteClient } = await import('./helpers/pgliteClient.mjs');
   const { onRequestGet, onRequestPost } = await import('../functions/api/motion.js');
   const pg = new PGlite();
-  const original = neonConfig.fetchFunction;
   try {
     await pg.exec(`CREATE TABLE sites(id text, account_id text, relay_secret text);
       CREATE TABLE accounts(id text, plan text, subscription_status text, clip_duration_seconds integer);
@@ -71,13 +70,7 @@ test('policy endpoint authenticates per site and applies account clip limits; un
       INSERT INTO sites VALUES ('a','account-a','secret-a'),('b','account-b','secret-b');
       INSERT INTO accounts VALUES ('account-a','free','inactive',60),('account-b','pro','active',30);
       INSERT INTO cameras VALUES ('a','account-a','front',1,60),('a','account-a','private',0,10),('b','account-b','other',1,30);`);
-    neonConfig.fetchFunction = async (_, init) => {
-      const body = JSON.parse(init.body);
-      const r = await pg.query(body.query, body.params);
-      return Response.json({ fields: r.fields, rowCount: r.affectedRows ?? r.rows.length,
-        rows: r.rows.map(row => r.fields.map(field => row[field.name] == null ? null : String(row[field.name]))) });
-    };
-    const env = { DATABASE_URL: 'postgresql://user:pass@example.neon.tech/db', DB_METRICS: '0' };
+    const env = { DB_CLIENT: pgliteClient(pg), DB_METRICS: '0' };
     const context = (site, secret, method = 'GET') => ({ env, request: new Request('https://test/api/motion?siteId=' + site, {
       method, headers: { 'x-relay-secret': secret, ...(method === 'POST' ? { 'content-type': 'multipart/form-data; boundary=test' } : {}) },
       ...(method === 'POST' ? { body: 'malformed body' } : {}),
@@ -90,5 +83,5 @@ test('policy endpoint authenticates per site and applies account clip limits; un
     const unauthorized = context('a','wrong','POST');
     assert.equal((await onRequestPost(unauthorized)).status, 401);
     assert.equal(unauthorized.request.bodyUsed, false);
-  } finally { neonConfig.fetchFunction = original; await pg.close(); }
+  } finally { await pg.close(); }
 });

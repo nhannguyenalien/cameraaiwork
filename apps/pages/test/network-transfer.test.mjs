@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
-import { neonConfig } from '@neondatabase/serverless';
+import { pgliteClient } from './helpers/pgliteClient.mjs';
 import { statements } from '../migrations/001-network-transfer.mjs';
 import { findOrCreatePerson } from '../functions/_lib/faceMatch.js';
 import { onRequestGet as people } from '../functions/api/people/index.js';
@@ -11,7 +11,6 @@ import { measureDb } from '../functions/_lib/dbMetrics.js';
 
 test('PostgreSQL vector matching, isolation, pagination and event deltas', async () => {
  const db = new PGlite({ extensions: { vector } });
- const oldFetch = neonConfig.fetchFunction;
  try {
   for (const table of ['people','gpu_people']) await db.exec(`CREATE TABLE ${table}(id text PRIMARY KEY,account_id text,embedding text,label text,first_seen_at timestamptz DEFAULT now(),last_seen_at timestamptz DEFAULT now(),seen_count integer DEFAULT 1)`);
   await db.exec(`CREATE TABLE events(id serial PRIMARY KEY,account_id text,person_id text,timestamp timestamptz DEFAULT now(),image_key text,video_key text,acknowledged boolean DEFAULT false);
@@ -19,17 +18,7 @@ test('PostgreSQL vector matching, isolation, pagination and event deltas', async
     CREATE TABLE event_gpu_people(event_id integer,person_id text,face_box text);
     INSERT INTO people(id,account_id,embedding) VALUES ('broken','a','bad'),('zero','a','[0,0]'),('dimension','a','[1,0,0]');`);
   for (let run=0;run<2;run++) for (const sql of statements) await db.exec(sql);
-  neonConfig.fetchFunction = async (_, init) => {
-   const body = JSON.parse(init.body);
-   const execute = async q => {
-    const r = await db.query(q.query,q.params);
-    return { fields:r.fields, rowCount:r.affectedRows ?? r.rows.length, rows:r.rows.map(row=>r.fields.map(f=>{
-     const v=row[f.name]; return v==null?null:typeof v==='object'?JSON.stringify(v):String(v);
-    })) };
-   };
-   return Response.json(body.queries?{results:await Promise.all(body.queries.map(execute))}:await execute(body));
-  };
-  const env={DATABASE_URL:'postgresql://user:pass@example.neon.tech/db',DB_METRICS:'0'};
+  const env={DB_CLIENT:pgliteClient(db),DB_METRICS:'0'};
   const id=await findOrCreatePerson(env,'a',[1,0]);
   assert.ok(id);
   assert.equal(await findOrCreatePerson(env,'a',[0.99,0.01]),id);
@@ -63,7 +52,7 @@ test('PostgreSQL vector matching, isolation, pagination and event deltas', async
   delta=await read(known);assert.equal(delta.rows[0].person_label,'Renamed');
   await db.exec("DELETE FROM events WHERE account_id='a'");
   delta=await read(known);assert.equal(delta.manifest.length,0);assert.equal(delta.total,0);
- } finally { neonConfig.fetchFunction=oldFetch;await db.close(); }
+ } finally { await db.close(); }
 });
 test('metrics do not expose query, parameters or returned values',async()=>{
  const old=console.log;const logs=[];console.log=x=>logs.push(JSON.parse(x));

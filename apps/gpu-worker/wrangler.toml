@@ -1,6 +1,7 @@
 name = "cameraaiwork-gpu-worker"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 GPU_MAX_EVENTS_PER_RUN = "1"
@@ -10,3 +11,7 @@ GPU_SIMILARITY_THRESHOLD = "0.30"
 [[r2_buckets]]
 binding = "EVENTS_BUCKET"
 bucket_name = "cameraaiwork-events"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "e62ee12d27de462db4d627605349ff31"
