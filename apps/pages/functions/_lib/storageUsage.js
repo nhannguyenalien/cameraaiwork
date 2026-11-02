@@ -6,7 +6,7 @@ const MAX_LIST_PAGES = 100;
 // Each s3/gdrive object costs one HEAD to the customer's storage. Past this many
 // keys per backend the dashboard summary would take minutes and hammer the
 // provider (Google Drive rate-limits), so only the newest keys are measured.
-const MAX_HEAD_KEYS = 600;
+const MAX_HEAD_KEYS = 100;
 const BACKENDS = ["r2", "s3", "gdrive"];
 
 function emptyBackend(backend) {
