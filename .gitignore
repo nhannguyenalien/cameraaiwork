@@ -37,3 +37,4 @@ apps/pages/.wrangler/
 
 # Durable relay queue contains private camera footage.
 apps/relay/data/
+apps/pages/.maintenance-secret.local
