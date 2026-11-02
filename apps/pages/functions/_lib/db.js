@@ -23,10 +23,17 @@ function resultShape(rows) {
 
 // Hyperdrive (env.HYPERDRIVE) pools connections to the Coolify Postgres;
 // DATABASE_URL is the direct fallback for local dev and scripts.
+const sharedPools = new Map();
+
 export function connect(env) {
   if (env.DB_CLIENT) return env.DB_CLIENT; // test seam (see test/helpers/pgliteClient.mjs)
   const url = env.HYPERDRIVE?.connectionString || env.DATABASE_URL;
   if (!url) throw new Error("Thiếu HYPERDRIVE hoặc DATABASE_URL cho PostgreSQL");
+  // A long-lived Node server shares one pool; Workers must not reuse sockets across requests.
+  if (env.DB_SHARED_POOL) {
+    sharedPools.set(url, sharedPools.get(url) || postgres(url, { max: 10, fetch_types: false, idle_timeout: 60 }));
+    return sharedPools.get(url);
+  }
   return postgres(url, { max: 5, fetch_types: false, idle_timeout: 20 });
 }
 
@@ -45,6 +52,6 @@ export function getDb(env, flow = "other") {
       ));
       return results.map(resultShape);
     },
-    close: () => sql.end(),
+    close: () => (env.DB_SHARED_POOL ? Promise.resolve() : sql.end()),
   };
 }
