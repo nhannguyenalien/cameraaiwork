@@ -19,9 +19,15 @@ else console.warn("R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY not set: event media st
 const { routes, middleware } = await loadRoutes(join(root, "functions"));
 const serveStatic = createStatic(publicDir, await loadHeaders(publicDir));
 
+// Background work (clip capture/upload) outlives its response; track it so a
+// redeploy can let it finish instead of cutting recordings short.
+const inflight = new Set();
+
 async function handle(request) {
-  const pending = [];
-  const waitUntil = (promise) => { pending.push(Promise.resolve(promise).catch((error) => console.error("waitUntil", error))); };
+  const waitUntil = (promise) => {
+    const tracked = Promise.resolve(promise).catch((error) => console.error("waitUntil", error)).finally(() => inflight.delete(tracked));
+    inflight.add(tracked);
+  };
   const url = new URL(request.url);
   const matched = url.pathname.startsWith("/api/") ? matchRoute(routes, url.pathname, request.method) : null;
   const context = { request, env, data: {}, params: matched?.params || {}, waitUntil, functionPath: url.pathname };
@@ -45,7 +51,7 @@ function toRequest(req) {
   return new Request(`${proto}://${host}${req.url}`, init);
 }
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   try {
     const response = await handle(toRequest(req));
     const headers = {};
@@ -59,4 +65,14 @@ createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Internal server error" }));
   }
-}).listen(port, () => console.log(`cameraaiwork listening on :${port}`));
+});
+server.listen(port, () => console.log(`cameraaiwork listening on :${port}`));
+
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.once(signal, async () => {
+    console.log(`${signal}: draining ${inflight.size} background task(s)`);
+    server.close();
+    await Promise.race([Promise.allSettled([...inflight]), new Promise((resolve) => setTimeout(resolve, 55_000))]);
+    process.exit(0);
+  });
+}
