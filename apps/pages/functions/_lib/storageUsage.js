@@ -3,6 +3,10 @@ import { headObject } from "./objectStorage.js";
 import { R2_FREE_QUOTA_BYTES } from "./storageQuota.js";
 
 const MAX_LIST_PAGES = 100;
+// Each s3/gdrive object costs one HEAD to the customer's storage. Past this many
+// keys per backend the dashboard summary would take minutes and hammer the
+// provider (Google Drive rate-limits), so only the newest keys are measured.
+const MAX_HEAD_KEYS = 600;
 const BACKENDS = ["r2", "s3", "gdrive"];
 
 function emptyBackend(backend) {
@@ -55,6 +59,7 @@ export async function storageUsage(env, accountId) {
   });
 
   const objects = new Map();
+  const unmeasured = new Set();
   const backendUsage = new Map(BACKENDS.map((backend) => [backend, emptyBackend(backend)]));
   let cursor;
   let truncated = false;
@@ -69,9 +74,14 @@ export async function storageUsage(env, accountId) {
   }
 
   for (const backend of ["s3", "gdrive"]) {
-    const keys = [...new Set(result.rows
+    const allKeys = [...new Set(result.rows
       .filter((row) => row.storage_backend === backend)
       .flatMap((row) => [row.image_key, row.video_key]).filter(Boolean).map(String))];
+    const keys = allKeys.slice(0, MAX_HEAD_KEYS);
+    if (allKeys.length > keys.length) {
+      truncated = true;
+      for (const key of allKeys.slice(MAX_HEAD_KEYS)) unmeasured.add(`${backend}:${key}`);
+    }
     try {
       for (let offset = 0; offset < keys.length; offset += 20) {
         await Promise.all(keys.slice(offset, offset + 20).map(async (key) => {
@@ -121,6 +131,7 @@ export async function storageUsage(env, accountId) {
       const objectKey = `${backend}:${String(key)}`;
       linkedKeys.add(objectKey);
       if (!objects.has(objectKey)) {
+        if (unmeasured.has(objectKey)) continue;
         if (!usage.unavailable) {
           summary.missingObjects += 1;
           group.missingObjects += 1;
