@@ -36,3 +36,23 @@ test("creates, reads, and deletes a Drive object by its CameraAI key", async (t)
   assert.ok(calls.some((call) => call.init.method === "DELETE"));
   assert.ok(calls.every((call) => !call.init.headers?.authorization || call.init.headers.authorization === "Bearer token"));
 });
+
+test("folder verification reports exhausted Drive quota instead of an internal server error", async (t) => {
+  const { testGoogleDrive } = await import("../functions/_lib/googleDrive.js");
+  const { withErrorHandling } = await import("../functions/_lib/http.js");
+  t.mock.method(console, "error", () => {});
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).includes("uploadType=resumable")) {
+      return new Response(null, { headers: { location: "https://upload-session" } });
+    }
+    if (String(url) === "https://upload-session") {
+      return Response.json({ error: { errors: [{ reason: "storageQuotaExceeded" }] } }, { status: 403 });
+    }
+    return Response.json({ files: [] });
+  });
+  const response = await withErrorHandling(() => testGoogleDrive({ accessToken: "test-token", folderId: "folder" }))({});
+  assert.equal(response.status, 409);
+  const { error } = await response.json();
+  assert.match(error, /Google Drive đã hết dung lượng/);
+  assert.doesNotMatch(error, /Internal server error|test-token/);
+});

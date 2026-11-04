@@ -22,6 +22,13 @@ function headers(config, extra = {}) {
 async function ensureOk(response, action) {
   if (response.ok) return response;
   const detail = await response.text().catch(() => "");
+  let providerError;
+  try { providerError = JSON.parse(detail)?.error; } catch {}
+  if (response.status === 403 && providerError?.errors?.some((item) => item.reason === "storageQuotaExceeded")) {
+    const error = new Error("Google Drive đã hết dung lượng. Hãy giải phóng dung lượng (kể cả thùng rác), tăng dung lượng hoặc kết nối tài khoản Google khác rồi thử lại.");
+    error.status = 409;
+    throw error;
+  }
   throw new Error(`${action} Google Drive thất bại (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
 }
 
