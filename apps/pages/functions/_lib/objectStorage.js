@@ -4,21 +4,14 @@ import { googleDriveUsage, deleteGoogleDrive, getGoogleDrive, headGoogleDrive, p
 import { refreshGoogleAccessToken } from "./googleAuth.js";
 import { ensureR2Capacity } from "./storageQuota.js";
 
-// Write-path priority order: whichever backend the account has selected as
-// "backend" (Storage settings dropdown / the one last connected) goes
-// first, the other configured customer backend (if any) is the fallback,
-// and R2 is always last — R2 is always available (same Cloudflare account
-// as this Worker, no external network dependency) so it's the guaranteed
-// backstop when a customer's own S3/Drive integration is down.
+import { effectivePlanForAccount } from "./plans.js";
+import { storagePolicy } from "./storagePolicy.js";
+
 export async function resolveStorageChain(env, accountId) {
-  const saved = await getIntegration(env, accountId, "storage");
-  const chain = [];
-  if (saved?.backend === "gdrive" && saved.gdrive) chain.push("gdrive");
-  if (saved?.backend === "s3" && saved.s3) chain.push("s3");
-  if (saved?.s3 && !chain.includes("s3")) chain.push("s3");
-  if (saved?.gdrive && !chain.includes("gdrive")) chain.push("gdrive");
-  chain.push("r2");
-  return chain;
+  const [saved, plan] = await Promise.all([
+    getIntegration(env, accountId, "storage"), effectivePlanForAccount(env, accountId),
+  ]);
+  return storagePolicy(saved, plan, Boolean(env.EVENTS_BUCKET)).writeChain;
 }
 
 // The account only ever holds a long-lived refresh_token (see
@@ -56,11 +49,8 @@ export async function putObject(env, accountId, backend, key, body, contentType,
 // timeout here.
 const STORAGE_ATTEMPT_TIMEOUT_MS = 8000;
 
-// Tries each backend in `chain` in order (see resolveStorageChain — S3 then
-// Drive then R2) and returns the key/backend that actually succeeded. A
-// failure or timeout on one candidate is logged and the next is tried; only
-// throws if every candidate in the chain failed (in practice that means R2
-// itself is broken, since it's always the last entry).
+// Try the destinations permitted by the current plan, in configured order.
+// Reading and deleting historical objects do not depend on this write policy.
 export async function putObjectWithFallback(env, accountId, chain, key, body, contentType, label = "object") {
   let lastErr;
   for (const backend of chain) {

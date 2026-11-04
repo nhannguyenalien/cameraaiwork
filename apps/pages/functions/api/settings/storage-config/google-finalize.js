@@ -32,7 +32,9 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
 
   const saved = await getIntegration(env, data.accountId, "storage");
   await setIntegration(env, data.accountId, "storage", {
+    ...saved,
     backend: "gdrive",
+    writeOrder: ["gdrive", ...(saved?.writeOrder || []).filter(name => name !== "gdrive")],
     gdrive: { refreshToken: pending.refreshToken, folderId, connectedAt: new Date().toISOString() },
     ...(saved?.s3 ? { s3: saved.s3 } : {}),
   });

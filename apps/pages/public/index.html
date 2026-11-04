@@ -541,7 +541,15 @@
                   <form id="storage-config-form" class="card">
                     <div class="card-header"><h3 class="card-title"><i class="ti ti-cloud-upload me-2"></i>Nơi lưu ảnh và video sự kiện</h3></div>
                     <div class="card-body">
-                      <p class="text-secondary">Bạn có thể cấu hình cả S3 lẫn Google Drive. Mỗi sự kiện mới sẽ thử dịch vụ đang chọn bên dưới trước, nếu lỗi thì tự chuyển sang nơi lưu còn lại, và cuối cùng luôn có Cloudflare R2 làm phương án dự phòng — không mất clip khi một nơi lưu bị sự cố.</p>
+                      <p class="text-secondary">Kết nối một Google Drive và một S3. Gói Free ghi vào một ổ được chọn; gói Pro có thể tự chuyển sang ổ tiếp theo khi ổ ưu tiên đầy hoặc upload lỗi. Dữ liệu cũ vẫn xem được khi đổi chế độ lưu.</p>
+                      <div class="border rounded p-3 mb-3">
+                        <h4>Kho nhiều ổ <span class="badge bg-purple-lt">Pro</span></h4>
+                        <label class="form-check"><input id="storage-pool-enabled" type="checkbox" class="form-check-input"><span class="form-check-label">Tự chuyển sang ổ tiếp theo khi upload thất bại</span></label>
+                        <div id="storage-pool-note" class="text-secondary mb-2"></div>
+                        <div id="storage-pool-order"></div>
+                        <button id="save-storage-pool" type="button" class="btn btn-outline-primary mt-2">Lưu thứ tự và chế độ</button>
+                        <div class="form-hint">Ổ đầu tiên nhận dữ liệu mới. Tắt dùng chung sẽ chỉ ghi vào ổ đầu tiên. Mỗi video được lưu nguyên trên một ổ; nếu tất cả ổ đã chọn đều lỗi, upload sẽ báo thất bại.</div>
+                      </div>
                       <div class="mb-3"><label class="form-label">Dịch vụ lưu trữ</label><select id="storage-backend" class="form-select"><option value="r2">Cloudflare R2 của hệ thống</option><option value="s3">S3 của khách hàng / dịch vụ tương thích S3</option><option value="gdrive">Google Drive của khách hàng</option></select></div>
                       <div id="s3-config-fields" class="d-none">
                         <div class="row g-3">
@@ -1810,16 +1818,48 @@
     document.getElementById('save-storage-config').classList.toggle('d-none', backend === 'gdrive');
   }
 
+  let storagePoolOrder = [];
+  const storagePoolNames = { gdrive: 'Google Drive', s3: 'S3', r2: 'Cloudflare R2' };
+  function renderStoragePool() {
+    document.getElementById('storage-pool-order').innerHTML = storagePoolOrder.map((name, index) =>
+      `<div class="d-flex align-items-center gap-2 mb-2"><span class="badge bg-secondary-lt">${index + 1}</span><span class="flex-fill">${storagePoolNames[name]}</span><button type="button" class="btn btn-sm btn-outline-secondary" data-pool-up="${index}" ${index === 0 ? 'disabled' : ''}>Ưu tiên hơn</button></div>`).join('');
+  }
+  document.getElementById('storage-pool-order').addEventListener('click', event => {
+    const button = event.target.closest('[data-pool-up]');
+    if (!button) return;
+    const index = Number(button.dataset.poolUp);
+    if (index > 0) [storagePoolOrder[index - 1], storagePoolOrder[index]] = [storagePoolOrder[index], storagePoolOrder[index - 1]];
+    renderStoragePool();
+  });
+  document.getElementById('save-storage-pool').addEventListener('click', async () => {
+    const button = document.getElementById('save-storage-pool');
+    button.disabled = true;
+    try {
+      await api('/api/settings/storage-config', { method: 'PUT', body: JSON.stringify({ action: 'pool', order: storagePoolOrder, multiStorage: document.getElementById('storage-pool-enabled').checked }) });
+      await loadStorageConfig();
+      showSettingsMessage('Đã lưu cấu hình kho nhiều ổ');
+    } catch (error) { showSettingsMessage(error.message, false); }
+    finally { button.disabled = false; }
+  });
+
   async function loadStorageConfig() {
     const config = await api('/api/settings/storage-config');
+    storagePoolOrder = config.pool.order;
+    const poolToggle = document.getElementById('storage-pool-enabled');
+    poolToggle.checked = config.pool.multiStorage;
+    poolToggle.disabled = config.pool.plan !== 'pro';
+    document.getElementById('storage-pool-note').textContent = config.pool.plan === 'pro'
+      ? 'Pro: có thể dùng chung các ổ đã kết nối theo thứ tự bên dưới.'
+      : 'Free: chỉ ghi vào ổ đầu tiên. Nâng cấp Pro để tự chuyển qua nhiều ổ. Các ổ còn lại vẫn giữ kết nối để đọc dữ liệu cũ.';
+    renderStoragePool();
     document.getElementById('storage-backend').value = config.backend || 'r2';
     document.getElementById('s3-endpoint').value = config.endpoint || '';
     document.getElementById('s3-region').value = config.region || '';
     document.getElementById('s3-bucket').value = config.bucket || '';
     document.getElementById('s3-path-style').checked = config.forcePathStyle !== false;
     document.getElementById('s3-access-key').placeholder = config.accessKeyHint || '';
-    document.getElementById('s3-saved-note').textContent = config.configured && config.backend === 's3' ? 'Thông tin bí mật đã được mã hóa. Muốn tiếp tục dùng S3, hãy nhập lại access key và secret key khi lưu thay đổi.' : '';
-    document.getElementById('gdrive-saved-note').textContent = config.configured && config.backend === 'gdrive'
+    document.getElementById('s3-saved-note').textContent = Boolean(config.bucket) ? 'Thông tin bí mật đã được mã hóa. Muốn tiếp tục dùng S3, hãy nhập lại access key và secret key khi lưu thay đổi.' : '';
+    document.getElementById('gdrive-saved-note').textContent = Boolean(config.folderId)
       ? `Đã kết nối tới thư mục Drive (ID: ${config.folderId})${config.connectedAt ? ` lúc ${new Date(config.connectedAt).toLocaleString('vi-VN')}` : ''}. Bấm Kết nối lại để đổi sang thư mục khác.`
       : '';
     toggleStorageFields();
@@ -1958,6 +1998,7 @@
         const quota = Number(item.quotaBytes) || 0;
         const percent = quota ? Math.min(100, Math.round((Number(item.totalBytes) / quota) * 100)) : 0;
         let quotaBar = quota ? `<div class="progress progress-sm my-2"><div class="progress-bar ${percent >= 90 ? 'bg-danger' : percent >= 70 ? 'bg-warning' : 'bg-green'}" style="width: ${percent}%" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100"></div></div><div class="text-secondary small">${formatBytes(item.totalBytes)} / ${formatBytes(quota)} (${percent}%) · tự động xóa video cũ khi đầy</div>` : `<div class="h3 my-2">${formatBytes(item.totalBytes)}</div>`;
+        if (item.backend === 's3') quotaBar += '<div class="text-secondary small">Dung lượng tổng và còn trống: chưa xác định (S3 không cung cấp quota thống nhất).</div>';
         if (item.backend === 'gdrive') {
           const drive = item.driveQuota;
           if (drive) {
