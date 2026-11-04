@@ -1957,7 +1957,19 @@
       backendElement.innerHTML = (storage.backends || []).map(item => {
         const quota = Number(item.quotaBytes) || 0;
         const percent = quota ? Math.min(100, Math.round((Number(item.totalBytes) / quota) * 100)) : 0;
-        const quotaBar = quota ? `<div class="progress progress-sm my-2"><div class="progress-bar ${percent >= 90 ? 'bg-danger' : percent >= 70 ? 'bg-warning' : 'bg-green'}" style="width: ${percent}%" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100"></div></div><div class="text-secondary small">${formatBytes(item.totalBytes)} / ${formatBytes(quota)} (${percent}%) · tự động xóa video cũ khi đầy</div>` : `<div class="h3 my-2">${formatBytes(item.totalBytes)}</div>`;
+        let quotaBar = quota ? `<div class="progress progress-sm my-2"><div class="progress-bar ${percent >= 90 ? 'bg-danger' : percent >= 70 ? 'bg-warning' : 'bg-green'}" style="width: ${percent}%" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100"></div></div><div class="text-secondary small">${formatBytes(item.totalBytes)} / ${formatBytes(quota)} (${percent}%) · tự động xóa video cũ khi đầy</div>` : `<div class="h3 my-2">${formatBytes(item.totalBytes)}</div>`;
+        if (item.backend === 'gdrive') {
+          const drive = item.driveQuota;
+          if (drive) {
+            const limit = drive.limitBytes;
+            const used = drive.usedBytes;
+            const pct = limit > 0 && used != null ? Math.min(100, Math.round(used / limit * 100)) : null;
+            const camera = drive.cameraBytes == null ? 'Chưa đo được' : `${drive.cameraPartial ? 'Ít nhất ' : ''}${formatBytes(drive.cameraBytes)}`;
+            quotaBar = `<div class="h3 my-2">${camera} camera / ${limit == null ? 'chưa có hạn mức' : formatBytes(limit)}</div><div class="text-secondary small">File camera trong thư mục đang kết nối</div>`;
+            if (pct != null) quotaBar += `<div class="progress progress-sm my-2"><div class="progress-bar ${pct >= 90 ? 'bg-danger' : 'bg-green'}" style="width:${pct}%" role="progressbar" aria-label="Dung lượng tài khoản Google đã dùng" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"></div></div>`;
+            quotaBar += `<div class="text-secondary small">Tài khoản Google đã dùng: ${used == null ? 'Chưa rõ' : formatBytes(used)} · Còn trống: ${drive.remainingBytes == null ? 'Chưa rõ' : formatBytes(drive.remainingBytes)}</div><div class="text-secondary small">Hạn mức dùng chung Drive, Gmail và Photos; tài khoản tổ chức có thể dùng dung lượng chung.</div>`;
+          } else if (item.quotaError) quotaBar += `<div class="text-warning small">${escapeHtml(item.quotaError)}</div>`;
+        }
         return `<div class="col-sm-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between"><strong>${backendLabels[item.backend] || escapeHtml(item.backend)}</strong>${item.unavailable ? '<span class="badge bg-warning-lt">Chưa đo được</span>' : ''}</div>${quotaBar}<div class="text-secondary small">${Number(item.eventCount).toLocaleString()} event · ${Number(item.objectCount).toLocaleString()} file đã đo</div>${item.unavailable ? `<div class="text-warning small mt-1">Credential hết hạn hoặc kho không truy cập được.${item.error ? ` (${escapeHtml(item.error)})` : ''}</div>` : ''}</div></div>`;
       }).join('');
       backendElement.classList.remove('d-none');
@@ -1968,7 +1980,7 @@
       const issues = [];
       if (storage.missingObjects) issues.push(`${storage.missingObjects} file được DB tham chiếu nhưng không còn trong kho lưu trữ`);
       if (storage.orphanCount) issues.push(`${storage.orphanCount} file mồ côi (${formatBytes(storage.orphanBytes)})`);
-      if (storage.truncated) issues.push('Số liệu bị rút gọn vì tài khoản có trên 100.000 file');
+      if (storage.truncated) issues.push('Thống kê chi tiết bị giới hạn số file đo; tổng dung lượng tài khoản Google được lấy riêng từ Google');
       (storage.backends || []).filter(item => item.unavailable).forEach(item => issues.push(`Không đo được dung lượng ${backendLabels[item.backend] || item.backend}; số event lịch sử vẫn được giữ`));
       warning.textContent = issues.join(' · ');
       warning.classList.toggle('d-none', issues.length === 0);

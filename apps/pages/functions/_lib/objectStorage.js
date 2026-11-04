@@ -1,6 +1,6 @@
 import { getIntegration } from "./integrations.js";
 import { deleteS3, getS3, headS3, putS3 } from "./s3.js";
-import { deleteGoogleDrive, getGoogleDrive, headGoogleDrive, putGoogleDrive } from "./googleDrive.js";
+import { googleDriveUsage, deleteGoogleDrive, getGoogleDrive, headGoogleDrive, putGoogleDrive } from "./googleDrive.js";
 import { refreshGoogleAccessToken } from "./googleAuth.js";
 import { ensureR2Capacity } from "./storageQuota.js";
 
@@ -134,4 +134,10 @@ export async function deleteObjects(env, accountId, backend, keys) {
     if (!env.EVENTS_BUCKET) throw new Error("Kho R2 chưa được cấu hình");
     await env.EVENTS_BUCKET.delete(keys);
   }
+}
+
+export async function getGoogleDriveUsage(env, accountId) {
+  const saved = await getIntegration(env, accountId, "storage");
+  if (!saved?.gdrive?.refreshToken) return null;
+  return googleDriveUsage(await googleDriveConfig(env, accountId), accountId);
 }

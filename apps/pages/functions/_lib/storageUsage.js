@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import { headObject } from "./objectStorage.js";
+import { getGoogleDriveUsage, headObject } from "./objectStorage.js";
 import { R2_FREE_QUOTA_BYTES } from "./storageQuota.js";
 
 const MAX_LIST_PAGES = 100;
@@ -166,6 +166,10 @@ export async function storageUsage(env, accountId) {
     const usage = backendUsage.get(backend);
     if (usage) usage.objectCount += 1;
   }
+
+  const drive = backendUsage.get("gdrive");
+  try { drive.driveQuota = await getGoogleDriveUsage(env, accountId); }
+  catch { drive.quotaError = "Không đọc được dung lượng tài khoản Google. Thử làm mới hoặc kết nối lại Drive."; }
 
   return {
     ...summary,

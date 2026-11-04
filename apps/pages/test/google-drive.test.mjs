@@ -56,3 +56,34 @@ test("folder verification reports exhausted Drive quota instead of an internal s
   assert.match(error, /Google Drive đã hết dung lượng/);
   assert.doesNotMatch(error, /Internal server error|test-token/);
 });
+
+test("Drive usage paginates camera files and subtracts all Google usage from quota", async (t) => {
+  const { googleDriveUsage } = await import('../functions/_lib/googleDrive.js');
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('/about?')) return Response.json({ storageQuota: { limit: '1000', usage: '900', usageInDrive: '500' } });
+    const second = new URL(url).searchParams.get('pageToken');
+    return Response.json(second ? { files: [{ size: '200', appProperties: { cameraaiObjectKey: 'acct/2' } }] } : {
+      nextPageToken: 'next', files: [
+        { size: '100', appProperties: { cameraaiObjectKey: 'acct/1' } },
+        { size: '99', appProperties: { cameraaiObjectKey: 'other/1' } },
+        { size: '55' },
+      ],
+    });
+  });
+  assert.deepEqual(await googleDriveUsage({ accessToken: 'token', folderId: 'folder' }, 'acct'), {
+    limitBytes: 1000, usedBytes: 900, driveBytes: 500, remainingBytes: 100, cameraBytes: 300, cameraPartial: false,
+  });
+});
+
+test("Drive quota without a limit stays unknown and file-list failure preserves quota", async (t) => {
+  const { googleDriveUsage } = await import('../functions/_lib/googleDrive.js');
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('/about?')) return Response.json({ storageQuota: { usage: '900' } });
+    throw new Error('timeout');
+  });
+  const usage = await googleDriveUsage({ accessToken: 'token', folderId: 'folder' }, 'acct');
+  assert.equal(usage.limitBytes, null);
+  assert.equal(usage.remainingBytes, null);
+  assert.equal(usage.cameraBytes, null);
+  assert.equal(usage.usedBytes, 900);
+});

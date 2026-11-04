@@ -107,3 +107,37 @@ export async function testGoogleDrive(config) {
   if (!found) throw new Error("Kiểm tra Google Drive thất bại: không đọc lại được file thử");
   await deleteGoogleDrive(config, key);
 }
+
+// Account quota is shared with other Google services; camera bytes are scoped
+// to this account's tagged files in the currently connected folder.
+export async function googleDriveUsage(config, accountId) {
+  const signal = AbortSignal.timeout(15000);
+  const response = await ensureOk(await fetch(`${API}/about?fields=storageQuota`, {
+    headers: headers(config), signal,
+  }), "Đọc dung lượng");
+  const { storageQuota = {} } = await response.json();
+  const number = (value) => value != null && Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : null;
+  const limitBytes = number(storageQuota.limit);
+  const usedBytes = number(storageQuota.usage);
+  const quota = { limitBytes, usedBytes, driveBytes: number(storageQuota.usageInDrive),
+    remainingBytes: limitBytes != null && usedBytes != null ? Math.max(0, limitBytes - usedBytes) : null };
+  let cameraBytes = 0;
+  let pageToken;
+  try {
+    for (let page = 0; page < 100; page++) {
+      const q = `'${escapeQuery(config.folderId)}' in parents and trashed = false`;
+      const params = new URLSearchParams({ q, fields: "nextPageToken,files(size,appProperties)", pageSize: "1000", supportsAllDrives: "true", includeItemsFromAllDrives: "true" });
+      if (pageToken) params.set("pageToken", pageToken);
+      const listed = await ensureOk(await fetch(`${API}/files?${params}`, { headers: headers(config), signal }), "Đo file camera trên");
+      const data = await listed.json();
+      for (const file of data.files || []) {
+        if (file.appProperties?.cameraaiObjectKey?.startsWith(`${accountId}/`)) cameraBytes += number(file.size) || 0;
+      }
+      pageToken = data.nextPageToken;
+      if (!pageToken) break;
+    }
+    return { ...quota, cameraBytes, cameraPartial: Boolean(pageToken) };
+  } catch {
+    return { ...quota, cameraBytes: null, cameraPartial: true };
+  }
+}
