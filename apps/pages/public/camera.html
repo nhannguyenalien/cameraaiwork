@@ -190,7 +190,8 @@
 </main>
 <div id="timeline-preview" class="timeline-preview" role="tooltip" aria-hidden="true"></div>
 
-<script src="/ui-i18n-fallback.js?v=20260910-6"></script>
+<script src="/ui-translations.js?v=20261104-1"></script>
+<script src="/ui-i18n-fallback.js?v=20261104-1"></script>
 <script>
 const API_KEY_STORAGE = 'cameraaiwork_logged_in';
 localStorage.removeItem('cameraaiwork_api_key');
@@ -368,7 +369,7 @@ document.getElementById('camera-light-mode').addEventListener('change', async ev
 });
 
 async function gotoSelectedPreset(){const preset=document.getElementById('ptz-preset').value;if(preset)await api(endpoint('ptz'),{method:'POST',body:JSON.stringify({action:'gotoPreset',preset})});}
-async function savePreset(){const name=prompt('Tên preset mới:');if(!name)return;await api(endpoint('ptz'),{method:'POST',body:JSON.stringify({action:'setPreset',name})});await loadControls();}
+async function savePreset(){const name=prompt(uiText('Tên preset mới:'));if(!name)return;await api(endpoint('ptz'),{method:'POST',body:JSON.stringify({action:'setPreset',name})});await loadControls();}
 async function togglePatrol(){const button=document.getElementById('patrol-button');const active=button.dataset.active==='true';const presets=[...document.getElementById('ptz-preset').options].map(o=>o.value);try{await api(endpoint('ptz'),{method:'POST',body:JSON.stringify(active?{action:'stopPatrol'}:{action:'startPatrol',presets,intervalSeconds:15})});await loadControls();}catch(error){document.getElementById('camera-status').textContent=error.message;}}
 
 document.getElementById('camera-alarm').addEventListener('change', async event => {
@@ -480,7 +481,7 @@ async function loadVideoDays() {
   select.disabled = false;
   document.getElementById('timeline-time').disabled = false;
   select.innerHTML = timelineVideoDays.map(item => {
-    const label = dateFromDayAndTime(item.day).toLocaleDateString('vi-VN', {weekday:'short', day:'2-digit', month:'2-digit', year:'numeric'});
+    const label = dateFromDayAndTime(item.day).toLocaleDateString(uiLocale(), {weekday:'short', day:'2-digit', month:'2-digit', year:'numeric'});
     return `<option value="${escapeHtml(item.day)}">${escapeHtml(label)} · ${item.videoCount} clip</option>`;
   }).join('');
   const today = localDateValue(new Date());
@@ -520,7 +521,7 @@ function endTimelineAt(minutes) {
 }
 
 function formatTimelineTime(value, seconds = false) {
-  return new Intl.DateTimeFormat('vi-VN', {hour:'2-digit', minute:'2-digit', ...(seconds ? {second:'2-digit'} : {}), hour12:false}).format(new Date(value));
+  return new Intl.DateTimeFormat(uiLocale(), {hour:'2-digit', minute:'2-digit', ...(seconds ? {second:'2-digit'} : {}), hour12:false}).format(new Date(value));
 }
 
 async function loadEvents() {
@@ -697,7 +698,7 @@ function eventCard(event) {
   else if(event.video_status==='recording') video='<span class="badge bg-yellow-lt">Đang lưu video…</span>';
   else if(event.video_status==='error') video=`<div class="alert alert-danger py-2 mb-0"><strong>Lỗi lưu clip:</strong> ${escapeHtml(event.video_error||'Không rõ lỗi')}</div>`;
   else video='<span class="text-secondary small">Sự kiện không có video</span>';
-  return `<div class="card"><div class="card-header"><div><span class="badge ${isVehicle?'bg-orange-lt':'bg-blue-lt'} me-2"><i class="ti ${isVehicle?'ti-car':'ti-user'} me-1"></i>${isVehicle?'Có xe':'Có người'}</span><strong>${escapeHtml(person)}</strong></div><div class="card-actions text-secondary small"><i class="ti ti-clock me-1"></i>${escapeHtml(new Date(event.timestamp).toLocaleString('vi-VN'))}</div></div><div class="card-body"><div class="row g-3"><div class="col-lg-7">${event.image_key?`<img class="rounded event-image bg-secondary-lt" data-event-image="${escapeHtml(event.id)}" alt="Ảnh sự kiện ${escapeHtml(event.id)}" />`:'<div class="event-viewer-placeholder rounded text-secondary"><div class="text-center"><i class="ti ti-photo-off fs-1 d-block mb-2"></i>Không có ảnh sự kiện</div></div>'}</div><div class="col-lg-5"><div class="text-secondary small mb-2">SỰ KIỆN #${escapeHtml(event.id)}</div><div class="mb-3"><i class="ti ti-${isVehicle?'car':'user-check'} me-1"></i>AI xác nhận có ${isVehicle?'xe':'người'}</div>${video}</div></div></div></div>`;
+  return `<div class="card"><div class="card-header"><div><span class="badge ${isVehicle?'bg-orange-lt':'bg-blue-lt'} me-2"><i class="ti ${isVehicle?'ti-car':'ti-user'} me-1"></i>${isVehicle?'Có xe':'Có người'}</span><strong>${escapeHtml(person)}</strong></div><div class="card-actions text-secondary small"><i class="ti ti-clock me-1"></i>${escapeHtml(new Date(event.timestamp).toLocaleString(uiLocale()))}</div></div><div class="card-body"><div class="row g-3"><div class="col-lg-7">${event.image_key?`<img class="rounded event-image bg-secondary-lt" data-event-image="${escapeHtml(event.id)}" alt="Ảnh sự kiện ${escapeHtml(event.id)}" />`:'<div class="event-viewer-placeholder rounded text-secondary"><div class="text-center"><i class="ti ti-photo-off fs-1 d-block mb-2"></i>Không có ảnh sự kiện</div></div>'}</div><div class="col-lg-5"><div class="text-secondary small mb-2">SỰ KIỆN #${escapeHtml(event.id)}</div><div class="mb-3"><i class="ti ti-${isVehicle?'car':'user-check'} me-1"></i>${uiText(isVehicle?'AI xác nhận có xe':'AI xác nhận có người')}</div>${video}</div></div></div></div>`;
 }
 
 function timelineRatioFromPointer(event) {
@@ -880,7 +881,7 @@ document.getElementById('camera-config-form').addEventListener('submit', async e
 });
 
 document.getElementById('delete-camera').addEventListener('click', async () => {
-  if(!confirm('Xóa camera này và toàn bộ ảnh/video sự kiện? Thao tác này không thể hoàn tác.')) return;
+  if(!confirm(uiText('Xóa camera này và toàn bộ ảnh/video sự kiện? Thao tác này không thể hoàn tác.'))) return;
   try {
     await api(`/api/cameras/${encodeURIComponent(siteId)}/${encodeURIComponent(cameraId)}`, {method:'DELETE'});
     location.href='/';

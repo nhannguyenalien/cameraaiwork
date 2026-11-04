@@ -49,10 +49,14 @@
     event_recording:'Grabación de vídeo de eventos',event_recording_note:'Elige qué cámaras guardarán clips en R2 cuando la IA confirme una persona.',record_when_person:'Grabar vídeo al detectar una persona',recording_saved:'Preferencia de grabación guardada.',account_security:'Cuenta y seguridad',account_email:'Correo de inicio de sesión',legacy_email_note:'Esta cuenta de demostración antigua no tiene correo. Introduce uno para futuros accesos.',email_fixed_note:'El correo de inicio de sesión está vinculado a esta cuenta.',password_change_note:'Como has iniciado sesión, no necesitas la contraseña actual.',new_password:'Nueva contraseña',confirm_password:'Confirmar nueva contraseña',change_password:'Guardar correo y contraseña',password_mismatch:'Las nuevas contraseñas no coinciden.',password_changed:'Correo y contraseña guardados.',rotate_camera:'Girar cámara',hold_to_talk:'Mantener para hablar',talk_note:'Mantén pulsado hasta 10 segundos y suelta para reproducir por el altavoz de la cámara.',camera_light:'Luz de la cámara',checking_controls:'Comprobando controles…',camera_online:'La cámara está en línea.',camera_offline:'Los controles de la cámara están desconectados.',controls_unavailable:'Controles no disponibles',sending_audio:'Enviando audio…',recording_audio:'Grabando…',audio_played:'Audio reproducido por la cámara.',microphone_denied:'Micrófono no disponible. Permite el acceso en el navegador.',saving_clip:'Guardando clip…',clip_error:'Error al grabar el clip',site:'sitio',viewer:'espectador/cámara',relay_install:'Instalar relay en el VPS',relay_install_note:'Crea un comando de instalación de un solo uso. El sitio y las cámaras se vinculan a la cuenta/correo activo; el código caduca en 15 minutos.',create_install_command:'Crear comando de instalación',copy:'Copiar',r2_storage:'Uso del almacenamiento R2',storage_note:'Uso real; los límites no se aplican actualmente.',measuring_storage:'Midiendo almacenamiento…',site_camera:'Sitio / Cámara',event:'Evento',images:'Imágenes',video:'Vídeo',total:'Total',total_storage:'Almacenamiento total',event_images:'Imágenes de eventos',event_videos:'Vídeos de eventos',files:'archivos',clips:'clips',errors_recording:'{errors} errores · {recording} grabando',bot_token:'Token del bot',chat_id:'ID del chat',api_key:'Clave API',endpoint_id:'ID del endpoint'
   });
   const dictionaries = {vi,en,ja,fr,ko,es};
+  for (const [source, translations] of Object.entries(window.CameraTranslations || {})) if (source.startsWith('@')) {
+    for (const [locale, value] of Object.entries(translations)) if (dictionaries[locale]) dictionaries[locale][source.slice(1)] = value;
+  }
   const storageKey = 'cameraaiwork_docs_language';
   const requested = new URLSearchParams(location.search).get('lang');
   let language = dictionaries[requested] ? requested : (dictionaries[localStorage.getItem(storageKey)] ? localStorage.getItem(storageKey) : ((navigator.language || 'en').split('-')[0]));
   if (!dictionaries[language]) language = 'en';
+  localStorage.setItem(storageKey, language);
   const format = (key, values={}) => (dictionaries[language][key] || en[key] || key).replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '');
   function apply() {
     document.documentElement.lang = language;
@@ -60,7 +64,7 @@
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = format(el.dataset.i18nPlaceholder); });
     document.querySelectorAll('[data-language-select]').forEach(select => { select.value = language; });
     document.title = document.getElementById('dashboard')?.classList.contains('d-none')
-      ? (language === 'vi' ? 'CameraAIWork — An ninh thông minh, vận hành nhẹ nhàng' : 'CameraAIWork — Smart security, effortless operations')
+      ? ('CameraAIWork — ' + (window.CameraTranslations?.['An ninh thông minh, vận hành nhẹ nhàng']?.[language] || 'An ninh thông minh, vận hành nhẹ nhàng'))
       : `CameraAIWork — ${format('cameras')}`;
   }
   window.t = format;

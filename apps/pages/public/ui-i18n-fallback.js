@@ -184,60 +184,80 @@
   Object.assign(localizedCopy.es, {"Tư vấn": "Ayuda", "Tư vấn CameraAIWork": "Ayuda de CameraAIWork", "Trợ lý tư vấn CameraAIWork": "Asistente de CameraAIWork", "Đóng": "Cerrar", "Xin chào! Tôi có thể tư vấn về tính năng, bảng giá và cách sử dụng CameraAIWork.": "¡Hola! Puedo ayudarte con las funciones, los precios y la configuración de CameraAIWork.", "Nhập câu hỏi...": "Escribe tu pregunta...", "Câu hỏi tư vấn": "Pregunta de soporte", "Gửi": "Enviar", "Đang trả lời…": "Respondiendo…"});
   const supportErrors = {"en": "Sorry, I cannot reply right now: ", "ja": "申し訳ありません。現在回答できません：", "fr": "Désolé, je ne peux pas répondre pour le moment : ", "ko": "죄송합니다. 지금은 답변할 수 없습니다: ", "es": "Lo siento, no puedo responder ahora: "};
 
-  const storageKey = 'cameraaiwork_docs_language';
+
+  const catalog = window.CameraTranslations || {};
   const supported = new Set(['vi', 'en', 'ja', 'fr', 'ko', 'es']);
   const requested = new URLSearchParams(location.search).get('lang');
-  const stored = localStorage.getItem(storageKey);
-  const standaloneLocale = supported.has(requested) ? requested : (supported.has(stored) ? stored : null);
-  // Pages with the full dictionary set their own locale. Standalone legacy
-  // pages (notably camera details) inherit the locale selected on the dashboard.
-  if (!window.dashboardLanguage && standaloneLocale) document.documentElement.lang = standaloneLocale;
-  const currentLocale = () => (document.documentElement.lang || 'vi').split('-')[0];
-  const isNonVietnamese = () => currentLocale() !== 'vi';
+  const stored = localStorage.getItem('cameraaiwork_docs_language') || localStorage.getItem('cameraaiwork_legal_language');
+  const candidate = requested || stored || (navigator.language || 'en').split('-')[0];
+  if (!window.dashboardLanguage) document.documentElement.lang = supported.has(candidate) ? candidate : 'en';
+  const currentLocale = () => (document.documentElement.lang || 'en').split('-')[0];
+  if (supported.has(requested)) localStorage.setItem('cameraaiwork_docs_language', requested);
+  const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const templates = Object.entries(catalog).filter(([source]) => /\{\d+\}/.test(source)).map(([source, translations]) => {
+    const tokens = source.match(/\{\d+\}/g);
+    const pattern = new RegExp('^' + source.split(/\{\d+\}/).map(escapeRegex).join('(.*?)') + '$');
+    return {source, translations, tokens, pattern};
+  }).sort((a,b) => b.source.replace(/\{\d+\}/g,'').length - a.source.replace(/\{\d+\}/g,'').length);
   function translate(value) {
-    const trimmed = value.trim();
     const locale = currentLocale();
-    if (trimmed.startsWith('Xin lỗi, hiện chưa thể trả lời: ')) return value.replace('Xin lỗi, hiện chưa thể trả lời: ', supportErrors[locale] || 'Xin lỗi, hiện chưa thể trả lời: ');
-    let translated = localizedCopy[locale]?.[trimmed] || copy.get(trimmed);
-    if (!translated && trimmed.startsWith('Nhận diện khuôn mặt') && trimmed.includes('Bảo mật riêng tư')) translated = 'Face recognition  ✦  Motion detection  ✦  Instant alerts  ✦  AI Agent  ✦  Live view anywhere  ✦  Privacy-first security  ✦';
+    if (locale === 'vi') return value;
+    const trimmed = value.trim();
+    let translated = catalog[trimmed]?.[locale] || localizedCopy[locale]?.[trimmed] || (locale === 'en' ? copy.get(trimmed) : null);
+    if (!translated) for (const item of templates) {
+      const match = trimmed.match(item.pattern);
+      if (!match) continue;
+      const values = Object.fromEntries(item.tokens.map((token,i) => [token, match[i+1]]));
+      translated = item.translations[locale]?.replace(/\{\d+\}/g, token => values[token]);
+      if (translated) break;
+    }
     if (!translated) for (const [pattern, replacement] of localizedDynamic[locale] || []) if (pattern.test(trimmed)) { translated = trimmed.replace(pattern, replacement); break; }
-    if (!translated) for (const [pattern, replacement] of dynamic) if (pattern.test(trimmed)) { translated = trimmed.replace(pattern, replacement); break; }
-    return translated ? value.replace(trimmed, translated) : value;
+    if (!translated) for (const [pattern, replacement] of dynamic) if (pattern.test(trimmed)) {
+      const target = catalog[replacement]?.[locale] || (locale === 'en' ? replacement : null);
+      if (target) translated = trimmed.replace(pattern, target);
+      break;
+    }
+    return translated ? value.replace(trimmed, () => translated) : value;
   }
+  window.uiText = (source, values = {}) => translate(source).replace(/\{(\w+)\}/g, (token,key) => values[key] ?? token);
+  window.uiLocale = () => ({vi:'vi-VN', en:'en-US', ja:'ja-JP', fr:'fr-FR', ko:'ko-KR', es:'es-ES'}[currentLocale()] || 'en-US');
   function applyNode(root) {
-    if (!root || root.nodeType === Node.COMMENT_NODE || root.nodeName === 'SCRIPT' || root.nodeName === 'STYLE') return;
+    if (!root || root.nodeType === Node.COMMENT_NODE || ['SCRIPT','STYLE'].includes(root.nodeName)) return;
+    if (root.parentElement?.closest('[translate="no"],script,style')) return;
     if (root.nodeType === Node.TEXT_NODE) {
       if (root.parentElement?.closest('[data-i18n]')) return;
-      if (!originalText.has(root)) originalText.set(root, root.nodeValue);
-      const source = originalText.get(root);
-      const next = isNonVietnamese() ? translate(source) : source;
-      if (root.nodeValue !== next) root.nodeValue = next;
+      let state = originalText.get(root);
+      if (!state || root.nodeValue !== state.rendered) state = {source:root.nodeValue};
+      state.rendered = translate(state.source);
+      originalText.set(root, state);
+      if (root.nodeValue !== state.rendered) root.nodeValue = state.rendered;
       return;
     }
     if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_NODE) return;
     if (root.nodeType === Node.ELEMENT_NODE) {
+      if (root.getAttribute('translate') === 'no') return;
       if (!originalAttrs.has(root)) originalAttrs.set(root, {});
       const saved = originalAttrs.get(root);
       for (const attr of attrs) if (root.hasAttribute(attr)) {
         if (attr === 'placeholder' && root.hasAttribute('data-i18n-placeholder')) continue;
-        if (!(attr in saved)) saved[attr] = root.getAttribute(attr);
-        root.setAttribute(attr, isNonVietnamese() ? translate(saved[attr]) : saved[attr]);
+        const value = root.getAttribute(attr);
+        if (!saved[attr] || value !== saved[attr].rendered) saved[attr] = {source:value};
+        saved[attr].rendered = translate(saved[attr].source);
+        if (value !== saved[attr].rendered) root.setAttribute(attr, saved[attr].rendered);
       }
     }
     root.childNodes.forEach(applyNode);
   }
   function apply() {
     applyNode(document.body);
-    const sourceTitle = document.documentElement.dataset.originalTitle || document.title;
-    if (!document.documentElement.dataset.originalTitle) document.documentElement.dataset.originalTitle = sourceTitle;
-    document.title = isNonVietnamese() ? translate(sourceTitle) : sourceTitle;
+    if (!window.dashboardLanguage) document.title = translate(document.title);
   }
   window.applyLegacyTranslations = apply;
   document.addEventListener('DOMContentLoaded', () => {
     apply();
     new MutationObserver(records => records.forEach(record => {
-      if (record.type === 'characterData') applyNode(record.target);
+      if (record.type === 'characterData' || record.type === 'attributes') applyNode(record.target);
       else record.addedNodes.forEach(applyNode);
-    })).observe(document.body, { childList: true, characterData: true, subtree: true });
+    })).observe(document.body, { childList:true, characterData:true, attributes:true, attributeFilter:attrs, subtree:true });
   });
 })();

@@ -274,14 +274,14 @@
     set('changes-title', t.changesTitle); set('changes-body', t.changesBody);
     set('contact-title', t.contactTitle); set('contact-body', t.contactBody, true);
     document.getElementById('language-select').value = lang;
-    localStorage.setItem('cameraaiwork_legal_language', lang);
+    localStorage.setItem('cameraaiwork_docs_language', lang);
     const url = new URL(location.href);
     url.searchParams.set('lang', lang);
     history.replaceState(null, '', url);
   }
 
   const browserLanguage = navigator.language.toLowerCase().split('-')[0];
-  const initial = new URLSearchParams(location.search).get('lang') || localStorage.getItem('cameraaiwork_legal_language') || browserLanguage;
+  const initial = new URLSearchParams(location.search).get('lang') || localStorage.getItem('cameraaiwork_docs_language') || localStorage.getItem('cameraaiwork_legal_language') || browserLanguage;
   document.getElementById('language-select').addEventListener('change', (event) => applyLanguage(event.target.value));
   applyLanguage(initial);
 })();

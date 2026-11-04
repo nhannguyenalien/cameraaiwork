@@ -764,8 +764,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/js/tabler.min.js" integrity="sha384-fSOug2E78eoy8fAFcDbY60mgZb6eboMDErIUzTF1UWHQCmmN7LcTyt+uzxH8upW+" crossorigin="anonymous"></script>
-<script src="/dashboard-i18n.js?v=20260910-6"></script>
-<script src="/ui-i18n-fallback.js?v=20261003-3"></script>
+
+<script src="/ui-translations.js?v=20261104-1"></script>
+<script src="/dashboard-i18n.js?v=20261104-1"></script>
+<script src="/ui-i18n-fallback.js?v=20261104-1"></script>
 <script>
   function resourceText(key) {
     const language = document.documentElement.lang || 'vi';
@@ -1948,7 +1950,8 @@
           .addView(new google.picker.DocsView(google.picker.ViewId.FOLDERS).setSelectFolderEnabled(true).setIncludeFolders(true))
           .setOAuthToken(accessToken)
           .setDeveloperKey(pickerApiKey)
-          .setTitle('Chọn thư mục Drive lưu ảnh/video sự kiện')
+          .setLocale(document.documentElement.lang)
+          .setTitle(uiText('Chọn thư mục Drive lưu ảnh/video sự kiện'))
           .setSize(pickerWidth, pickerHeight)
           .setCallback((result) => {
             if (result.action === google.picker.Action.PICKED) resolve(result.docs[0]);
@@ -2356,8 +2359,8 @@
     body.innerHTML = keys.map((key) => `<tr>
       <td>${escapeHtml(key.label)}</td>
       <td><span class="badge ${key.scope === 'full' ? 'bg-orange-lt' : 'bg-green-lt'}">${SCOPE_LABELS[key.scope] || key.scope}</span></td>
-      <td class="text-secondary">${new Date(key.createdAt).toLocaleString('vi-VN')}</td>
-      <td class="text-secondary">${key.expiresAt ? new Date(key.expiresAt).toLocaleString('vi-VN') : 'Không hết hạn'}</td>
+      <td class="text-secondary">${new Date(key.createdAt).toLocaleString(uiLocale())}</td>
+      <td class="text-secondary">${key.expiresAt ? new Date(key.expiresAt).toLocaleString(uiLocale()) : 'Không hết hạn'}</td>
       <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="revokeApiKey('${key.id}', '${escapeHtml(key.label).replace(/'/g, "\\'")}')">Thu hồi</button></td>
     </tr>`).join('');
   }
@@ -2371,7 +2374,7 @@
   }
 
   async function revokeApiKey(id, label) {
-    if (!confirm(`Thu hồi key "${label}"? Mọi request dùng key này sẽ ngừng hoạt động ngay.`)) return;
+    if (!confirm(uiText('Thu hồi key "{0}"? Mọi request dùng key này sẽ ngừng hoạt động ngay.', {0:label}))) return;
     try {
       await api(`/api/settings/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' });
       await loadApiKeys();
@@ -2500,7 +2503,7 @@
   }
 
   async function pushSiteUpdate(siteId) {
-    if (!confirm('Đẩy update tới site này? Relay và AI worker sẽ restart trong quá trình cập nhật — live view/PTZ sẽ gián đoạn vài giây.')) return;
+    if (!confirm(uiText('Đẩy update tới site này? Relay và AI worker sẽ restart trong quá trình cập nhật — live view/PTZ sẽ gián đoạn vài giây.'))) return;
     const button = document.getElementById(`site-update-btn-${siteId}`);
     if (button) button.disabled = true;
     try {
