@@ -1919,7 +1919,7 @@
     const name = document.getElementById('storage-connection-name').value;
     button.disabled = true;
     try {
-      const { clientId, pickerApiKey } = await api('/api/settings/storage-config/google-client-info');
+      const { clientId, pickerApiKey, appId } = await api('/api/settings/storage-config/google-client-info');
       await ensureGoogleDriveLibs();
       // 1) Popup OAuth consent (drive.file scope) -> one-time authorization code.
       const code = await new Promise((resolve, reject) => {
@@ -1948,6 +1948,7 @@
         const pickerHeight = Math.max(400, Math.min(650, window.innerHeight - 32));
         const picker = new google.picker.PickerBuilder()
           .addView(new google.picker.DocsView(google.picker.ViewId.FOLDERS).setSelectFolderEnabled(true).setIncludeFolders(true))
+          .setAppId(appId)
           .setOAuthToken(accessToken)
           .setDeveloperKey(pickerApiKey)
           .setLocale(document.documentElement.lang)

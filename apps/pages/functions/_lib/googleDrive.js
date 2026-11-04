@@ -29,6 +29,11 @@ async function ensureOk(response, action) {
     error.status = 409;
     throw error;
   }
+  if (response.status === 403 && providerError?.errors?.some((item) => ["insufficientParentPermissions", "insufficientFilePermissions"].includes(item.reason))) {
+    const error = new Error("Không có quyền ghi vào thư mục Google Drive đã chọn. Hãy kết nối lại và chọn thư mục thuộc tài khoản Google này hoặc thư mục được chia sẻ với quyền chỉnh sửa.");
+    error.status = 403;
+    throw error;
+  }
   throw new Error(`${action} Google Drive thất bại (${response.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`);
 }
 

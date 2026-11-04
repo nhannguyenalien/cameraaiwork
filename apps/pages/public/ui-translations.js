@@ -1,5 +1,6 @@
 // Shared UI catalog. Preserve placeholders in every locale.
 window.CameraTranslations = {
+  "Không có quyền ghi vào thư mục Google Drive đã chọn. Hãy kết nối lại và chọn thư mục thuộc tài khoản Google này hoặc thư mục được chia sẻ với quyền chỉnh sửa.": {"en": "Cannot write to the selected Google Drive folder. Reconnect and select a folder owned by this Google account or shared with edit access.", "ja": "選択したGoogle Driveフォルダに書き込めません。再接続し、このGoogleアカウントが所有するフォルダ、または編集権限で共有されたフォルダを選択してください。", "fr": "Impossible d’écrire dans le dossier Google Drive sélectionné. Reconnectez-vous et choisissez un dossier appartenant à ce compte Google ou partagé avec un accès en modification.", "ko": "선택한 Google Drive 폴더에 쓸 수 없습니다. 다시 연결하고 이 Google 계정이 소유하거나 수정 권한으로 공유된 폴더를 선택하세요.", "es": "No se puede escribir en la carpeta de Google Drive seleccionada. Vuelve a conectar y elige una carpeta de esta cuenta de Google o compartida con permiso de edición."},
   "An ninh thông minh, vận hành nhẹ nhàng": {
     "en": "Smart security, effortless operations",
     "ja": "スマートセキュリティ、シンプルな運用",

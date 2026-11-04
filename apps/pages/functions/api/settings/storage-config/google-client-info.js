@@ -10,5 +10,6 @@ export const onRequestGet = withErrorHandling(async ({ env }) => {
   if (!env.GOOGLE_OAUTH_CLIENT_ID || !env.GOOGLE_PICKER_API_KEY) {
     return errorJson("Google Drive chưa được cấu hình trên hệ thống", 400);
   }
-  return json({ clientId: env.GOOGLE_OAUTH_CLIENT_ID, pickerApiKey: env.GOOGLE_PICKER_API_KEY });
+  const appId = env.GOOGLE_OAUTH_CLIENT_ID.split("-")[0];
+  return json({ appId, clientId: env.GOOGLE_OAUTH_CLIENT_ID, pickerApiKey: env.GOOGLE_PICKER_API_KEY });
 });

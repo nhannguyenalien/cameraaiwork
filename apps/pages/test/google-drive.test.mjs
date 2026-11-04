@@ -87,3 +87,22 @@ test("Drive quota without a limit stays unknown and file-list failure preserves 
   assert.equal(usage.cameraBytes, null);
   assert.equal(usage.usedBytes, 900);
 });
+
+ test("Drive parent permission rejection is actionable rather than HTTP 500", async (t) => {
+  const { withErrorHandling } = await import("../functions/_lib/http.js");
+  t.mock.method(console, "error", () => {});
+  t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).includes("uploadType=resumable")) return new Response(null, { headers: { location: "https://upload-session" } });
+    if (String(url) === "https://upload-session") return Response.json({ error: { errors: [{ reason: "insufficientParentPermissions" }] } }, { status: 403 });
+    return Response.json({ files: [] });
+  });
+  const response = await withErrorHandling(() => putGoogleDrive({ accessToken: "secret-token", folderId: "folder" }, "test", "test", "text/plain"))({});
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error, /Không có quyền ghi/);
+});
+
+test("Picker config identifies the OAuth project without exposing its secret", async () => {
+  const { onRequestGet } = await import("../functions/api/settings/storage-config/google-client-info.js");
+  const response = await onRequestGet({ env: { GOOGLE_OAUTH_CLIENT_ID: "123456-client.apps.googleusercontent.com", GOOGLE_PICKER_API_KEY: "public-picker-key", GOOGLE_OAUTH_CLIENT_SECRET: "secret" } });
+  assert.deepEqual(await response.json(), { appId: "123456", clientId: "123456-client.apps.googleusercontent.com", pickerApiKey: "public-picker-key" });
+});
