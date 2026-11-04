@@ -1109,7 +1109,7 @@ window.CameraTranslations = {
   "Giữ để nói": {
     "en": "Hold to talk",
     "ja": "押し続けて話す",
-    "fr": "Attends pour parler",
+    "fr": "Maintenir pour parler",
     "ko": "길게 눌러 말하세요",
     "es": "Espera para hablar"
   },
@@ -2327,7 +2327,7 @@ window.CameraTranslations = {
   "Khi có người đến, camera chào và hỏi qua loa (nói chuyện theo lượt), rồi tóm tắt cho chủ nhà. Quản gia chỉ trò chuyện và báo cáo, không mở được cổng.": {
     "en": "When someone arrives, the camera greets and asks questions through the speaker (turn-based conversation), then summarizes for the homeowner. The housekeeper only chats and reports, but cannot open the gate.",
     "ja": "誰かが到着すると、カメラが挨拶し、スピーカーを通じて質問し (ターンベースの会話)、住宅所有者に要約します。家政婦は雑談と報告のみで門を開けることはできません。",
-    "fr": "Lorsque quelqu'un arrive, la caméra salue et pose des questions via le haut-parleur (conversation au tour par tour), puis résume pour le propriétaire. La femme de ménage discute et rapporte uniquement, mais ne peut pas ouvrir le portail.",
+    "fr": "Lorsque quelqu'un arrive, la caméra salue et pose des questions via le haut-parleur (conversation au tour par tour), puis résume pour le propriétaire. L’assistant échange avec les visiteurs et transmet un compte rendu, mais ne peut pas ouvrir le portail.",
     "ko": "누군가 도착하면 카메라는 스피커를 통해 인사하고 질문(턴 기반 대화)을 한 다음 집주인에게 요약합니다. 가사도우미는 채팅과 보고만 할 뿐 대문을 열 수는 없습니다.",
     "es": "Cuando llega alguien, la cámara saluda y hace preguntas a través del orador (conversación por turnos) y luego resume para el propietario. El ama de llaves solo charla e informa, pero no puede abrir la puerta."
   },
