@@ -109,7 +109,7 @@ export async function createAccount(env, input) {
   await db.batch([
     { sql: "INSERT INTO accounts (id, name, email, plan, subscription_status) VALUES (?, ?, ?, 'free', 'inactive')", args: [accountId, normalizedName || normalizedEmail, normalizedEmail] },
     { sql: "INSERT INTO auth_credentials (account_id, password_salt, password_hash, password_iterations) VALUES (?, ?, ?, ?)", args: [accountId, salt, passwordHash, PASSWORD_PBKDF2_ITERATIONS] },
-    { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web signup', CURRENT_TIMESTAMP + INTERVAL '12 hours')", args: [await sha256Hex(apiKey), accountId] },
+    { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web signup', CURRENT_TIMESTAMP + INTERVAL '30 days')", args: [await sha256Hex(apiKey), accountId] },
   ]);
   return { accountId, apiKey };
 }
@@ -133,7 +133,7 @@ export async function login(env, { email, password }) {
   await db.batch([
     { sql: "UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = ? AND label LIKE 'web %' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at < CURRENT_TIMESTAMP)", args: [row.id] },
     { sql: "DELETE FROM api_keys WHERE account_id = ? AND label LIKE 'web %' AND ((revoked_at IS NOT NULL AND revoked_at < CURRENT_TIMESTAMP - INTERVAL '30 days') OR expires_at < CURRENT_TIMESTAMP - INTERVAL '30 days')", args: [row.id] },
-    { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web login', CURRENT_TIMESTAMP + INTERVAL '12 hours')", args: [await sha256Hex(apiKey), row.id] },
+    { sql: "INSERT INTO api_keys (id, account_id, label, expires_at) VALUES (?, ?, 'web login', CURRENT_TIMESTAMP + INTERVAL '30 days')", args: [await sha256Hex(apiKey), row.id] },
   ]);
   return { accountId: row.id, apiKey };
 }

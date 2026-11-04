@@ -1214,7 +1214,7 @@
   function openCamera(index) {
     const c = cameras[index];
     const query = new URLSearchParams({ site: c.siteId, camera: c.cameraId });
-    location.href = `/camera.html?${query}`;
+    location.href = `/camera?${query}`;
   }
 
   async function move(dir) {

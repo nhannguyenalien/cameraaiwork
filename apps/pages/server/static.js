@@ -41,8 +41,13 @@ export function createStatic(publicDir, globalHeaders) {
     let pathname;
     try { pathname = decodeURIComponent(url.pathname); } catch { return null; }
     if (/(^|\/)_(headers|redirects)$/.test(pathname)) return null;
-    if (pathname.endsWith("/index.html")) return Response.redirect(new URL(pathname.slice(0, -10) || "/", url), 308);
-    if (pathname.endsWith(".html") && pathname !== "/404.html") return Response.redirect(new URL(pathname.slice(0, -5), url), 308);
+    const redirect = (targetPath) => {
+      const target = new URL(url);
+      target.pathname = targetPath;
+      return Response.redirect(target, 308);
+    };
+    if (pathname.endsWith("/index.html")) return redirect(pathname.slice(0, -10) || "/");
+    if (pathname.endsWith(".html") && pathname !== "/404.html") return redirect(pathname.slice(0, -5));
     const base = normalize(join(publicDir, pathname));
     if (!(base + sep).startsWith(root) && base !== normalize(publicDir)) return null;
     let file = null;
@@ -53,7 +58,7 @@ export function createStatic(publicDir, globalHeaders) {
       if (info) { file = info; path = candidate; break; }
     }
     if (!file) return null;
-    if (pathname.endsWith("/") === false && path === join(base, "index.html")) return Response.redirect(new URL(`${pathname}/`, url), 308);
+    if (pathname.endsWith("/") === false && path === join(base, "index.html")) return redirect(`${pathname}/`);
     const headers = new Headers({ ...globalHeaders, "Content-Type": TYPES[extname(path)] || "application/octet-stream", "Accept-Ranges": "bytes", "Last-Modified": file.mtime.toUTCString() });
     headers.set("ETag", `W/"${file.size}-${Math.floor(file.mtimeMs)}"`);
     if (request.headers.get("if-none-match") === headers.get("ETag")) return new Response(null, { status: 304, headers });
