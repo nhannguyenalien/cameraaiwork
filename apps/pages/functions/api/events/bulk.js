@@ -13,7 +13,7 @@ export const onRequestDelete = withErrorHandling(async ({ request, env, data }) 
     sql: `SELECT id, image_key, video_key, storage_backend FROM events WHERE account_id = ? AND id IN (${placeholders})`,
     args: [data.accountId, ...ids],
   });
-  for (const backend of ["r2", "s3", "gdrive"]) {
+  for (const backend of new Set(found.rows.map(row => row.storage_backend || "r2"))) {
     const keys = found.rows.filter((row) => (row.storage_backend || "r2") === backend).flatMap((row) => [row.image_key, row.video_key]).filter(Boolean);
     await deleteObjects(env, data.accountId, backend, keys);
   }

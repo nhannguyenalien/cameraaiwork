@@ -81,3 +81,20 @@ export async function integrationStatus(env, accountId) {
   }));
   return Object.fromEntries(entries);
 }
+
+// Optimistic updates prevent simultaneous OAuth completions from losing a slot
+// or bypassing the per-provider cap. The mutation is rerun against fresh data.
+export async function updateIntegration(env, accountId, provider, mutate) {
+  const db = getDb(env, "_lib.integrations");
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const result = await db.execute({ sql: "SELECT encrypted_config FROM account_integrations WHERE account_id = ? AND provider = ?", args: [accountId, provider] });
+    const previous = result.rows[0]?.encrypted_config;
+    const updated = mutate(previous ? await decryptConfig(env, previous) : {});
+    const encrypted = await encryptConfig(env, updated);
+    const written = previous
+      ? await db.execute({ sql: "UPDATE account_integrations SET encrypted_config = ?, updated_at = datetime('now') WHERE account_id = ? AND provider = ? AND encrypted_config = ? RETURNING provider", args: [encrypted, accountId, provider, previous] })
+      : await db.execute({ sql: "INSERT INTO account_integrations (account_id, provider, encrypted_config, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(account_id, provider) DO NOTHING RETURNING provider", args: [accountId, provider, encrypted] });
+    if (written.rows.length) return updated;
+  }
+  throw Object.assign(new Error("Cấu hình vừa thay đổi, hãy thử lại"), { status: 409 });
+}

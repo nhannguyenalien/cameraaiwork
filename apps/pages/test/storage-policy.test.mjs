@@ -33,6 +33,7 @@ test('API blocks Free pool activation; Pro priority persists and downgrade gates
   env.DB_CLIENT = { unsafe: async (sql, args) => {
     if (sql.includes('SELECT encrypted_config')) return [{ encrypted_config: encrypted }];
     if (sql.includes('SELECT plan')) return [account];
+    if (sql.includes('UPDATE account_integrations')) { if (encrypted !== args[3]) return []; encrypted = args[0]; return [{ provider: 'storage' }]; }
     if (sql.includes('INSERT INTO account_integrations')) { encrypted = args[2]; return []; }
     throw new Error(`Unexpected query: ${sql}`);
   } };

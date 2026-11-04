@@ -1,3 +1,5 @@
+import { getIntegration } from "./integrations.js";
+import { storageConnections, storageProvider } from "./storagePolicy.js";
 import { getDb } from "./db.js";
 import { getGoogleDriveUsage, headObject } from "./objectStorage.js";
 import { R2_FREE_QUOTA_BYTES } from "./storageQuota.js";
@@ -7,7 +9,7 @@ const MAX_LIST_PAGES = 100;
 // keys per backend the dashboard summary would take minutes and hammer the
 // provider (Google Drive rate-limits), so only the newest keys are measured.
 const MAX_HEAD_KEYS = 100;
-const BACKENDS = ["r2", "s3", "gdrive"];
+
 
 function emptyBackend(backend) {
   return {
@@ -58,6 +60,8 @@ export async function storageUsage(env, accountId) {
     args: [accountId],
   });
 
+  const connections = storageConnections(await getIntegration(env, accountId, "storage"));
+  const BACKENDS = [...new Set(["r2", ...connections.map(item => item.id), ...result.rows.map(row => row.storage_backend || "r2")])];
   const objects = new Map();
   const unmeasured = new Set();
   const backendUsage = new Map(BACKENDS.map((backend) => [backend, emptyBackend(backend)]));
@@ -73,7 +77,7 @@ export async function storageUsage(env, accountId) {
     }
   }
 
-  for (const backend of ["s3", "gdrive"]) {
+  for (const backend of BACKENDS.filter(id => id !== "r2")) {
     const allKeys = [...new Set(result.rows
       .filter((row) => row.storage_backend === backend)
       .flatMap((row) => [row.image_key, row.video_key]).filter(Boolean).map(String))];
@@ -167,9 +171,14 @@ export async function storageUsage(env, accountId) {
     if (usage) usage.objectCount += 1;
   }
 
-  const drive = backendUsage.get("gdrive");
-  try { drive.driveQuota = await getGoogleDriveUsage(env, accountId); }
-  catch { drive.quotaError = "Không đọc được dung lượng tài khoản Google. Thử làm mới hoặc kết nối lại Drive."; }
+  for (const [id, usage] of backendUsage) {
+    usage.provider = storageProvider(id);
+    usage.name = connections.find(item => item.id === id)?.name || id;
+    if (usage.provider === "gdrive") {
+      try { usage.driveQuota = await getGoogleDriveUsage(env, accountId, id); }
+      catch { usage.quotaError = "Không đọc được dung lượng tài khoản Google. Thử kết nối lại Drive."; }
+    }
+  }
 
   return {
     ...summary,

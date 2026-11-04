@@ -111,21 +111,16 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
 
   // The event is already durable at this point. Snapshot and clip persistence
   // are independent so a broken video stream never removes the event/photo.
-  // They must still land on the same storage_backend (one column covers the
-  // whole event row), so the clip upload below waits for the snapshot's
-  // fallback decision and tries that backend first. If the snapshot upload
-  // fails on every candidate (only possible if R2 itself is broken, since
-  // it's always last in the chain), the clip independently runs the full
-  // chain — the two could then diverge, but that only happens alongside a
-  // platform-level R2 outage.
+  // Both objects share one location column. When video falls back to another
+  // connection, copy the snapshot there before changing that location.
   let resolveSnapshotBackend;
   const snapshotBackendKnown = new Promise((resolve) => { resolveSnapshotBackend = resolve; });
 
   waitUntil(
     uploadSnapshot(env, site.account_id, storageChain, frame, `${site.account_id}/${eventId}.jpg`)
       .then(async ({ key, backend }) => {
-        resolveSnapshotBackend(backend);
         await db.execute({ sql: "UPDATE events SET image_key = ?, storage_backend = ? WHERE id = ?", args: [key, backend, eventId] });
+        resolveSnapshotBackend(backend);
         if (backend === "r2") await triggerGpuScan(env, eventId);
       })
       .catch((err) => {
@@ -139,9 +134,13 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   if (shouldRecord) {
     waitUntil(
       snapshotBackendKnown
-        .then((snapshotBackend) => {
+        .then(async (snapshotBackend) => {
           const clipChain = snapshotBackend ? [snapshotBackend, ...storageChain.filter((b) => b !== snapshotBackend)] : storageChain;
-          return uploadClip(env, site.account_id, clipChain, clipPromise, `${site.account_id}/${eventId}.mp4`);
+          const uploaded = await uploadClip(env, site.account_id, clipChain, clipPromise, `${site.account_id}/${eventId}.mp4`);
+          if (snapshotBackend && snapshotBackend !== uploaded.backend) {
+            await uploadSnapshot(env, site.account_id, [uploaded.backend], frame, `${site.account_id}/${eventId}.jpg`);
+          }
+          return uploaded;
         })
         .then(({ key, backend }) => db.execute({
           sql: "UPDATE events SET video_key = ?, storage_backend = ?, video_status = 'ready', video_error = NULL WHERE id = ?",

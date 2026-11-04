@@ -541,7 +541,7 @@
                   <form id="storage-config-form" class="card">
                     <div class="card-header"><h3 class="card-title"><i class="ti ti-cloud-upload me-2"></i>Nơi lưu ảnh và video sự kiện</h3></div>
                     <div class="card-body">
-                      <p class="text-secondary">Kết nối một Google Drive và một S3. Gói Free ghi vào một ổ được chọn; gói Pro có thể tự chuyển sang ổ tiếp theo khi ổ ưu tiên đầy hoặc upload lỗi. Dữ liệu cũ vẫn xem được khi đổi chế độ lưu.</p>
+                      <p class="text-secondary">Kết nối tối đa 3 tài khoản Google Drive và 3 kết nối S3 với gói Pro. Gói Free ghi vào một ổ được chọn; gói Pro có thể tự chuyển sang ổ tiếp theo khi ổ ưu tiên đầy hoặc upload lỗi. Dữ liệu cũ vẫn xem được khi đổi chế độ lưu.</p>
                       <div class="border rounded p-3 mb-3">
                         <h4>Kho nhiều ổ <span class="badge bg-purple-lt">Pro</span></h4>
                         <label class="form-check"><input id="storage-pool-enabled" type="checkbox" class="form-check-input"><span class="form-check-label">Tự chuyển sang ổ tiếp theo khi upload thất bại</span></label>
@@ -551,6 +551,7 @@
                         <div class="form-hint">Ổ đầu tiên nhận dữ liệu mới. Tắt dùng chung sẽ chỉ ghi vào ổ đầu tiên. Mỗi video được lưu nguyên trên một ổ; nếu tất cả ổ đã chọn đều lỗi, upload sẽ báo thất bại.</div>
                       </div>
                       <div class="mb-3"><label class="form-label">Dịch vụ lưu trữ</label><select id="storage-backend" class="form-select"><option value="r2">Cloudflare R2 của hệ thống</option><option value="s3">S3 của khách hàng / dịch vụ tương thích S3</option><option value="gdrive">Google Drive của khách hàng</option></select></div>
+                      <div id="storage-connection-fields" class="mb-3 d-none"><label class="form-label" for="storage-connection">Tài khoản / kết nối</label><select id="storage-connection" class="form-select mb-2"></select><div id="storage-connection-note" class="form-hint mb-2"></div><label class="form-label" for="storage-connection-name">Tên dễ nhớ</label><input id="storage-connection-name" class="form-control" maxlength="80" placeholder="Ví dụ: Drive trường A"></div>
                       <div id="s3-config-fields" class="d-none">
                         <div class="row g-3">
                           <div class="col-md-6"><label class="form-label">Endpoint HTTPS</label><input id="s3-endpoint" class="form-control" placeholder="https://s3.ap-southeast-1.amazonaws.com" /></div>
@@ -565,7 +566,7 @@
                       </div>
                       <div id="gdrive-config-fields" class="d-none">
                         <button id="gdrive-connect" class="btn btn-outline-primary" type="button"><i class="ti ti-brand-google me-1"></i>Kết nối Google Drive</button>
-                        <div class="form-hint mt-2">Bấm nút trên để cấp quyền qua Google rồi chọn thư mục Drive ngay trong hộp thoại hiện ra. Chỉ cần làm một lần, hệ thống tự làm mới quyền truy cập — không cần dán token hay Folder ID tay, và không bao giờ hết hạn.</div>
+                        <div class="form-hint mt-2">Bấm nút trên để cấp quyền qua Google rồi chọn thư mục Drive ngay trong hộp thoại hiện ra. Chỉ cần làm một lần, hệ thống tự làm mới quyền truy cập — không cần dán token hay Folder ID tay, có thể cần kết nối lại nếu quyền bị thu hồi.</div>
                         <div id="gdrive-saved-note" class="form-hint mt-1"></div>
                       </div>
                     </div>
@@ -1626,10 +1627,10 @@
   }
 
   function storageBackendBadge(backend) {
-    const normalized = backend || 'r2';
+    const normalized = (backend || 'r2').split('-')[0];
     const labels = { r2: 'Mặc định (R2)', s3: 'S3', gdrive: 'Google Drive' };
     const colors = { r2: 'bg-blue-lt', s3: 'bg-azure-lt', gdrive: 'bg-green-lt' };
-    return `<span class="badge ${colors[normalized] || 'bg-secondary-lt'}">${labels[normalized] || escapeHtml(normalized)}</span>`;
+    return `<span class="badge ${colors[normalized] || 'bg-secondary-lt'}">${escapeHtml(storagePoolNames[backend] || labels[normalized] || normalized)}</span>`;
   }
 
   document.getElementById('events-prev').addEventListener('click', () => {
@@ -1811,6 +1812,7 @@
 
   function toggleStorageFields() {
     const backend = document.getElementById('storage-backend').value;
+    document.getElementById('storage-connection-fields').classList.toggle('d-none', backend === 'r2');
     document.getElementById('s3-config-fields').classList.toggle('d-none', backend !== 's3');
     document.getElementById('gdrive-config-fields').classList.toggle('d-none', backend !== 'gdrive');
     // Google Drive connects via OAuth (the dedicated button below), not via
@@ -1819,10 +1821,34 @@
   }
 
   let storagePoolOrder = [];
+  let storageConnections = [];
+  let storagePlan = 'free';
+  function fillStorageConnection() {
+    const config = storageConnections.find(item => item.id === document.getElementById('storage-connection').value) || {};
+    document.getElementById('storage-connection-name').value = config.name || '';
+    for (const field of ['endpoint', 'region', 'bucket']) document.getElementById(`s3-${field}`).value = config[field] || '';
+    for (const field of ['access-key', 'secret-key', 'session-token']) document.getElementById(`s3-${field}`).value = '';
+    document.getElementById('s3-path-style').checked = config.forcePathStyle !== false;
+    document.getElementById('s3-access-key').placeholder = config.accessKeyHint || '';
+    document.getElementById('s3-saved-note').textContent = config.bucket ? 'Nhập lại khóa khi cập nhật. Đổi bucket cần thêm kết nối mới để giữ dữ liệu cũ.' : '';
+    document.getElementById('gdrive-saved-note').textContent = config.folderId ? `Thư mục đã kết nối: ${config.folderId}. Kết nối lại cùng thư mục để cấp lại quyền; chọn Thêm tài khoản để dùng thư mục khác.` : '';
+  }
+  function renderStorageConnections(selectedId) {
+    const provider = document.getElementById('storage-backend').value;
+    const items = storageConnections.filter(item => item.provider === provider);
+    const canAdd = items.length < 3 && (items.length === 0 || storagePlan === 'pro');
+    const select = document.getElementById('storage-connection');
+    select.innerHTML = items.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('') + (canAdd ? '<option value="">+ Thêm tài khoản / kết nối</option>' : '');
+    if (selectedId && items.some(item => item.id === selectedId)) select.value = selectedId;
+    document.getElementById('storage-connection-note').textContent = `${items.length}/3 kết nối. ` + (items.length >= 3 ? 'Đã đạt giới hạn nhà cung cấp này.' : storagePlan !== 'pro' && items.length ? 'Nâng cấp Pro để thêm tài khoản.' : 'Mỗi kết nối có thư mục hoặc bucket riêng.');
+    fillStorageConnection();
+    toggleStorageFields();
+  }
+  document.getElementById('storage-connection').addEventListener('change', fillStorageConnection);
   const storagePoolNames = { gdrive: 'Google Drive', s3: 'S3', r2: 'Cloudflare R2' };
   function renderStoragePool() {
     document.getElementById('storage-pool-order').innerHTML = storagePoolOrder.map((name, index) =>
-      `<div class="d-flex align-items-center gap-2 mb-2"><span class="badge bg-secondary-lt">${index + 1}</span><span class="flex-fill">${storagePoolNames[name]}</span><button type="button" class="btn btn-sm btn-outline-secondary" data-pool-up="${index}" ${index === 0 ? 'disabled' : ''}>Ưu tiên hơn</button></div>`).join('');
+      `<div class="d-flex align-items-center gap-2 mb-2"><span class="badge bg-secondary-lt">${index + 1}</span><span class="flex-fill">${escapeHtml(storagePoolNames[name] || name)}</span><button type="button" class="btn btn-sm btn-outline-secondary" data-pool-up="${index}" ${index === 0 ? 'disabled' : ''}>Ưu tiên hơn</button></div>`).join('');
   }
   document.getElementById('storage-pool-order').addEventListener('click', event => {
     const button = event.target.closest('[data-pool-up]');
@@ -1851,21 +1877,15 @@
     document.getElementById('storage-pool-note').textContent = config.pool.plan === 'pro'
       ? 'Pro: có thể dùng chung các ổ đã kết nối theo thứ tự bên dưới.'
       : 'Free: chỉ ghi vào ổ đầu tiên. Nâng cấp Pro để tự chuyển qua nhiều ổ. Các ổ còn lại vẫn giữ kết nối để đọc dữ liệu cũ.';
+    storageConnections = config.connections || [];
+    storagePlan = config.pool.plan;
+    for (const item of storageConnections) storagePoolNames[item.id] = item.name;
     renderStoragePool();
-    document.getElementById('storage-backend').value = config.backend || 'r2';
-    document.getElementById('s3-endpoint').value = config.endpoint || '';
-    document.getElementById('s3-region').value = config.region || '';
-    document.getElementById('s3-bucket').value = config.bucket || '';
-    document.getElementById('s3-path-style').checked = config.forcePathStyle !== false;
-    document.getElementById('s3-access-key').placeholder = config.accessKeyHint || '';
-    document.getElementById('s3-saved-note').textContent = Boolean(config.bucket) ? 'Thông tin bí mật đã được mã hóa. Muốn tiếp tục dùng S3, hãy nhập lại access key và secret key khi lưu thay đổi.' : '';
-    document.getElementById('gdrive-saved-note').textContent = Boolean(config.folderId)
-      ? `Đã kết nối tới thư mục Drive (ID: ${config.folderId})${config.connectedAt ? ` lúc ${new Date(config.connectedAt).toLocaleString('vi-VN')}` : ''}. Bấm Kết nối lại để đổi sang thư mục khác.`
-      : '';
-    toggleStorageFields();
+    document.getElementById('storage-backend').value = storageConnections.find(item => item.id === config.backend)?.provider || 'r2';
+    renderStorageConnections(config.backend);
   }
 
-  document.getElementById('storage-backend').addEventListener('change', toggleStorageFields);
+  document.getElementById('storage-backend').addEventListener('change', () => renderStorageConnections());
 
   // Loads an external <script> at most once, resolving when it's ready.
   const loadedScripts = new Map();
@@ -1893,6 +1913,8 @@
 
   document.getElementById('gdrive-connect').addEventListener('click', async () => {
     const button = document.getElementById('gdrive-connect');
+    const connectionId = document.getElementById('storage-connection').value || null;
+    const name = document.getElementById('storage-connection-name').value;
     button.disabled = true;
     try {
       const { clientId, pickerApiKey } = await api('/api/settings/storage-config/google-client-info');
@@ -1938,7 +1960,7 @@
       // 4) Pair the picked folder with the pending refresh_token server-side.
       await api('/api/settings/storage-config/google-finalize', {
         method: 'POST',
-        body: JSON.stringify({ pending, folderId: folder.id }),
+        body: JSON.stringify({ pending, folderId: folder.id, connectionId, name }),
       });
       showSettingsMessage(`Đã kết nối Google Drive: thư mục "${folder.name}".`);
       await loadStorageConfig();
@@ -1958,6 +1980,8 @@
     try {
       const payload = backend === 'r2' ? { backend } : {
         backend,
+        connectionId: document.getElementById('storage-connection').value || null,
+        name: document.getElementById('storage-connection-name').value,
         endpoint: document.getElementById('s3-endpoint').value,
         region: document.getElementById('s3-region').value,
         bucket: document.getElementById('s3-bucket').value,
@@ -1998,8 +2022,8 @@
         const quota = Number(item.quotaBytes) || 0;
         const percent = quota ? Math.min(100, Math.round((Number(item.totalBytes) / quota) * 100)) : 0;
         let quotaBar = quota ? `<div class="progress progress-sm my-2"><div class="progress-bar ${percent >= 90 ? 'bg-danger' : percent >= 70 ? 'bg-warning' : 'bg-green'}" style="width: ${percent}%" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100"></div></div><div class="text-secondary small">${formatBytes(item.totalBytes)} / ${formatBytes(quota)} (${percent}%) · tự động xóa video cũ khi đầy</div>` : `<div class="h3 my-2">${formatBytes(item.totalBytes)}</div>`;
-        if (item.backend === 's3') quotaBar += '<div class="text-secondary small">Dung lượng tổng và còn trống: chưa xác định (S3 không cung cấp quota thống nhất).</div>';
-        if (item.backend === 'gdrive') {
+        if ((item.provider || item.backend) === 's3') quotaBar += '<div class="text-secondary small">Dung lượng tổng và còn trống: chưa xác định (S3 không cung cấp quota thống nhất).</div>';
+        if ((item.provider || item.backend) === 'gdrive') {
           const drive = item.driveQuota;
           if (drive) {
             const limit = drive.limitBytes;
@@ -2011,7 +2035,7 @@
             quotaBar += `<div class="text-secondary small">Tài khoản Google đã dùng: ${used == null ? 'Chưa rõ' : formatBytes(used)} · Còn trống: ${drive.remainingBytes == null ? 'Chưa rõ' : formatBytes(drive.remainingBytes)}</div><div class="text-secondary small">Hạn mức dùng chung Drive, Gmail và Photos; tài khoản tổ chức có thể dùng dung lượng chung.</div>`;
           } else if (item.quotaError) quotaBar += `<div class="text-warning small">${escapeHtml(item.quotaError)}</div>`;
         }
-        return `<div class="col-sm-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between"><strong>${backendLabels[item.backend] || escapeHtml(item.backend)}</strong>${item.unavailable ? '<span class="badge bg-warning-lt">Chưa đo được</span>' : ''}</div>${quotaBar}<div class="text-secondary small">${Number(item.eventCount).toLocaleString()} event · ${Number(item.objectCount).toLocaleString()} file đã đo</div>${item.unavailable ? `<div class="text-warning small mt-1">Credential hết hạn hoặc kho không truy cập được.${item.error ? ` (${escapeHtml(item.error)})` : ''}</div>` : ''}</div></div>`;
+        return `<div class="col-sm-6 col-xl-4"><div class="border rounded p-3 h-100"><div class="d-flex justify-content-between"><strong>${escapeHtml(item.name || backendLabels[item.backend] || item.backend)}</strong>${item.unavailable ? '<span class="badge bg-warning-lt">Chưa đo được</span>' : ''}</div>${quotaBar}<div class="text-secondary small">${Number(item.eventCount).toLocaleString()} event · ${Number(item.objectCount).toLocaleString()} file đã đo</div>${item.unavailable ? `<div class="text-warning small mt-1">Credential hết hạn hoặc kho không truy cập được.${item.error ? ` (${escapeHtml(item.error)})` : ''}</div>` : ''}</div></div>`;
       }).join('');
       backendElement.classList.remove('d-none');
       document.getElementById('storage-cameras').innerHTML = storage.cameras.map(camera => {

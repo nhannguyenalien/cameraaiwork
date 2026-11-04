@@ -1,10 +1,12 @@
+import { effectivePlanForAccount } from "../../../_lib/plans.js";
+import { saveStorageConnection } from "../../../_lib/storagePolicy.js";
 // Step 2: the dashboard calls this once the user has picked a folder in
 // the Google Picker widget. Decrypts the `pending` blob from
 // google-exchange.js to recover the refresh_token (it never touched the
 // browser), verifies it belongs to the caller's own account, confirms the
 // grant can actually read/write the chosen folder, then saves the
 // connection.
-import { decryptConfig, getIntegration, setIntegration } from "../../../_lib/integrations.js";
+import { decryptConfig, updateIntegration } from "../../../_lib/integrations.js";
 import { refreshGoogleAccessToken } from "../../../_lib/googleAuth.js";
 import { testGoogleDrive } from "../../../_lib/googleDrive.js";
 import { errorJson, json, withErrorHandling } from "../../../_lib/http.js";
@@ -30,13 +32,8 @@ export const onRequestPost = withErrorHandling(async ({ request, env, data }) =>
   // real motion event.
   await testGoogleDrive({ accessToken, folderId });
 
-  const saved = await getIntegration(env, data.accountId, "storage");
-  await setIntegration(env, data.accountId, "storage", {
-    ...saved,
-    backend: "gdrive",
-    writeOrder: ["gdrive", ...(saved?.writeOrder || []).filter(name => name !== "gdrive")],
-    gdrive: { refreshToken: pending.refreshToken, folderId, connectedAt: new Date().toISOString() },
-    ...(saved?.s3 ? { s3: saved.s3 } : {}),
-  });
+  const plan = await effectivePlanForAccount(env, data.accountId);
+  const newId = `gdrive-${crypto.randomUUID()}`;
+  await updateIntegration(env, data.accountId, "storage", current => saveStorageConnection(current, "gdrive", { refreshToken: pending.refreshToken, folderId, connectedAt: new Date().toISOString() }, { connectionId: body.connectionId, name: body.name, plan, newId }));
   return json({ ok: true });
 });

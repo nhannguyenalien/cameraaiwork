@@ -54,7 +54,7 @@ export const onRequestDelete = withErrorHandling(async ({ params, env, data }) =
     sql: "SELECT image_key, video_key, storage_backend FROM events WHERE account_id = ? AND site_id = ? AND camera = ?",
     args: [data.accountId, params.site, camera.stream],
   });
-  for (const backend of ["r2", "s3", "gdrive"]) {
+  for (const backend of new Set(events.rows.map(row => row.storage_backend || "r2"))) {
     const keys = events.rows.filter((row) => (row.storage_backend || "r2") === backend).flatMap((row) => [row.image_key, row.video_key]).filter(Boolean);
     await deleteObjects(env, data.accountId, backend, keys);
   }

@@ -5,7 +5,7 @@ import { refreshGoogleAccessToken } from "./googleAuth.js";
 import { ensureR2Capacity } from "./storageQuota.js";
 
 import { effectivePlanForAccount } from "./plans.js";
-import { storagePolicy } from "./storagePolicy.js";
+import { storagePolicy, storageConnections, storageProvider } from "./storagePolicy.js";
 
 export async function resolveStorageChain(env, accountId) {
   const [saved, plan] = await Promise.all([
@@ -18,22 +18,24 @@ export async function resolveStorageChain(env, accountId) {
 // functions/api/settings/storage-config/google-callback.js) — every call
 // resolves it to a fresh ~1h access token on demand, so the connection
 // keeps working indefinitely without the customer re-authorizing.
-async function googleDriveConfig(env, accountId) {
+async function googleDriveConfig(env, accountId, backend = "gdrive") {
   const saved = await getIntegration(env, accountId, "storage");
-  if (!saved?.gdrive?.refreshToken) throw new Error("Cấu hình Google Drive của tài khoản không còn khả dụng");
-  const accessToken = await refreshGoogleAccessToken(env, saved.gdrive.refreshToken);
-  return { accessToken, folderId: saved.gdrive.folderId };
+  const config = storageConnections(saved).find(item => item.id === backend)?.config;
+  if (!config?.refreshToken) throw new Error("Cấu hình Google Drive của tài khoản không còn khả dụng");
+  const accessToken = await refreshGoogleAccessToken(env, config.refreshToken);
+  return { accessToken, folderId: config.folderId };
 }
 
-async function s3Config(env, accountId) {
+async function s3Config(env, accountId, backend) {
   const saved = await getIntegration(env, accountId, "storage");
-  if (!saved?.s3) throw new Error("Cấu hình S3 của tài khoản không còn khả dụng");
-  return saved.s3;
+  const config = storageConnections(saved).find(item => item.id === backend)?.config;
+  if (!config) throw new Error("Cấu hình S3 của tài khoản không còn khả dụng");
+  return config;
 }
 
 export async function putObject(env, accountId, backend, key, body, contentType, signal) {
-  if (backend === "s3") await putS3(await s3Config(env, accountId), key, body, contentType, signal);
-  else if (backend === "gdrive") await putGoogleDrive(await googleDriveConfig(env, accountId), key, body, contentType, signal);
+  if (storageProvider(backend) === "s3") await putS3(await s3Config(env, accountId, backend), key, body, contentType, signal);
+  else if (storageProvider(backend) === "gdrive") await putGoogleDrive(await googleDriveConfig(env, accountId, backend), key, body, contentType, signal);
   else {
     if (!env.EVENTS_BUCKET) throw new Error("Kho R2 chưa được cấu hình");
     await ensureR2Capacity(env, accountId, body?.byteLength || 0);
@@ -70,8 +72,8 @@ export async function putObjectWithFallback(env, accountId, chain, key, body, co
 }
 
 export async function headObject(env, accountId, backend, key) {
-  if (backend === "s3") {
-    const config = await s3Config(env, accountId);
+  if (storageProvider(backend) === "s3") {
+    const config = await s3Config(env, accountId, backend);
     try {
       const response = await headS3(config, key);
       return response && { size: Number(response.headers.get("content-length") || 0), contentType: response.headers.get("content-type") };
@@ -90,20 +92,20 @@ export async function headObject(env, accountId, backend, key) {
       return { size, contentType: response.headers.get("content-type") };
     }
   }
-  if (backend === "gdrive") {
-    const file = await headGoogleDrive(await googleDriveConfig(env, accountId), key);
+  if (storageProvider(backend) === "gdrive") {
+    const file = await headGoogleDrive(await googleDriveConfig(env, accountId, backend), key);
     return file && { size: Number(file.size || 0), contentType: file.mimeType };
   }
   return env.EVENTS_BUCKET?.head(key);
 }
 
 export async function getObject(env, accountId, backend, key, range) {
-  if (backend === "s3") {
-    const response = await getS3(await s3Config(env, accountId), key, range ? `bytes=${range.start}-${range.end}` : undefined);
+  if (storageProvider(backend) === "s3") {
+    const response = await getS3(await s3Config(env, accountId, backend), key, range ? `bytes=${range.start}-${range.end}` : undefined);
     return response && { body: response.body, size: Number(response.headers.get("content-length") || 0), contentType: response.headers.get("content-type") };
   }
-  if (backend === "gdrive") {
-    const response = await getGoogleDrive(await googleDriveConfig(env, accountId), key, range ? `bytes=${range.start}-${range.end}` : undefined);
+  if (storageProvider(backend) === "gdrive") {
+    const response = await getGoogleDrive(await googleDriveConfig(env, accountId, backend), key, range ? `bytes=${range.start}-${range.end}` : undefined);
     return response && { body: response.body, size: Number(response.headers.get("content-length") || 0), contentType: response.headers.get("content-type") };
   }
   const object = await env.EVENTS_BUCKET?.get(key, range ? { range: { offset: range.start, length: range.length } } : undefined);
@@ -114,11 +116,11 @@ export async function deleteObjects(env, accountId, backend, keys) {
   if (!keys.length) return;
   // Resolve the config once per call, not once per key — matters more now
   // that the gdrive branch does a real network token refresh.
-  if (backend === "s3") {
-    const config = await s3Config(env, accountId);
+  if (storageProvider(backend) === "s3") {
+    const config = await s3Config(env, accountId, backend);
     for (const key of keys) await deleteS3(config, key);
-  } else if (backend === "gdrive") {
-    const config = await googleDriveConfig(env, accountId);
+  } else if (storageProvider(backend) === "gdrive") {
+    const config = await googleDriveConfig(env, accountId, backend);
     for (const key of keys) await deleteGoogleDrive(config, key);
   } else {
     if (!env.EVENTS_BUCKET) throw new Error("Kho R2 chưa được cấu hình");
@@ -126,8 +128,9 @@ export async function deleteObjects(env, accountId, backend, keys) {
   }
 }
 
-export async function getGoogleDriveUsage(env, accountId) {
+export async function getGoogleDriveUsage(env, accountId, backend = "gdrive") {
   const saved = await getIntegration(env, accountId, "storage");
-  if (!saved?.gdrive?.refreshToken) return null;
-  return googleDriveUsage(await googleDriveConfig(env, accountId), accountId);
+  const config = storageConnections(saved).find(item => item.id === backend)?.config;
+  if (!config?.refreshToken) return null;
+  return googleDriveUsage(await googleDriveConfig(env, accountId, backend), accountId);
 }
