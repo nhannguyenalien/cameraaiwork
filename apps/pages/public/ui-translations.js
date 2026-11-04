@@ -4505,5 +4505,26 @@ window.CameraTranslations = {
     "fr": "Véhicule confirmé par l’IA",
     "ko": "AI가 차량 확인",
     "es": "Vehículo confirmado por IA"
+  },
+  "AI local theo camera": {
+    "en": "Local AI per camera",
+    "ja": "カメラごとのローカルAI",
+    "fr": "IA locale par caméra",
+    "ko": "카메라별 로컬 AI",
+    "es": "IA local por cámara"
+  },
+  "{0}/{1} kết nối. Mỗi kết nối có thư mục hoặc bucket riêng.": {
+    "en": "{0}/{1} connections. Each connection has its own folder or bucket.",
+    "ja": "{0}/{1} 接続。各接続には専用のフォルダまたはバケットがあります。",
+    "fr": "{0}/{1} connexions. Chaque connexion possède son propre dossier ou bucket.",
+    "ko": "{0}/{1} 연결. 각 연결에는 별도의 폴더 또는 버킷이 있습니다.",
+    "es": "{0}/{1} conexiones. Cada conexión tiene su propia carpeta o bucket."
+  },
+  "Cập nhật hoàn tất.": {
+    "en": "Update completed.",
+    "ja": "更新が完了しました。",
+    "fr": "Mise à jour terminée.",
+    "ko": "업데이트가 완료되었습니다.",
+    "es": "Actualización completada."
   }
 };

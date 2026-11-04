@@ -2050,7 +2050,7 @@
       if (storage.orphanCount) issues.push(`${storage.orphanCount} file mồ côi (${formatBytes(storage.orphanBytes)})`);
       if (storage.truncated) issues.push('Thống kê chi tiết bị giới hạn số file đo; tổng dung lượng tài khoản Google được lấy riêng từ Google');
       (storage.backends || []).filter(item => item.unavailable).forEach(item => issues.push(`Không đo được dung lượng ${backendLabels[item.backend] || item.backend}; số event lịch sử vẫn được giữ`));
-      warning.textContent = issues.join(' · ');
+      warning.textContent = issues.map(issue => window.uiText(issue)).join(' · ');
       warning.classList.toggle('d-none', issues.length === 0);
       loading.classList.add('d-none');
     } catch (error) {
@@ -2429,8 +2429,8 @@
   function formatVersion(version) {
     if (!version) return null;
     const rawDate = version.commitDate && version.commitDate !== 'unknown' ? version.commitDate : version.builtAt;
-    const date = rawDate ? new Date(rawDate).toLocaleDateString() : '?';
-    return `${date} (${version.commit || '?'})${version.dirty ? ' · có thay đổi chưa commit' : ''}`;
+    const date = rawDate ? new Date(rawDate).toLocaleDateString(window.uiLocale()) : '?';
+    return `${date} (${version.commit || '?'})${version.dirty ? ' ' + window.uiText('· có thay đổi chưa commit') : ''}`;
   }
 
   let changelogText = null;
@@ -2458,19 +2458,19 @@
     const info = UPDATE_STATUS_LABELS[status.status] || UPDATE_STATUS_LABELS.unknown;
     const when = status.finishedAt || status.startedAt;
     const statusLine = info.text
-      ? `<div class="${info.className}"${status.message ? ` title="${escapeHtml(status.message)}"` : ''}>${escapeHtml(info.text)}${when ? ` (${new Date(when).toLocaleString()})` : ''}</div>`
+      ? `<div class="${info.className}"${status.message ? ` title="${escapeHtml(status.message)}"` : ''}>${escapeHtml(window.uiText(info.text))}${when ? ` (${new Date(when).toLocaleString(window.uiLocale())})` : ''}</div>`
       : '';
     const installed = formatVersion(status.installedVersion);
     const latest = formatVersion(status.latestVersion);
     const hasUpdate = Boolean(status.installedVersion && status.latestVersion && status.installedVersion.commit !== status.latestVersion.commit);
     let versionLines = '';
     if (installed) {
-      versionLines += `<div class="text-secondary">Đang chạy: ${escapeHtml(installed)}</div>`;
+      versionLines += `<div class="text-secondary">${escapeHtml(window.uiText('Đang chạy: {0}', {0: installed}))}</div>`;
     } else if (status.latestVersion) {
       versionLines += `<div class="text-secondary">Chưa rõ phiên bản — cập nhật một lần để bắt đầu theo dõi</div>`;
     }
     if (hasUpdate) {
-      versionLines += `<div class="text-warning">Có bản mới: ${escapeHtml(latest)} · <a href="#" onclick="toggleChangelog('${siteId}');return false;">Xem thay đổi</a></div>`;
+      versionLines += `<div class="text-warning">${escapeHtml(window.uiText('Có bản mới: {0}', {0: latest}))} · <a href="#" onclick="toggleChangelog('${siteId}');return false;">Xem thay đổi</a></div>`;
     } else if (installed && status.latestVersion) {
       versionLines += `<div class="text-success">Đã là bản mới nhất</div>`;
     }
