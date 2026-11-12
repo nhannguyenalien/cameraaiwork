@@ -4527,5 +4527,54 @@ window.CameraTranslations = {
     "fr": "Mise à jour terminée.",
     "ko": "업데이트가 완료되었습니다.",
     "es": "Actualización completada."
+  },
+  "Google Drive đầy thì tự xóa video cũ nhất để ghi tiếp": {
+      "en": "When Google Drive is full, automatically delete the oldest videos to keep recording",
+      "ja": "Google Drive がいっぱいになったら、最も古い動画を自動削除して録画を続ける",
+      "fr": "Quand Google Drive est plein, supprimer automatiquement les plus anciennes vidéos pour continuer à enregistrer",
+      "ko": "Google Drive가 가득 차면 가장 오래된 동영상을 자동 삭제하고 계속 저장",
+      "es": "Cuando Google Drive esté lleno, eliminar automáticamente los vídeos más antiguos para seguir grabando"
+  },
+  "Chỉ xóa clip video do CameraAIWork đã lưu; ảnh và thông tin sự kiện được giữ lại.": {
+      "en": "Only video clips saved by CameraAIWork are deleted; images and event details are kept.",
+      "ja": "CameraAIWork が保存した動画クリップのみ削除されます。画像とイベント情報は保持されます。",
+      "fr": "Seuls les clips vidéo enregistrés par CameraAIWork sont supprimés ; les images et les informations d'événement sont conservées.",
+      "ko": "CameraAIWork가 저장한 동영상 클립만 삭제되며 이미지와 이벤트 정보는 유지됩니다.",
+      "es": "Solo se eliminan los clips de vídeo guardados por CameraAIWork; las imágenes y los datos del evento se conservan."
+  },
+  "Đã bật tự xóa video cũ khi Google Drive đầy": {
+      "en": "Auto-delete of old videos when Google Drive is full is on",
+      "ja": "Google Drive がいっぱいのときの古い動画の自動削除をオンにしました",
+      "fr": "La suppression automatique des anciennes vidéos quand Google Drive est plein est activée",
+      "ko": "Google Drive가 가득 찼을 때 오래된 동영상 자동 삭제를 켰습니다",
+      "es": "Se activó la eliminación automática de vídeos antiguos cuando Google Drive está lleno"
+  },
+  "Đã tắt tự xóa video cũ": {
+      "en": "Auto-delete of old videos is off",
+      "ja": "古い動画の自動削除をオフにしました",
+      "fr": "La suppression automatique des anciennes vidéos est désactivée",
+      "ko": "오래된 동영상 자동 삭제를 껐습니다",
+      "es": "Se desactivó la eliminación automática de vídeos antiguos"
+  },
+  "Dung lượng chỉ đủ lưu khoảng {0} ngày video (đang đặt {1} ngày, ghi ~{2}/ngày). Hãy giảm số ngày lưu hoặc thêm dung lượng": {
+      "en": "Storage only fits about {0} days of video (set to {1} days, recording ~{2}/day). Reduce the retention days or add storage",
+      "ja": "ストレージには約{0}日分の動画しか保存できません（設定は{1}日、録画は1日あたり約{2}）。保存日数を減らすか、容量を追加してください",
+      "fr": "Le stockage ne contient qu'environ {0} jours de vidéo (réglé sur {1} jours, enregistrement ~{2}/jour). Réduisez la durée de conservation ou ajoutez du stockage",
+      "ko": "저장 공간에는 약 {0}일 분량의 동영상만 들어갑니다(설정 {1}일, 하루 약 {2} 기록). 보관 일수를 줄이거나 저장 공간을 추가하세요",
+      "es": "El almacenamiento solo admite unos {0} días de vídeo (configurado en {1} días, grabando ~{2}/día). Reduce los días de conservación o añade almacenamiento"
+  },
+  "Dung lượng gần đầy: với tốc độ ghi ~{0}/ngày, kho chỉ chứa được dưới 1 ngày video (đang đặt lưu {1} ngày). Hãy giải phóng hoặc thêm dung lượng": {
+      "en": "Storage almost full: at ~{0}/day it holds under 1 day of video (set to {1} days). Free up or add storage",
+      "ja": "容量がほぼいっぱいです。1日あたり約{0}の録画では、動画は1日分未満しか保存できません（設定は{1}日）。容量を空けるか追加してください",
+      "fr": "Stockage presque plein : à ~{0}/jour, il contient moins d'1 jour de vidéo (réglé sur {1} jours). Libérez ou ajoutez du stockage",
+      "ko": "저장 공간이 거의 가득 찼습니다. 하루 약 {0} 기록 시 동영상 1일 분량도 담지 못합니다(설정 {1}일). 공간을 확보하거나 추가하세요",
+      "es": "Almacenamiento casi lleno: a ~{0}/día guarda menos de 1 día de vídeo (configurado en {1} días). Libera o añade almacenamiento"
+  },
+  "(chưa tính S3 vì không có hạn mức)": {
+      "en": "(S3 not counted: it has no quota)",
+      "ja": "（S3 は上限がないため含まれていません）",
+      "fr": "(S3 non comptabilisé : pas de quota)",
+      "ko": "(S3는 할당량이 없어 제외됨)",
+      "es": "(S3 no incluido: no tiene cuota)"
   }
 };
