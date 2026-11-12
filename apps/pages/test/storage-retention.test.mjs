@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { estimateRetention, chainCapacityBytes } from "../functions/_lib/storageRetention.js";
+import { estimateRetention, chainCapacity } from "../functions/_lib/storageRetention.js";
 
 const GB = 1024 ** 3;
 
@@ -19,10 +19,26 @@ test("ok when enough room; unknown when capacity unbounded; no-data without reco
   assert.equal(estimateRetention({ capacityBytes: null, dailyVideoBytes: GB, configuredDays: 7 }).status, "unknown");
   assert.equal(estimateRetention({ capacityBytes: GB, dailyVideoBytes: 0, configuredDays: 7 }).status, "no-data");
 });
-test("chain capacity sums r2 and drive, null if S3 present", () => {
-  const backends = [{ backend: "gdrive", provider: "gdrive", totalBytes: 0, driveQuota: { remainingBytes: 5 * GB, cameraBytes: 5 * GB } }, { backend: "s3", provider: "s3" }];
-  assert.equal(chainCapacityBytes(["gdrive", "r2"], backends, GB), 11 * GB);
-  assert.equal(chainCapacityBytes(["gdrive", "s3"], backends, GB), null);
+test("chain capacity sums r2 and drive; S3 is skipped and flagged partial", () => {
+  const backends = [
+    { backend: "gdrive", provider: "gdrive", totalBytes: 5 * GB, videoBytes: 4 * GB, driveQuota: { remainingBytes: 0, cameraBytes: 5 * GB } },
+    { backend: "s3", provider: "s3", totalBytes: GB, videoBytes: GB },
+    { backend: "r2", totalBytes: GB, videoBytes: GB },
+  ];
+  assert.deepEqual(chainCapacity(["gdrive", "r2"], backends, GB), { capacityBytes: 6 * GB, nonVideoBytes: GB, partial: false });
+  assert.deepEqual(chainCapacity(["gdrive", "s3", "r2"], backends, GB), { capacityBytes: 6 * GB, nonVideoBytes: GB, partial: true });
+  assert.equal(chainCapacity(["s3"], backends, GB).capacityBytes, null);
+});
+test("full Drives + R2 with S3 in the chain still produce a warning", () => {
+  const backends = [
+    { backend: "gdrive", provider: "gdrive", totalBytes: 0.3 * GB, videoBytes: 0.3 * GB, driveQuota: { remainingBytes: 0, cameraBytes: 5 * GB } },
+    { backend: "r2", totalBytes: GB, videoBytes: GB },
+  ];
+  const cap = chainCapacity(["gdrive", "s3", "r2"], backends, GB);
+  const r = estimateRetention({ ...cap, dailyVideoBytes: 2.3 * GB, configuredDays: 7 });
+  assert.equal(r.status, "warning");
+  assert.ok(r.maxDays < 7 && r.maxDays > 1);
+  assert.equal(r.partial, true);
 });
 
 import { encryptConfig } from "../functions/_lib/integrations.js";

@@ -3,7 +3,7 @@ import { storageConnections, storageProvider } from "./storagePolicy.js";
 import { getDb } from "./db.js";
 import { getGoogleDriveUsage, headObject, resolveStorageChain } from "./objectStorage.js";
 import { accountUsage } from "./plans.js";
-import { chainCapacityBytes, estimateRetention } from "./storageRetention.js";
+import { chainCapacity, estimateRetention } from "./storageRetention.js";
 import { R2_FREE_QUOTA_BYTES } from "./storageQuota.js";
 
 const MAX_LIST_PAGES = 100;
@@ -208,12 +208,8 @@ async function retentionEstimate(env, accountId, summary, backends) {
     ]);
     const avgVideo = summary.videoCount ? summary.videoBytes / summary.videoCount : 0;
     const dailyVideoBytes = (Number(recent.rows[0]?.videos) || 0) / RATE_WINDOW_DAYS * avgVideo;
-    return estimateRetention({
-      capacityBytes: chainCapacityBytes(chain, backends, R2_FREE_QUOTA_BYTES),
-      nonVideoBytes: summary.totalBytes - summary.videoBytes,
-      dailyVideoBytes,
-      configuredDays: plan.videoRetentionDays,
-    });
+    const { capacityBytes, nonVideoBytes, partial } = chainCapacity(chain, backends, R2_FREE_QUOTA_BYTES);
+    return estimateRetention({ capacityBytes, nonVideoBytes, dailyVideoBytes, configuredDays: plan.videoRetentionDays, partial });
   } catch {
     return { status: "unknown", maxDays: null };
   }

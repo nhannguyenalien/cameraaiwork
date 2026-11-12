@@ -2066,8 +2066,8 @@
       if (ret && (ret.status === 'warning' || ret.status === 'critical')) {
         const perDay = formatBytes(ret.dailyVideoBytes);
         issues.unshift(ret.maxDays < 1
-          ? `Dung lượng gần đầy: với tốc độ ghi ~${perDay}/ngày, kho chỉ chứa được dưới 1 ngày video (đang đặt lưu ${ret.configuredDays} ngày). Hãy giải phóng hoặc thêm dung lượng`
-          : `Dung lượng chỉ đủ lưu khoảng ${ret.maxDays} ngày video (đang đặt ${ret.configuredDays} ngày, ghi ~${perDay}/ngày). Hãy giảm số ngày lưu hoặc thêm dung lượng`);
+          ? `Dung lượng gần đầy: với tốc độ ghi ~${perDay}/ngày, kho chỉ chứa được dưới 1 ngày video (đang đặt lưu ${ret.configuredDays} ngày). Hãy giải phóng hoặc thêm dung lượng${ret.partial ? ' (chưa tính S3 vì không có hạn mức)' : ''}`
+          : `Dung lượng chỉ đủ lưu khoảng ${ret.maxDays} ngày video (đang đặt ${ret.configuredDays} ngày, ghi ~${perDay}/ngày). Hãy giảm số ngày lưu hoặc thêm dung lượng${ret.partial ? ' (chưa tính S3 vì không có hạn mức)' : ''}`);
       }
       if (storage.truncated) issues.push('Thống kê chi tiết bị giới hạn số file đo; tổng dung lượng tài khoản Google được lấy riêng từ Google');
       (storage.backends || []).filter(item => item.unavailable).forEach(item => issues.push(`Không đo được dung lượng ${backendLabels[item.backend] || item.backend}; số event lịch sử vẫn được giữ`));
