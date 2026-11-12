@@ -66,3 +66,29 @@ export async function ensureR2Capacity(env, accountId, incomingBytes) {
     });
   }
 }
+
+// Opt-in (storage integration `autoEvict`): when a customer's Google Drive is
+// out of space, delete the oldest *video* clips this app wrote to that backend
+// so new recordings keep flowing. Images and event rows are kept; only
+// objects referenced by events.video_key are touched, never other Drive files.
+const DRIVE_EVICTION_BATCH = 10;
+const MAX_DRIVE_EVICTION_ROUNDS = 5;
+
+export async function evictOldestVideos(env, accountId, backend, batch = DRIVE_EVICTION_BATCH) {
+  const db = getDb(env, "_lib.storageQuota");
+  const oldest = await db.execute({
+    sql: `SELECT id, video_key FROM events
+          WHERE account_id = ? AND storage_backend = ? AND video_key IS NOT NULL AND video_status != 'recording'
+          ORDER BY timestamp ASC, id ASC LIMIT ?`,
+    args: [accountId, backend, batch],
+  });
+  if (!oldest.rows.length) return 0;
+  await deleteObjects(env, accountId, backend, oldest.rows.map((row) => String(row.video_key)));
+  await db.batch(oldest.rows.map((row) => ({
+    sql: "UPDATE events SET video_key = NULL, video_status = 'expired', video_error = NULL WHERE id = ? AND video_key = ?",
+    args: [row.id, row.video_key],
+  })));
+  return oldest.rows.length;
+}
+
+export { MAX_DRIVE_EVICTION_ROUNDS };

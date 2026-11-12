@@ -545,6 +545,8 @@
                       <div class="border rounded p-3 mb-3">
                         <h4>Kho nhiều ổ <span class="badge bg-purple-lt">Pro</span></h4>
                         <label class="form-check"><input id="storage-pool-enabled" type="checkbox" class="form-check-input"><span class="form-check-label">Tự chuyển sang ổ tiếp theo khi upload thất bại</span></label>
+                        <label class="form-check"><input id="storage-auto-evict" type="checkbox" class="form-check-input"><span class="form-check-label">Google Drive đầy thì tự xóa video cũ nhất để ghi tiếp</span></label>
+                        <div class="form-hint">Chỉ xóa clip video do CameraAIWork đã lưu; ảnh và thông tin sự kiện được giữ lại.</div>
                         <div id="storage-pool-note" class="text-secondary mb-2"></div>
                         <div id="storage-pool-order"></div>
                         <button id="save-storage-pool" type="button" class="btn btn-outline-primary mt-2">Lưu thứ tự và chế độ</button>
@@ -1870,8 +1872,19 @@
     finally { button.disabled = false; }
   });
 
+  document.getElementById('storage-auto-evict').addEventListener('change', async (event) => {
+    const box = event.target;
+    box.disabled = true;
+    try {
+      await api('/api/settings/storage-config', { method: 'PUT', body: JSON.stringify({ action: 'evict', autoEvict: box.checked }) });
+      showSettingsMessage(box.checked ? 'Đã bật tự xóa video cũ khi Google Drive đầy' : 'Đã tắt tự xóa video cũ');
+    } catch (error) { box.checked = !box.checked; showSettingsMessage(error.message, false); }
+    finally { box.disabled = false; }
+  });
+
   async function loadStorageConfig() {
     const config = await api('/api/settings/storage-config');
+    document.getElementById('storage-auto-evict').checked = config.autoEvict === true;
     storagePoolOrder = config.pool.order;
     const poolToggle = document.getElementById('storage-pool-enabled');
     poolToggle.checked = config.pool.multiStorage;
@@ -2049,6 +2062,13 @@
       const issues = [];
       if (storage.missingObjects) issues.push(`${storage.missingObjects} file được DB tham chiếu nhưng không còn trong kho lưu trữ`);
       if (storage.orphanCount) issues.push(`${storage.orphanCount} file mồ côi (${formatBytes(storage.orphanBytes)})`);
+      const ret = storage.retention;
+      if (ret && (ret.status === 'warning' || ret.status === 'critical')) {
+        const perDay = formatBytes(ret.dailyVideoBytes);
+        issues.unshift(ret.maxDays < 1
+          ? `Dung lượng gần đầy: với tốc độ ghi ~${perDay}/ngày, kho chỉ chứa được dưới 1 ngày video (đang đặt lưu ${ret.configuredDays} ngày). Hãy giải phóng hoặc thêm dung lượng`
+          : `Dung lượng chỉ đủ lưu khoảng ${ret.maxDays} ngày video (đang đặt ${ret.configuredDays} ngày, ghi ~${perDay}/ngày). Hãy giảm số ngày lưu hoặc thêm dung lượng`);
+      }
       if (storage.truncated) issues.push('Thống kê chi tiết bị giới hạn số file đo; tổng dung lượng tài khoản Google được lấy riêng từ Google');
       (storage.backends || []).filter(item => item.unavailable).forEach(item => issues.push(`Không đo được dung lượng ${backendLabels[item.backend] || item.backend}; số event lịch sử vẫn được giữ`));
       warning.textContent = issues.map(issue => window.uiText(issue)).join(' · ');

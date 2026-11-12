@@ -2,7 +2,7 @@ import { getIntegration } from "./integrations.js";
 import { deleteS3, getS3, headS3, putS3 } from "./s3.js";
 import { googleDriveUsage, deleteGoogleDrive, getGoogleDrive, headGoogleDrive, putGoogleDrive } from "./googleDrive.js";
 import { refreshGoogleAccessToken } from "./googleAuth.js";
-import { ensureR2Capacity } from "./storageQuota.js";
+import { ensureR2Capacity, evictOldestVideos, MAX_DRIVE_EVICTION_ROUNDS } from "./storageQuota.js";
 
 import { effectivePlanForAccount } from "./plans.js";
 import { storagePolicy, storageConnections, storageProvider } from "./storagePolicy.js";
@@ -59,7 +59,11 @@ export async function putObjectWithFallback(env, accountId, chain, key, body, co
     const controller = backend === "r2" ? null : new AbortController();
     const timer = controller ? setTimeout(() => controller.abort(), STORAGE_ATTEMPT_TIMEOUT_MS) : null;
     try {
-      await putObject(env, accountId, backend, key, body, contentType, controller?.signal);
+      try {
+        await putObject(env, accountId, backend, key, body, contentType, controller?.signal);
+      } catch (err) {
+        if (!(await reclaimDriveSpace(env, accountId, backend, err, () => putObject(env, accountId, backend, key, body, contentType, controller?.signal)))) throw err;
+      }
       return { key, backend };
     } catch (err) {
       lastErr = err;
@@ -69,6 +73,21 @@ export async function putObjectWithFallback(env, accountId, chain, key, body, co
     }
   }
   throw lastErr || new Error("Không có backend lưu trữ nào khả dụng");
+}
+
+// Drive reported storageQuotaExceeded (error.status 409). If the customer opted
+// in to autoEvict, free space by deleting their oldest clips and retry. Returns
+// true once `retry` succeeds, false when not applicable or nothing more to free.
+async function reclaimDriveSpace(env, accountId, backend, err, retry) {
+  if (storageProvider(backend) !== "gdrive" || err?.status !== 409) return false;
+  const saved = await getIntegration(env, accountId, "storage");
+  if (saved?.autoEvict !== true) return false;
+  for (let round = 0; round < MAX_DRIVE_EVICTION_ROUNDS; round += 1) {
+    if (!(await evictOldestVideos(env, accountId, backend))) return false;
+    try { await retry(); return true; }
+    catch (error) { if (error?.status !== 409) throw error; }
+  }
+  return false;
 }
 
 export async function headObject(env, accountId, backend, key) {

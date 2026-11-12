@@ -1,7 +1,9 @@
 import { getIntegration } from "./integrations.js";
 import { storageConnections, storageProvider } from "./storagePolicy.js";
 import { getDb } from "./db.js";
-import { getGoogleDriveUsage, headObject } from "./objectStorage.js";
+import { getGoogleDriveUsage, headObject, resolveStorageChain } from "./objectStorage.js";
+import { accountUsage } from "./plans.js";
+import { chainCapacityBytes, estimateRetention } from "./storageRetention.js";
 import { R2_FREE_QUOTA_BYTES } from "./storageQuota.js";
 
 const MAX_LIST_PAGES = 100;
@@ -180,10 +182,39 @@ export async function storageUsage(env, accountId) {
     }
   }
 
+  const retention = await retentionEstimate(env, accountId, summary, [...backendUsage.values()]);
+
   return {
     ...summary,
+    retention,
     backends: BACKENDS.map((backend) => backendUsage.get(backend)),
     cameras: [...groups.values()].sort((a, b) => b.imageBytes + b.videoBytes - a.imageBytes - a.videoBytes),
     measuredAt: new Date().toISOString(),
   };
+}
+
+const RATE_WINDOW_DAYS = 3;
+
+async function retentionEstimate(env, accountId, summary, backends) {
+  try {
+    const [chain, plan, recent] = await Promise.all([
+      resolveStorageChain(env, accountId),
+      accountUsage(env, accountId),
+      getDb(env, "_lib.storageUsage").execute({
+        sql: `SELECT COUNT(video_key) AS videos FROM events
+              WHERE account_id = ? AND timestamp >= CURRENT_TIMESTAMP - (? * INTERVAL '1 day')`,
+        args: [accountId, RATE_WINDOW_DAYS],
+      }),
+    ]);
+    const avgVideo = summary.videoCount ? summary.videoBytes / summary.videoCount : 0;
+    const dailyVideoBytes = (Number(recent.rows[0]?.videos) || 0) / RATE_WINDOW_DAYS * avgVideo;
+    return estimateRetention({
+      capacityBytes: chainCapacityBytes(chain, backends, R2_FREE_QUOTA_BYTES),
+      nonVideoBytes: summary.totalBytes - summary.videoBytes,
+      dailyVideoBytes,
+      configuredDays: plan.videoRetentionDays,
+    });
+  } catch {
+    return { status: "unknown", maxDays: null };
+  }
 }
