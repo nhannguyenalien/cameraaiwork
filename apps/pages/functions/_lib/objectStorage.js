@@ -1,6 +1,6 @@
 import { getIntegration } from "./integrations.js";
 import { deleteS3, getS3, headS3, putS3 } from "./s3.js";
-import { googleDriveUsage, googleDriveRemaining, deleteGoogleDrive, getGoogleDrive, headGoogleDrive, putGoogleDrive } from "./googleDrive.js";
+import { googleDriveUsage, googleDriveRemaining, listDriveObjects, deleteDriveFileById, deleteGoogleDrive, getGoogleDrive, headGoogleDrive, putGoogleDrive } from "./googleDrive.js";
 import { refreshGoogleAccessToken } from "./googleAuth.js";
 import { ensureR2Capacity, evictOldestVideos, MAX_DRIVE_EVICTION_ROUNDS } from "./storageQuota.js";
 
@@ -156,4 +156,13 @@ export async function getGoogleDriveUsage(env, accountId, backend = "gdrive") {
 
 export async function getGoogleDriveRemaining(env, accountId, backend) {
   return googleDriveRemaining(await googleDriveConfig(env, accountId, backend));
+}
+
+export async function driveInventory(env, accountId, backend) {
+  return listDriveObjects(await googleDriveConfig(env, accountId, backend));
+}
+
+export async function deleteDriveFiles(env, accountId, backend, ids) {
+  const config = await googleDriveConfig(env, accountId, backend);
+  for (const id of ids) await deleteDriveFileById(config, id);
 }

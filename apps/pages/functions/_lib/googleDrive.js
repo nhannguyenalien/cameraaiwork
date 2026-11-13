@@ -155,3 +155,26 @@ export async function googleDriveRemaining(config, signal) {
   const usage = Number(storageQuota.usage);
   return Number.isFinite(limit) && Number.isFinite(usage) ? Math.max(0, limit - usage) : null;
 }
+
+// Every file this app wrote into the connected folder (tagged with
+// cameraaiObjectKey), live or trashed — both count against the Google quota.
+export async function listDriveObjects(config, signal) {
+  const files = [];
+  for (const trashed of [false, true]) {
+    let pageToken;
+    for (let page = 0; page < 200; page += 1) {
+      const q = `'${escapeQuery(config.folderId)}' in parents and trashed = ${trashed}`;
+      const params = new URLSearchParams({ q, fields: "nextPageToken,files(id,name,size,mimeType,appProperties)", pageSize: "1000", supportsAllDrives: "true", includeItemsFromAllDrives: "true" });
+      if (pageToken) params.set("pageToken", pageToken);
+      const data = await (await ensureOk(await fetch(`${API}/files?${params}`, { headers: headers(config), signal }), "Liệt kê file trên")).json();
+      for (const file of data.files || []) files.push({ id: file.id, name: file.name, size: Number(file.size) || 0, mimeType: file.mimeType, key: file.appProperties?.cameraaiObjectKey || null, trashed });
+      pageToken = data.nextPageToken;
+      if (!pageToken) break;
+    }
+  }
+  return files;
+}
+
+export async function deleteDriveFileById(config, id) {
+  await ensureOk(await fetch(`${API}/files/${encodeURIComponent(id)}?supportsAllDrives=true`, { method: "DELETE", headers: headers(config) }), "Xóa file trên");
+}

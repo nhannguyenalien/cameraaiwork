@@ -137,3 +137,39 @@ test("low-space guard does nothing when the Drive has enough space or autoEvict 
     t.mock.restoreAll();
   }
 });
+
+import { reconcileDrive } from "../functions/_lib/storageReconcile.js";
+
+test("reconcile reports linked/orphan/trashed bytes and missing DB references; apply cleans them", async (t) => {
+  const env = { CUSTOMER_SECRETS_KEY: Buffer.alloc(32, 7).toString("base64"), GOOGLE_OAUTH_CLIENT_ID: "id", GOOGLE_OAUTH_CLIENT_SECRET: "secret" };
+  const encrypted = await encryptConfig(env, { backend: "gdrive", gdrive: { refreshToken: "rt", folderId: "folder" } });
+  const updates = [];
+  const unsafe = async (sql, args) => {
+    if (sql.includes("SELECT encrypted_config")) return [{ encrypted_config: encrypted }];
+    if (sql.includes("FROM events")) return [{ id: 1, image_key: "a/1.jpg", video_key: "a/1.mp4" }, { id: 2, image_key: "a/2.jpg", video_key: "a/2.mp4" }];
+    if (sql.includes("UPDATE events")) { updates.push(args[0]); return []; }
+    throw new Error(sql);
+  };
+  env.DB_CLIENT = { unsafe, begin: async (fn) => Promise.all(fn({ unsafe })) };
+  const deleted = [];
+  const file = (id, name, size, key, trashed) => ({ id, name, size: String(size), mimeType: name.endsWith("mp4") ? "video/mp4" : "image/jpeg", appProperties: key ? { cameraaiObjectKey: key } : undefined, _t: trashed });
+  const live = [file("f1", "1.mp4", 100, "a/1.mp4"), file("f2", "1.jpg", 10, "a/1.jpg"), file("f3", "9.mp4", 500, "a/9.mp4"), file("f4", "x.txt", 5, null)];
+  const trash = [file("f5", "8.mp4", 700, "a/8.mp4")];
+  t.mock.method(globalThis, "fetch", async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes("oauth2")) return Response.json({ access_token: "tok" });
+    if (init.method === "DELETE") { deleted.push(u.split("/files/")[1].split("?")[0]); return new Response(null, { status: 204 }); }
+    if (u.includes("/files?")) return Response.json({ files: decodeURIComponent(u.replace(/\+/g, " ")).includes("trashed = true") ? trash : live });
+    throw new Error(u);
+  });
+  const report = await reconcileDrive(env, "a", "gdrive");
+  assert.equal(report.linked.bytes, 110);
+  assert.equal(report.orphan.video.bytes, 500);
+  assert.equal(report.trashed.bytes, 700);
+  assert.equal(report.untagged, 1);
+  assert.deepEqual(report.dbReferencesMissing, { video: 1, image: 1 }); // event 2 has neither file
+  assert.deepEqual(deleted, []);
+  const applied = await reconcileDrive(env, "a", "gdrive", { apply: true });
+  assert.deepEqual(deleted.sort(), ["f3", "f5"]); // untagged f4 and linked files are never touched
+  assert.equal(applied.clearedReferences, 2);
+});
