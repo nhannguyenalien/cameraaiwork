@@ -152,8 +152,8 @@ test("reconcile reports linked/orphan/trashed bytes and missing DB references; a
   };
   env.DB_CLIENT = { unsafe, begin: async (fn) => Promise.all(fn({ unsafe })) };
   const deleted = [];
-  const file = (id, name, size, key, trashed) => ({ id, name, size: String(size), mimeType: name.endsWith("mp4") ? "video/mp4" : "image/jpeg", appProperties: key ? { cameraaiObjectKey: key } : undefined, _t: trashed });
-  const live = [file("f1", "1.mp4", 100, "a/1.mp4"), file("f2", "1.jpg", 10, "a/1.jpg"), file("f3", "9.mp4", 500, "a/9.mp4"), file("f4", "x.txt", 5, null)];
+  const file = (id, name, size, key, trashed, created = "2020-01-01T00:00:00Z") => ({ id, name, size: String(size), createdTime: created, mimeType: name.endsWith("mp4") ? "video/mp4" : "image/jpeg", appProperties: key ? { cameraaiObjectKey: key } : undefined, _t: trashed });
+  const live = [file("f1", "1.mp4", 100, "a/1.mp4"), file("f2", "1.jpg", 10, "a/1.jpg"), file("f3", "9.mp4", 500, "a/9.mp4"), file("f4", "x.txt", 5, null), file("f6", "10.mp4", 50, "a/10.mp4", false, new Date().toISOString())];
   const trash = [file("f5", "8.mp4", 700, "a/8.mp4")];
   t.mock.method(globalThis, "fetch", async (url, init = {}) => {
     const u = String(url);
@@ -164,12 +164,15 @@ test("reconcile reports linked/orphan/trashed bytes and missing DB references; a
   });
   const report = await reconcileDrive(env, "a", "gdrive");
   assert.equal(report.linked.bytes, 110);
-  assert.equal(report.orphan.video.bytes, 500);
+  assert.equal(report.orphan.video.bytes, 550); // includes the brand-new file, which is reported but never deleted
   assert.equal(report.trashed.bytes, 700);
   assert.equal(report.untagged, 1);
   assert.deepEqual(report.dbReferencesMissing, { video: 1, image: 1 }); // event 2 has neither file
   assert.deepEqual(deleted, []);
-  const applied = await reconcileDrive(env, "a", "gdrive", { apply: true });
-  assert.deepEqual(deleted.sort(), ["f3", "f5"]); // untagged f4 and linked files are never touched
-  assert.equal(applied.clearedReferences, 2);
+  const orphansOnly = await reconcileDrive(env, "a", "gdrive", { apply: true });
+  assert.deepEqual(deleted.sort(), ["f3", "f5"]); // untagged f4, linked and brand-new f6 are never touched
+  assert.equal(orphansOnly.clearedReferences, 0);
+  assert.deepEqual(updates, []); // DB untouched unless clearReferences
+  const full = await reconcileDrive(env, "a", "gdrive", { apply: true, clearReferences: true });
+  assert.equal(full.clearedReferences, 2);
 });

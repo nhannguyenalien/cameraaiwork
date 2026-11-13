@@ -164,10 +164,10 @@ export async function listDriveObjects(config, signal) {
     let pageToken;
     for (let page = 0; page < 200; page += 1) {
       const q = `'${escapeQuery(config.folderId)}' in parents and trashed = ${trashed}`;
-      const params = new URLSearchParams({ q, fields: "nextPageToken,files(id,name,size,mimeType,appProperties)", pageSize: "1000", supportsAllDrives: "true", includeItemsFromAllDrives: "true" });
+      const params = new URLSearchParams({ q, fields: "nextPageToken,files(id,name,size,mimeType,createdTime,appProperties)", pageSize: "1000", supportsAllDrives: "true", includeItemsFromAllDrives: "true" });
       if (pageToken) params.set("pageToken", pageToken);
       const data = await (await ensureOk(await fetch(`${API}/files?${params}`, { headers: headers(config), signal }), "Liệt kê file trên")).json();
-      for (const file of data.files || []) files.push({ id: file.id, name: file.name, size: Number(file.size) || 0, mimeType: file.mimeType, key: file.appProperties?.cameraaiObjectKey || null, trashed });
+      for (const file of data.files || []) files.push({ id: file.id, name: file.name, size: Number(file.size) || 0, mimeType: file.mimeType, createdMs: Date.parse(file.createdTime) || 0, key: file.appProperties?.cameraaiObjectKey || null, trashed });
       pageToken = data.nextPageToken;
       if (!pageToken) break;
     }

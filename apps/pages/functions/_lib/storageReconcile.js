@@ -9,7 +9,11 @@ const add = (target, file) => { target.count += 1; target.bytes += file.size; };
 // Compare what the account's DB says is on a Drive with what is really in the
 // folder. Report only; `apply` additionally deletes orphan files this app wrote
 // and clears DB references to files that no longer exist.
-export async function reconcileDrive(env, accountId, backend, { apply = false } = {}) {
+// A file uploaded moments ago may not have its DB row updated yet; never treat
+// those as orphans.
+const FRESH_MS = 60 * 60 * 1000;
+
+export async function reconcileDrive(env, accountId, backend, { apply = false, clearReferences = false } = {}) {
   const [files, rows] = await Promise.all([
     driveInventory(env, accountId, backend),
     getDb(env, "_lib.storageReconcile").execute({
@@ -31,10 +35,11 @@ export async function reconcileDrive(env, accountId, backend, { apply = false } 
   const orphanIds = [];
   for (const file of mine) {
     const kind = kindOf(file);
+    const fresh = Date.now() - file.createdMs < FRESH_MS;
     if (file.trashed) { add(report.trashed, file); add(report.orphan.trashed, file); orphanIds.push(file.id); continue; }
     add(report.live[kind], file);
     if (referenced.has(file.key)) add(report.linked, file);
-    else { add(report.orphan[kind], file); orphanIds.push(file.id); }
+    else { add(report.orphan[kind], file); if (!fresh) orphanIds.push(file.id); }
   }
   const missing = [];
   for (const row of rows.rows) {
@@ -44,15 +49,15 @@ export async function reconcileDrive(env, accountId, backend, { apply = false } 
   report.applied = false;
   if (apply) {
     await deleteDriveFiles(env, accountId, backend, orphanIds);
+    report.deletedFiles = orphanIds.length;
     const db = getDb(env, "_lib.storageReconcile");
-    for (let offset = 0; offset < missing.length; offset += 200) {
+    for (let offset = 0; clearReferences && offset < missing.length; offset += 200) {
       await db.batch(missing.slice(offset, offset + 200).map((item) => item.kind === "video"
         ? { sql: "UPDATE events SET video_key = NULL, video_status = 'expired', video_error = NULL WHERE id = ? AND account_id = ?", args: [item.id, accountId] }
         : { sql: "UPDATE events SET image_key = NULL WHERE id = ? AND account_id = ?", args: [item.id, accountId] }));
     }
     report.applied = true;
-    report.deletedFiles = orphanIds.length;
-    report.clearedReferences = missing.length;
+    report.clearedReferences = clearReferences ? missing.length : 0;
   }
   return report;
 }
