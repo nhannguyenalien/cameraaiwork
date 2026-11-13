@@ -7,7 +7,7 @@ import { testS3, validateS3Config } from "../../_lib/s3.js";
 function publicConfig(saved = {}) {
   return {
     connections: storageConnections(saved).map(item => ({ id: item.id, provider: item.provider, name: item.name, folderId: item.config.folderId, connectedAt: item.config.connectedAt, endpoint: item.config.endpoint, region: item.config.region, bucket: item.config.bucket, forcePathStyle: item.config.forcePathStyle, accessKeyHint: item.config.accessKeyId ? `••••${item.config.accessKeyId.slice(-4)}` : "" })),
-    backend: saved?.backend || "r2", autoEvict: saved?.autoEvict === true, configured: Boolean(saved?.s3 || saved?.gdrive),
+    backend: saved?.backend || "r2", autoEvict: saved?.autoEvict !== false, configured: Boolean(saved?.s3 || saved?.gdrive),
     folderId: saved?.gdrive?.folderId, connectedAt: saved?.gdrive?.connectedAt,
     endpoint: saved?.s3?.endpoint, region: saved?.s3?.region, bucket: saved?.s3?.bucket,
     forcePathStyle: saved?.s3?.forcePathStyle,

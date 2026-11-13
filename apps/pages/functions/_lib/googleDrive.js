@@ -146,3 +146,12 @@ export async function googleDriveUsage(config, accountId) {
     return { ...quota, cameraBytes: null, cameraPartial: true };
   }
 }
+
+// Cheap quota probe (one request, no folder scan) for the low-space guard.
+export async function googleDriveRemaining(config, signal) {
+  const response = await ensureOk(await fetch(`${API}/about?fields=storageQuota`, { headers: headers(config), signal }), "Đọc dung lượng");
+  const { storageQuota = {} } = await response.json();
+  const limit = Number(storageQuota.limit);
+  const usage = Number(storageQuota.usage);
+  return Number.isFinite(limit) && Number.isFinite(usage) ? Math.max(0, limit - usage) : null;
+}

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createR2Bucket } from "./r2.js";
 import { loadRoutes, matchRoute } from "./router.js";
 import { createStatic, loadHeaders } from "./static.js";
+import { runStorageMaintenance } from "../functions/_lib/storageGuard.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const publicDir = join(root, "public");
@@ -67,6 +68,21 @@ const server = createServer(async (req, res) => {
   }
 });
 server.listen(port, () => console.log(`cameraaiwork listening on :${port}`));
+
+// Retention + low-space cleanup must not depend on an external cron: run it in
+// the server itself (every 10 min) so full Drives are drained before writes fail.
+if (process.env.STORAGE_MAINTENANCE !== "off") {
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try { console.log("[storage-maintenance]", JSON.stringify(await runStorageMaintenance(env))); }
+    catch (error) { console.error("[storage-maintenance] failed:", error.message || error); }
+    finally { running = false; }
+  };
+  setTimeout(tick, 60_000).unref();
+  setInterval(tick, 10 * 60_000).unref();
+}
 
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.once(signal, async () => {

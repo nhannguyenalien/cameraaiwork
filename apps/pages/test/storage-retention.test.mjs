@@ -46,7 +46,9 @@ import { putObjectWithFallback } from "../functions/_lib/objectStorage.js";
 
 async function evictionEnv(autoEvict) {
   const env = { CUSTOMER_SECRETS_KEY: Buffer.alloc(32, 7).toString("base64"), GOOGLE_OAUTH_CLIENT_ID: "id", GOOGLE_OAUTH_CLIENT_SECRET: "secret" };
-  const encrypted = await encryptConfig(env, { backend: "gdrive", gdrive: { refreshToken: "rt", folderId: "folder" }, autoEvict });
+  const saved = { backend: "gdrive", gdrive: { refreshToken: "rt", folderId: "folder" } };
+  if (autoEvict !== undefined) saved.autoEvict = autoEvict;
+  const encrypted = await encryptConfig(env, saved);
   const events = [{ id: 1, video_key: "a/old1.mp4" }, { id: 2, video_key: "a/old2.mp4" }];
   const log = { deleted: [], expired: [] };
   const unsafe = async (sql, args) => {
@@ -91,4 +93,47 @@ test("Drive full without autoEvict: nothing is deleted and the error surfaces", 
   await assert.rejects(putObjectWithFallback(env, "a", ["gdrive"], "a/new.mp4", new Uint8Array([1]), "video/mp4"), /hết dung lượng/);
   assert.deepEqual(log.expired, []);
   assert.equal(log.deleted.length, 0);
+});
+
+test("auto-evict is on by default (setting absent) and only off when explicitly false", async (t) => {
+  const { env, log } = await evictionEnv(undefined);
+  mockDrive(t, log, 1);
+  const result = await putObjectWithFallback(env, "a", ["gdrive"], "a/new.mp4", new Uint8Array([1]), "video/mp4");
+  assert.equal(result.backend, "gdrive");
+  assert.deepEqual(log.expired, [1]);
+});
+
+import { reclaimLowDriveSpace } from "../functions/_lib/storageGuard.js";
+
+test("low-space guard evicts oldest clips until the Drive has headroom, then stops", async (t) => {
+  const { env, log } = await evictionEnv(undefined);
+  let remaining = 1000; // bytes free: below `low`
+  t.mock.method(console, "error", () => {});
+  t.mock.method(globalThis, "fetch", async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes("oauth2")) return Response.json({ access_token: "tok" });
+    if (u.includes("/about")) return Response.json({ storageQuota: { limit: "10000", usage: String(10000 - remaining) } });
+    if (init.method === "DELETE") { remaining += 400; log.deleted.push(u); return new Response(null, { status: 204 }); }
+    if (u.includes("/files?")) return Response.json({ files: [{ id: "f" }] });
+    throw new Error(`Unexpected fetch: ${u}`);
+  });
+  const result = await reclaimLowDriveSpace(env, "a", { low: 1500, target: 1800 });
+  assert.equal(result.length, 1);
+  assert.deepEqual(log.expired, [1, 2]); // 1000 -> 1400 (still < 1800) -> 1800, then stops
+  assert.equal(result[0].remainingBytes, 1800);
+});
+
+test("low-space guard does nothing when the Drive has enough space or autoEvict is off", async (t) => {
+  for (const [auto, free] of [[undefined, 5000], [false, 100]]) {
+    const { env, log } = await evictionEnv(auto);
+    t.mock.method(globalThis, "fetch", async (url) => {
+      const u = String(url);
+      if (u.includes("oauth2")) return Response.json({ access_token: "tok" });
+      if (u.includes("/about")) return Response.json({ storageQuota: { limit: "10000", usage: String(10000 - free) } });
+      throw new Error(`Unexpected fetch: ${u}`);
+    });
+    assert.deepEqual(await reclaimLowDriveSpace(env, "a", { low: 1500, target: 1800 }), []);
+    assert.deepEqual(log.expired, []);
+    t.mock.restoreAll();
+  }
 });

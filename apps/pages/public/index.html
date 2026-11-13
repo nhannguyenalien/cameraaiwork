@@ -1884,7 +1884,7 @@
 
   async function loadStorageConfig() {
     const config = await api('/api/settings/storage-config');
-    document.getElementById('storage-auto-evict').checked = config.autoEvict === true;
+    document.getElementById('storage-auto-evict').checked = config.autoEvict !== false;
     storagePoolOrder = config.pool.order;
     const poolToggle = document.getElementById('storage-pool-enabled');
     poolToggle.checked = config.pool.multiStorage;
