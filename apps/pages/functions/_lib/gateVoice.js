@@ -60,13 +60,43 @@ async function voiceFetch(env, apiKey, path, init) {
 export const voiceGreeting = (env, apiKey, lang = "vi") =>
   voiceFetch(env, apiKey, "greeting", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang }) });
 
-export function voiceTurn(env, apiKey, audio, contentType, session, durationMs) {
+export function voiceTurn(env, apiKey, audio, contentType, session, durationMs, context) {
   const form = new FormData();
+  if (context) form.append("context", context);
   form.append("audio", new Blob([audio], { type: contentType }), "turn.webm");
   form.append("session", session);
   form.append("username", "Khách");
   if (durationMs) form.append("duration_ms", String(durationMs));
   return voiceFetch(env, apiKey, "turn", { method: "POST", body: form });
+}
+
+const SCENE_WINDOW_SECONDS = 120;
+
+// The vision analysis runs when the person is first detected (see
+// sceneAnalysis.js), seconds before the visitor speaks, so the butler finds it
+// by camera instead of needing a visit<->event link.
+export async function recentScene(env, camera) {
+  const result = await getDb(env, "_lib.gateVoice").execute({
+    sql: `SELECT scene_json FROM events WHERE account_id = ? AND site_id = ? AND camera = ? AND scene_json IS NOT NULL
+          AND timestamp > CURRENT_TIMESTAMP - (? * INTERVAL '1 second') ORDER BY timestamp DESC, id DESC LIMIT 1`,
+    args: [camera.account_id, camera.site_id, camera.stream, SCENE_WINDOW_SECONDS],
+  });
+  try {
+    const scene = JSON.parse(result.rows[0]?.scene_json || "null");
+    return scene && !scene.pending && typeof scene.summary === "string" ? scene : null;
+  } catch { return null; }
+}
+
+// Text handed to the voice AI so it asks relevant questions. The butler is told
+// not to read the analysis out; it can only talk, never act.
+export function sceneContext(scene) {
+  if (!scene) return "";
+  const parts = [`Cảnh camera: ${scene.summary}`];
+  if (scene.carrying) parts.push(`Đang mang: ${scene.carrying}`);
+  if (scene.behavior) parts.push(`Hành vi: ${scene.behavior}`);
+  parts.push(`Đánh giá: ${scene.role}, nguy cơ ${scene.threat}/3`);
+  if (scene.opening) parts.push(`Gợi ý cách nói: ${scene.opening}`);
+  return `[Ngữ cảnh nội bộ từ camera, KHÔNG đọc nguyên văn cho khách; hãy hỏi mục đích một cách lịch sự] ${parts.join(". ")}`.slice(0, 900);
 }
 
 const parse = (text) => { try { const value = JSON.parse(text); return Array.isArray(value) ? value : []; } catch { return []; } };
@@ -87,8 +117,9 @@ export function visitUsable(visit) {
     && Date.now() - new Date(visit.started_at).getTime() < SESSION_MAX_AGE_MS;
 }
 
-export async function recordTurn(env, visit, { transcript, reply, needsHuman }) {
+export async function recordTurn(env, visit, { transcript, reply, needsHuman, scene }) {
   const lines = parse(visit.transcript);
+  if (scene?.summary && !lines.some((line) => line.who === "scene")) lines.push({ who: "scene", text: scene.summary });
   if (transcript) lines.push({ who: "visitor", text: transcript });
   if (reply) lines.push({ who: "butler", text: reply });
   await getDb(env, "_lib.gateVoice").execute({
@@ -100,9 +131,11 @@ export async function recordTurn(env, visit, { transcript, reply, needsHuman }) 
 
 export function summarize(lines, needsHuman) {
   const visitor = lines.filter((line) => line.who === "visitor").map((line) => line.text).filter(Boolean);
-  if (!visitor.length) return "Có người ở cổng nhưng chưa nói gì rõ ràng.";
+  const sceneText = lines.find((line) => line.who === "scene")?.text;
+  const seen = sceneText ? ` Camera thấy: ${sceneText}` : "";
+  if (!visitor.length) return `Có người ở cổng nhưng chưa nói gì rõ ràng.${seen}`;
   const said = visitor.join(" / ").slice(0, 400);
-  return `${needsHuman ? "⚠️ Cần chủ nhà. " : ""}Khách nói: ${said}`;
+  return `${needsHuman ? "⚠️ Cần chủ nhà. " : ""}Khách nói: ${said}${seen}`;
 }
 
 // Closes the visit once and tells the owner (agent chat + Telegram if linked).

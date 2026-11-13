@@ -1,7 +1,7 @@
 import { json, errorJson, withErrorHandling } from "../../_lib/http.js";
 import {
   MAX_AUDIO_BYTES, MAX_TURNS, authenticateRelay, finishVisit, loadVoiceCamera, openVisit,
-  recordTurn, visitUsable, voiceTurn,
+  recentScene, recordTurn, sceneContext, visitUsable, voiceTurn,
 } from "../../_lib/gateVoice.js";
 
 // Relay -> backend: one spoken turn from the visitor (raw audio/* body).
@@ -25,10 +25,12 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
   if (!visitUsable(visit)) return json({ done: true, reason: "limit", reply: "", audioBase64: null, needsHuman: Boolean(visit?.needs_human) });
 
   const durationMs = Number(request.headers.get("x-duration-ms")) || undefined;
-  const result = await voiceTurn(env, apiKey, audio, type, visit.id, durationMs);
+  const scene = await recentScene(env, camera).catch(() => null);
+  const result = await voiceTurn(env, apiKey, audio, type, visit.id, durationMs, sceneContext(scene));
   const reply = String(result.reply || "");
-  const needsHuman = result.needsHuman === true;
-  await recordTurn(env, visit, { transcript: String(result.transcript || ""), reply, needsHuman });
+  // Threat 3 (climbing, forcing entry, weapon) hands over to the owner at once.
+  const needsHuman = result.needsHuman === true || scene?.threat >= 3;
+  await recordTurn(env, visit, { transcript: String(result.transcript || ""), reply, needsHuman, scene });
   const done = needsHuman || Number(visit.turns) + 1 >= MAX_TURNS;
   if (done) waitUntil(finishVisit(env, visit.id, camera));
   return json({

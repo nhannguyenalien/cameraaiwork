@@ -3,6 +3,7 @@ import { ingestOfflineEvent, offlinePolicy } from '../_lib/offlineEvents.js';
 // reports motion on one of its cameras. Body: { siteId, camera }.
 // Authenticated per-site (not per-account — the relay holds a site secret,
 // not a customer API key; see _middleware.js and getSiteUnscoped).
+import { runSceneCheck } from "../_lib/sceneAnalysis.js";
 import { getDb } from "../_lib/db.js";
 import { getCameraByStreamUnscoped, getSiteUnscoped } from "../_lib/sites.js";
 import { getFrame } from "../_lib/go2rtc.js";
@@ -107,6 +108,17 @@ export const onRequestPost = withErrorHandling(async ({ request, env, waitUntil 
       sql: "INSERT INTO event_people (event_id, person_id, face_box) VALUES (?, ?, ?) ON CONFLICT (event_id, person_id) DO UPDATE SET face_box = COALESCE(event_people.face_box, EXCLUDED.face_box)",
       args: [eventId, id, personBoxes.has(id) ? JSON.stringify(personBoxes.get(id)) : null],
     });
+  }
+
+  // High-security cameras: one external vision-API look per visit (see
+  // _lib/sceneAnalysis.js). Only when a person (not a vehicle) was seen, never
+  // for a named/known person, and never blocking the response.
+  if (hasPerson && cameraConfig.security_level === "high") {
+    waitUntil((async () => {
+      const labelRow = personId ? (await db.execute({ sql: "SELECT label FROM people WHERE id = ?", args: [personId] })).rows[0] : null;
+      const result = await runSceneCheck(env, { camera: cameraConfig, siteName: site.name, eventId, frame, personLabel: labelRow?.label || null });
+      if (result.skipped && result.skipped !== "cooldown") console.log(`[scene] event ${eventId} bỏ qua: ${result.skipped}`);
+    })().catch((error) => console.error(`[scene] event ${eventId}:`, error.message || error)));
   }
 
   // The event is already durable at this point. Snapshot and clip persistence

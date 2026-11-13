@@ -8,6 +8,8 @@ import { createR2Bucket } from "./r2.js";
 import { loadRoutes, matchRoute } from "./router.js";
 import { createStatic, loadHeaders } from "./static.js";
 import { runStorageMaintenance } from "../functions/_lib/storageGuard.js";
+import { getDb } from "../functions/_lib/db.js";
+import { SCENE_COLUMN_STATEMENTS as sceneColumns } from "../functions/_lib/sceneAnalysis.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const publicDir = join(root, "public");
@@ -16,6 +18,10 @@ const port = Number(process.env.PORT || 3000);
 const env = { ...process.env, DB_SHARED_POOL: "1" };
 if (env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY) env.EVENTS_BUCKET = createR2Bucket(env);
 else console.warn("R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY not set: event media storage is disabled");
+
+// Idempotent column additions the code depends on (also kept in schema.sql).
+try { for (const statement of sceneColumns) await getDb(env, "server.boot").execute(statement); }
+catch (error) { console.error("boot migration failed:", error.message || error); }
 
 const { routes, middleware } = await loadRoutes(join(root, "functions"));
 const serveStatic = createStatic(publicDir, await loadHeaders(publicDir));
