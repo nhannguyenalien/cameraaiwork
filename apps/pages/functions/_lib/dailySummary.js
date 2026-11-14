@@ -27,6 +27,7 @@ export const SUMMARY_STATEMENTS = [
 ];
 
 const CLIP_SECONDS = 3.5;
+const FADE = 0.4; // dip-to-black at each cut so scene changes are not abrupt
 const targetSeconds = () => Math.min(300, Math.max(30, Number(process.env.DAILY_SUMMARY_SECONDS) || 180));
 const CLUSTER_MS = 2 * 60_000;
 const TZ = () => process.env.DAILY_SUMMARY_TZ || "Asia/Ho_Chi_Minh";
@@ -110,20 +111,21 @@ function minuteOfDay(timestamp) {
 // time, hour ticks, and "so far X/Y events" so the whole day is represented.
 export function timelineFilters(clip, timeline) {
   if (!timeline?.hourly) return [];
-  const W = 1280, H = 720, stripH = 56, y0 = H - stripH, bar = W / 24, maxBar = 34;
+  const W = 1280, H = 720, stripH = 76, y0 = H - stripH, bar = W / 24, maxBar = 44, base = H - 26;
   const max = Math.max(1, ...timeline.hourly);
-  const filters = [`drawbox=x=0:y=${y0}:w=${W}:h=${stripH}:color=black@0.55:t=fill`];
+  const peakHours = new Set([...timeline.hourly.keys()].sort((x, y) => timeline.hourly[y] - timeline.hourly[x]).slice(0, 3).filter((h) => timeline.hourly[h] > 0));
+  const filters = [`drawbox=x=0:y=${y0}:w=${W}:h=${stripH}:color=black@0.78:t=fill`, `drawbox=x=0:y=${y0}:w=${W}:h=2:color=white@0.5:t=fill`];
   timeline.hourly.forEach((count, hour) => {
     if (!count) return;
-    const h = Math.max(2, Math.round((count / max) * maxBar));
-    filters.push(`drawbox=x=${Math.round(hour * bar + 3)}:y=${H - 18 - h}:w=${Math.round(bar - 6)}:h=${h}:color=white@0.6:t=fill`);
+    const h = Math.max(3, Math.round((count / max) * maxBar));
+    filters.push(`drawbox=x=${Math.round(hour * bar + 3)}:y=${base - h}:w=${Math.round(bar - 6)}:h=${h}:color=${peakHours.has(hour) ? "0xFFC83D@1" : "white@0.9"}:t=fill`);
   });
-  const x = Math.min(W - 4, Math.round((minuteOfDay(clip.timestamp) / 1440) * W));
-  filters.push(`drawbox=x=${x}:y=${y0}:w=4:h=${stripH}:color=red@0.95:t=fill`);
-  for (const hour of [0, 6, 12, 18]) filters.push(`drawtext=text='${hour}h':x=${Math.round(hour * bar + 4)}:y=${H - 18}:fontsize=14:fontcolor=white@0.8`);
+  const x = Math.min(W - 6, Math.round((minuteOfDay(clip.timestamp) / 1440) * W));
+  filters.push(`drawbox=x=${x}:y=${y0}:w=6:h=${stripH}:color=0xFF2D2D@1:t=fill`);
+  for (const hour of [0, 3, 6, 9, 12, 15, 18, 21]) filters.push(`drawtext=text='${hour}h':x=${Math.round(hour * bar + 6)}:y=${H - 22}:fontsize=18:fontcolor=white:borderw=2:bordercolor=black@0.8`);
   if (timeline.allMs?.length) {
     const sofar = timeline.allMs.filter((ms) => ms <= new Date(clip.timestamp).getTime()).length;
-    filters.push(`drawtext=text='${sofar}/${timeline.allMs.length} sự kiện':x=w-tw-24:y=${y0 - 40}:fontsize=26:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=8`);
+    filters.push(`drawtext=text='${sofar}/${timeline.allMs.length} sự kiện':x=w-tw-24:y=${y0 - 50}:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=8`);
   }
   return filters;
 }
@@ -139,7 +141,7 @@ export async function renderSummary(env, accountId, clips, { fetchClip = downloa
         const out = join(dir, `part-${parts.length}.mp4`);
         const text = label(clip).replace(/:/g, "\\:");
         await run("ffmpeg", ["-y", "-ss", "2", "-i", src, "-t", String(CLIP_SECONDS), "-an",
-          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25,drawtext=text='${text}':x=24:y=h-${timeline?.hourly ? 100 : 48}:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=8${["", ...timelineFilters(clip, timeline)].join(",")},format=yuv420p`,
+          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25,fade=t=in:st=0:d=${FADE}:color=black,fade=t=out:st=${CLIP_SECONDS - FADE}:d=${FADE}:color=black,drawtext=text='${text}':x=24:y=h-${timeline?.hourly ? 126 : 48}:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=8${["", ...timelineFilters(clip, timeline)].join(",")},format=yuv420p`,
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-movflags", "+faststart", out]);
         parts.push(out);
       } catch (error) {
