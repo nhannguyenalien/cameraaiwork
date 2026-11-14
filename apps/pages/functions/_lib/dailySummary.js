@@ -6,6 +6,7 @@ import { getDb } from "./db.js";
 import { getIntegration } from "./integrations.js";
 import { getObject, putObject, resolveStorageChain } from "./objectStorage.js";
 import { sendVideoAlert } from "./telegram.js";
+import { narrationFacts, synthesizeSpeech, writeNarration } from "./summaryNarration.js";
 
 export const SUMMARY_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS daily_summaries (
@@ -22,6 +23,7 @@ export const SUMMARY_STATEMENTS = [
     finished_at TIMESTAMPTZ,
     UNIQUE (account_id, day)
   )`,
+  "ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS narration TEXT",
 ];
 
 const CLIP_SECONDS = 4;
@@ -133,6 +135,41 @@ async function downloadClip(env, accountId, clip) {
   return Buffer.from(await new Response(object.body).arrayBuffer());
 }
 
+function probeDuration(path) {
+  return new Promise((resolve) => {
+    const child = spawn("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], { stdio: ["ignore", "pipe", "ignore"] });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    child.on("error", () => resolve(0));
+    child.on("close", () => resolve(Number(out.trim()) || 0));
+  });
+}
+
+// Lay the voice-over on the finished video. The shorter track is padded
+// (frozen last frame / silence) so neither is cut off.
+export async function mixNarration(videoBytes, speech) {
+  const dir = await mkdtemp(join(tmpdir(), "daymix-"));
+  try {
+    const video = join(dir, "v.mp4");
+    const audio = join(dir, speech.format === "pcm" ? "a.pcm" : "a.wav");
+    const out = join(dir, "out.mp4");
+    await writeFile(video, videoBytes);
+    await writeFile(audio, speech.bytes);
+    const input = speech.format === "pcm" ? ["-f", "s16le", "-ar", "24000", "-ac", "1", "-i", audio] : ["-i", audio];
+    const wav = join(dir, "n.wav");
+    await run("ffmpeg", ["-y", ...input, "-ar", "44100", "-ac", "1", wav]);
+    const [vd, ad] = await Promise.all([probeDuration(video), probeDuration(wav)]);
+    const extra = Math.max(0, ad - vd + 0.5);
+    const total = Math.max(vd, ad + 0.5);
+    await run("ffmpeg", ["-y", "-i", video, "-i", wav,
+      ...(extra > 0 ? ["-vf", `tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)}`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p"] : ["-c:v", "copy"]),
+      "-af", "apad", "-c:a", "aac", "-b:a", "96k", "-t", total.toFixed(2), "-map", "0:v:0", "-map", "1:a:0", "-movflags", "+faststart", out], { timeoutMs: 180_000 });
+    return await readFile(out);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 export function yesterday(now = new Date()) {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ(), year: "numeric", month: "2-digit", day: "2-digit" });
   return fmt.format(new Date(now.getTime() - 24 * 3600_000));
@@ -140,7 +177,7 @@ export function yesterday(now = new Date()) {
 
 async function dayEvents(db, accountId, day) {
   const result = await db.execute({
-    sql: `SELECT e.id, e.camera, e.timestamp, e.person_id, e.threat_level, e.video_key, e.storage_backend,
+    sql: `SELECT e.id, e.camera, e.timestamp, e.person_id, e.threat_level, e.scene_json, e.video_key, e.storage_backend,
                  (SELECT COUNT(*) FROM event_people p WHERE p.event_id = e.id) AS people_count
           FROM events e
           WHERE e.account_id = ? AND e.video_key IS NOT NULL AND e.video_status = 'ready'
@@ -166,7 +203,15 @@ export async function generateDailySummary(env, accountId, day, deps = {}) {
       await db.execute({ sql: "UPDATE daily_summaries SET status = 'empty', event_count = 0, clip_count = 0, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date", args: [accountId, day] });
       return { status: "empty" };
     }
-    const { bytes, used } = await (deps.render || renderSummary)(env, accountId, clips);
+    let { bytes, used } = await (deps.render || renderSummary)(env, accountId, clips);
+    let narration = null;
+    if (env.DAILY_SUMMARY_VOICE !== "off") {
+      try {
+        const written = await (deps.writeNarration || writeNarration)(env, accountId, { day, totalEvents: events.length, facts: narrationFacts(clips, TZ()), tz: TZ() });
+        const speech = await (deps.speech || synthesizeSpeech)(env, accountId, written.text);
+        if (speech) { bytes = await (deps.mix || mixNarration)(bytes, speech); narration = written.text; }
+      } catch (error) { console.error("[daily-summary] narration skipped:", error.message || error); }
+    }
     const key = `${accountId}/summaries/${day}.mp4`;
     let backend;
     let lastError;
@@ -176,12 +221,12 @@ export async function generateDailySummary(env, accountId, day, deps = {}) {
     }
     if (!backend) throw lastError || new Error("Không lưu được video tóm tắt");
     await db.execute({
-      sql: "UPDATE daily_summaries SET status = 'ready', video_key = ?, storage_backend = ?, clip_count = ?, event_count = ?, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date",
-      args: [key, backend, used, events.length, accountId, day],
+      sql: "UPDATE daily_summaries SET status = 'ready', video_key = ?, storage_backend = ?, clip_count = ?, event_count = ?, narration = ?, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date",
+      args: [key, backend, used, events.length, narration, accountId, day],
     });
     const telegram = await getIntegration(env, accountId, "telegram").catch(() => null);
     if (telegram && bytes.length < 49 * 1024 * 1024) {
-      await (deps.sendVideo || sendVideoAlert)(telegram, bytes, `Tóm tắt ngày ${day}: ${used} cảnh từ ${events.length} sự kiện`).catch((e) => console.error("[daily-summary] telegram", e.message || e));
+      await (deps.sendVideo || sendVideoAlert)(telegram, bytes, (narration ? `Tóm tắt ngày ${day}: ${narration}` : `Tóm tắt ngày ${day}: ${used} cảnh từ ${events.length} sự kiện`).slice(0, 1000)).catch((e) => console.error("[daily-summary] telegram", e.message || e));
     }
     return { status: "ready", clips: used, events: events.length, key, backend };
   } catch (error) {

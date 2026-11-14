@@ -69,3 +69,50 @@ test("runDailySummaries only fires at the configured local hour unless forced", 
   const forced = await runDailySummaries(env, noon, { force: true, render: async () => { throw new Error("no clips expected"); } });
   assert.equal(forced.results[0].status, "empty");
 });
+
+import { narrationFacts, templateNarration, writeNarration, synthesizeSpeech } from "../functions/_lib/summaryNarration.js";
+import { mixNarration } from "../functions/_lib/dailySummary.js";
+
+test("narration facts use stored scene summary and never invent identities", () => {
+  const facts = narrationFacts([
+    ev(1, 0, "cong", { scene_json: JSON.stringify({ summary: "Shipper đưa kiện hàng", threat: 0 }), threat_level: 0 }),
+    ev(2, 30, "san", { people_count: 1 }),
+    ev(3, 60, "sau", { threat_level: 3, scene_json: '{"pending":true}' }),
+  ], "UTC");
+  assert.deepEqual(facts.map((f) => f.text), ["Shipper đưa kiện hàng", "có người lạ xuất hiện", "có chuyển động"]);
+  assert.match(templateNarration("2026-11-13", 3, facts), /Tóm tắt ngày 2026-11-13\. Hệ thống ghi nhận 3 sự kiện\./);
+});
+
+test("writeNarration falls back to the template without AI keys or when the API fails", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const args = { day: "2026-11-13", totalEvents: 3, facts: [{ time: "08:00", camera: "cong", text: "có người lạ", threat: 1 }], tz: "UTC" };
+  assert.equal((await writeNarration({}, "a", args, { credentials: async () => ({}) })).source, "template");
+  t.mock.method(globalThis, "fetch", async () => new Response("no", { status: 500 }));
+  assert.equal((await writeNarration({}, "a", args, { credentials: async () => ({ gemini: { apiKey: "k" } }) })).source, "template");
+  t.mock.restoreAll();
+  t.mock.method(globalThis, "fetch", async () => Response.json({ candidates: [{ content: { parts: [{ text: "Hôm nay có ba sự kiện, đáng chú ý nhất là lúc tám giờ ở cổng." }] } }] }));
+  const ok = await writeNarration({}, "a", args, { credentials: async () => ({ gemini: { apiKey: "k" } }) });
+  assert.equal(ok.source, "ai");
+});
+
+test("synthesizeSpeech returns Gemini PCM, falls back to OpenAI wav, else null", async (t) => {
+  t.mock.method(console, "error", () => {});
+  t.mock.method(globalThis, "fetch", async (url) => String(url).includes("generativelanguage")
+    ? Response.json({ candidates: [{ content: { parts: [{ inlineData: { data: Buffer.from("pcm").toString("base64") } }] } }] })
+    : new Response(Buffer.from("wav")));
+  assert.equal((await synthesizeSpeech({}, "a", "xin chào", { credentials: async () => ({ gemini: { apiKey: "k" }, openai: { apiKey: "o" } }) })).format, "pcm");
+  t.mock.restoreAll();
+  t.mock.method(globalThis, "fetch", async (url) => String(url).includes("generativelanguage") ? new Response("x", { status: 500 }) : new Response(Buffer.from("wav")));
+  assert.equal((await synthesizeSpeech({}, "a", "xin chào", { credentials: async () => ({ gemini: { apiKey: "k" }, openai: { apiKey: "o" } }) })).format, "wav");
+  assert.equal(await synthesizeSpeech({}, "a", "x", { credentials: async () => ({}) }), null);
+});
+
+test("mixNarration adds an audio track and extends video when speech is longer", { skip: !hasFfmpeg }, async () => {
+  const video = spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=15:duration=2", "-pix_fmt", "yuv420p", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1"], { maxBuffer: 50e6 }).stdout;
+  const pcm = Buffer.alloc(24000 * 2 * 4); // 4s of silence, s16le 24k mono
+  const mixed = await mixNarration(video, { bytes: pcm, format: "pcm" });
+  const probe = (args) => String(spawnSync("ffprobe", ["-v", "error", ...args, "-of", "csv=p=0", "-i", "pipe:0"], { input: mixed }).stdout).trim();
+  assert.match(probe(["-select_streams", "a", "-show_entries", "stream=codec_name"]), /aac/);
+  const duration = Number(probe(["-show_entries", "format=duration"]));
+  assert.ok(duration >= 4 && duration < 5.5, `duration ${duration}`);
+});

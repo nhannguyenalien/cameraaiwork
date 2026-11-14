@@ -317,3 +317,5 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
     finished_at TIMESTAMPTZ,
     UNIQUE (account_id, day)
 );
+
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS narration TEXT;

@@ -4,7 +4,7 @@ import { errorJson, json, withErrorHandling } from "../../_lib/http.js";
 
 export const onRequestGet = withErrorHandling(async ({ env, data }) => {
   const result = await getDb(env, "api.daily-summaries").execute({
-    sql: `SELECT id, day::text AS day, status, clip_count, event_count, error, finished_at
+    sql: `SELECT id, day::text AS day, status, clip_count, event_count, narration, error, finished_at
           FROM daily_summaries WHERE account_id = ? ORDER BY day DESC LIMIT 30`,
     args: [data.accountId],
   });
