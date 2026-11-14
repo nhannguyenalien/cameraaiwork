@@ -413,6 +413,17 @@
 
             <!-- Events: recent motion/person log -->
             <div class="tab-pane" id="tab-events">
+              <div class="card mb-3" id="summary-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <h3 class="card-title mb-0"><i class="ti ti-movie me-2"></i>Video tóm tắt ngày</h3>
+                  <button id="summary-generate" class="btn btn-sm btn-outline-primary" type="button">Tạo cho hôm qua</button>
+                </div>
+                <div class="card-body">
+                  <video id="summary-player" class="w-100 rounded mb-3 d-none" controls playsinline style="max-height:420px;background:#000"></video>
+                  <div id="summary-empty" class="text-secondary small">Chưa có video tóm tắt. Hệ thống tự tạo mỗi đêm cho ngày hôm trước.</div>
+                  <div id="summary-list" class="list-group list-group-flush"></div>
+                </div>
+              </div>
               <div class="card">
                 <div class="table-responsive">
                   <table class="table card-table table-vcenter">
@@ -1105,7 +1116,7 @@
   document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => tab.addEventListener('shown.bs.tab', event => {
     if (event.target.getAttribute('href') !== '#tab-cameras') stopAllCameraPreviews();
     if (event.target.getAttribute('href') === '#tab-people') loadPeople().catch(() => {});
-    if (event.target.getAttribute('href') === '#tab-events') loadEvents().catch(() => {});
+    if (event.target.getAttribute('href') === '#tab-events') { loadEvents().catch(() => {}); loadSummaries().catch(() => {}); }
   }));
 
   function renderRecordingOptions() {
@@ -1567,6 +1578,42 @@
     const c = cameras.find((c) => c.siteId === siteId && c.stream === cameraStream);
     return c ? (c.cameraName || c.cameraId) : cameraStream;
   }
+
+  // Daily summary videos: private, so fetch as a blob with the bearer key.
+  let summaryTimer = null;
+  async function loadSummaries() {
+    const { summaries } = await api('/api/daily-summaries');
+    document.getElementById('summary-empty').classList.toggle('d-none', summaries.length > 0);
+    const list = document.getElementById('summary-list');
+    list.innerHTML = summaries.map((row) => {
+      const label = { ready: `${row.clip_count} cảnh / ${row.event_count} sự kiện`, running: 'Đang tạo…', empty: 'Không có video trong ngày', error: `Lỗi: ${escapeHtml(row.error || '')}`, pending: 'Đang chờ' }[row.status] || escapeHtml(row.status);
+      const play = row.status === 'ready' ? `<button class="btn btn-sm btn-primary" data-summary-play="${row.id}" type="button"><i class="ti ti-player-play me-1"></i>Xem</button>` : '';
+      const note = row.narration ? `<div class="text-secondary small mt-1">${escapeHtml(row.narration)}</div>` : '';
+      return `<div class="list-group-item px-0"><div class="d-flex justify-content-between align-items-center gap-2"><div><strong>${escapeHtml(row.day)}</strong> <span class="text-secondary small ms-2">${label}</span></div><div class="d-flex gap-2">${play}</div></div>${note}</div>`;
+    }).join('');
+    clearTimeout(summaryTimer);
+    if (summaries.some((row) => row.status === 'running')) summaryTimer = setTimeout(() => loadSummaries().catch(() => {}), 8000);
+  }
+  document.addEventListener('click', async (event) => {
+    const play = event.target.closest('[data-summary-play]');
+    if (!play) return;
+    const res = await fetch(`/api/daily-summaries/${play.dataset.summaryPlay}/video`, { headers: { Authorization: `Bearer ${getApiKey()}` } });
+    if (!res.ok) return;
+    const player = document.getElementById('summary-player');
+    if (player.dataset.url) URL.revokeObjectURL(player.dataset.url);
+    player.dataset.url = URL.createObjectURL(await res.blob());
+    player.src = player.dataset.url;
+    player.classList.remove('d-none');
+    player.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    player.play().catch(() => {});
+  });
+  document.getElementById('summary-generate').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try { await api('/api/daily-summaries', { method: 'POST', body: '{}' }); await loadSummaries(); }
+    catch (error) { alert(error.message); }
+    finally { button.disabled = false; }
+  });
 
   async function loadEvents() {
     const requestId = ++eventsRequest;
