@@ -22,7 +22,7 @@ export const onRequestGet = withErrorHandling(async ({ request, params, env, dat
     headers: {
       "Content-Type": "video/mp4", "Content-Length": String(range?.length || head.size), "Accept-Ranges": "bytes",
       ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${head.size}` } : {}),
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "private, no-cache",
     },
   });
 });
