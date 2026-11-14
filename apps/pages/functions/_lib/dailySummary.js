@@ -151,7 +151,7 @@ export async function mixNarration(videoBytes, speech) {
   const dir = await mkdtemp(join(tmpdir(), "daymix-"));
   try {
     const video = join(dir, "v.mp4");
-    const audio = join(dir, speech.format === "pcm" ? "a.pcm" : "a.wav");
+    const audio = join(dir, `a.${speech.format === "pcm" ? "pcm" : speech.format}`);
     const out = join(dir, "out.mp4");
     await writeFile(video, videoBytes);
     await writeFile(audio, speech.bytes);

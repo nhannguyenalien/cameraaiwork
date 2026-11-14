@@ -18,6 +18,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.4",
     "jose": "^6.2.7",
+    "msedge-tts": "2.1.1",
     "postgres": "^3.4.5"
   }
 }
