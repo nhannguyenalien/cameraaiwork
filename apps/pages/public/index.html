@@ -778,9 +778,9 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/js/tabler.min.js" integrity="sha384-fSOug2E78eoy8fAFcDbY60mgZb6eboMDErIUzTF1UWHQCmmN7LcTyt+uzxH8upW+" crossorigin="anonymous"></script>
 
-<script src="/ui-translations.js?v=20261112-1"></script>
-<script src="/dashboard-i18n.js?v=20261112-1"></script>
-<script src="/ui-i18n-fallback.js?v=20261112-1"></script>
+<script src="/ui-translations.js?v=20261114-1"></script>
+<script src="/dashboard-i18n.js?v=20261114-1"></script>
+<script src="/ui-i18n-fallback.js?v=20261114-1"></script>
 <script>
   function resourceText(key) {
     const language = document.documentElement.lang || 'vi';
@@ -1586,8 +1586,9 @@
     document.getElementById('summary-empty').classList.toggle('d-none', summaries.length > 0);
     const list = document.getElementById('summary-list');
     list.innerHTML = summaries.map((row) => {
-      const label = { ready: `${row.clip_count} cảnh / ${row.event_count} sự kiện`, running: 'Đang tạo…', empty: 'Không có video trong ngày', error: `Lỗi: ${escapeHtml(row.error || '')}`, pending: 'Đang chờ' }[row.status] || escapeHtml(row.status);
-      const play = row.status === 'ready' ? `<button class="btn btn-sm btn-primary" data-summary-play="${row.id}" type="button"><i class="ti ti-player-play me-1"></i>Xem</button>` : '';
+      const t = (text, params) => escapeHtml(window.uiText(text, params));
+      const label = { ready: t('{0} cảnh / {1} sự kiện', { 0: row.clip_count, 1: row.event_count }), running: t('Đang tạo…'), empty: t('Không có video trong ngày'), error: t('Lỗi: {0}', { 0: row.error || '' }), pending: t('Đang chờ') }[row.status] || escapeHtml(row.status);
+      const play = row.status === 'ready' ? `<button class="btn btn-sm btn-primary" data-summary-play="${row.id}" type="button"><i class="ti ti-player-play me-1"></i>${t('Xem')}</button>` : '';
       const note = row.narration ? `<div class="text-secondary small mt-1">${escapeHtml(row.narration)}</div>` : '';
       return `<div class="list-group-item px-0"><div class="d-flex justify-content-between align-items-center gap-2"><div><strong>${escapeHtml(row.day)}</strong> <span class="text-secondary small ms-2">${label}</span></div><div class="d-flex gap-2">${play}</div></div>${note}</div>`;
     }).join('');

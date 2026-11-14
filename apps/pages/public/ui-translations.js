@@ -4576,5 +4576,13 @@ window.CameraTranslations = {
       "fr": "(S3 non comptabilisé : pas de quota)",
       "ko": "(S3는 할당량이 없어 제외됨)",
       "es": "(S3 no incluido: no tiene cuota)"
-  }
+  },
+  "Video tóm tắt ngày": {"en": "Daily summary video", "ja": "1日のダイジェスト動画", "fr": "Vidéo récapitulative du jour", "ko": "일일 요약 영상", "es": "Vídeo resumen del día"},
+  "Tạo cho hôm qua": {"en": "Create for yesterday", "ja": "昨日分を作成", "fr": "Créer pour hier", "ko": "어제 영상 만들기", "es": "Crear el de ayer"},
+  "Chưa có video tóm tắt. Hệ thống tự tạo mỗi đêm cho ngày hôm trước.": {"en": "No summary video yet. One is created automatically every night for the previous day.", "ja": "ダイジェスト動画はまだありません。毎晩、前日分が自動で作成されます。", "fr": "Aucune vidéo récapitulative pour l'instant. Une vidéo est créée chaque nuit pour la veille.", "ko": "아직 요약 영상이 없습니다. 매일 밤 전날 영상이 자동으로 만들어집니다.", "es": "Aún no hay vídeo resumen. Se crea automáticamente cada noche para el día anterior."},
+  "{0} cảnh / {1} sự kiện": {"en": "{0} scenes / {1} events", "ja": "{0}シーン / {1}件のイベント", "fr": "{0} scènes / {1} événements", "ko": "{0}개 장면 / 이벤트 {1}건", "es": "{0} escenas / {1} eventos"},
+  "Đang tạo…": {"en": "Creating…", "ja": "作成中…", "fr": "Création…", "ko": "만드는 중…", "es": "Creando…"},
+  "Không có video trong ngày": {"en": "No video that day", "ja": "この日の動画はありません", "fr": "Aucune vidéo ce jour-là", "ko": "해당 날짜에 영상이 없습니다", "es": "No hay vídeo ese día"},
+  "Đang chờ": {"en": "Waiting", "ja": "待機中", "fr": "En attente", "ko": "대기 중", "es": "En espera"},
+  "Xem": {"en": "View", "ja": "表示", "fr": "Voir", "ko": "보기", "es": "Ver"}
 };
