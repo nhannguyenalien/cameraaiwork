@@ -164,3 +164,14 @@ test("peak window and hourly counts describe the whole day", () => {
   delete process.env.DAILY_SUMMARY_TZ;
   assert.deepEqual([counts[0], counts[2]], [2, 1]);
 });
+
+test("renderSummary cross-dissolves many clips across chunk levels with the exact net duration", { skip: !hasFfmpeg }, async () => {
+  const sample = spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=15:duration=7", "-pix_fmt", "yuv420p", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1"], { maxBuffer: 50e6 }).stdout;
+  const clips = Array.from({ length: 26 }, (_, i) => ev(i + 1, i * 10, `cam${i}`));
+  const { bytes, used } = await renderSummary({}, "a", clips, { fetchClip: async () => sample });
+  assert.equal(used, 26);
+  const probe = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", "-i", "pipe:0"], { input: bytes });
+  const duration = Number(String(probe.stdout).trim());
+  // net = 26 * 3.5 + 0.4 (each clip contributes 3.5s, the last keeps its 0.4s tail)
+  assert.ok(Math.abs(duration - 91.4) < 1, `duration ${duration}`);
+});

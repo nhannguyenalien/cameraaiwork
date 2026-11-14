@@ -27,7 +27,8 @@ export const SUMMARY_STATEMENTS = [
 ];
 
 const CLIP_SECONDS = 3.5;
-const FADE = 0.4; // dip-to-black at each cut so scene changes are not abrupt
+const FADE = 0.4; // cross-dissolve length between consecutive scenes
+const CHUNK = 12; // clips per xfade pass (keeps open inputs / memory small)
 const targetSeconds = () => Math.min(300, Math.max(30, Number(process.env.DAILY_SUMMARY_SECONDS) || 180));
 const CLUSTER_MS = 2 * 60_000;
 const TZ = () => process.env.DAILY_SUMMARY_TZ || "Asia/Ho_Chi_Minh";
@@ -140,23 +141,55 @@ export async function renderSummary(env, accountId, clips, { fetchClip = downloa
         await writeFile(src, await fetchClip(env, accountId, clip));
         const out = join(dir, `part-${parts.length}.mp4`);
         const text = label(clip).replace(/:/g, "\\:");
-        await run("ffmpeg", ["-y", "-ss", "2", "-i", src, "-t", String(CLIP_SECONDS), "-an",
-          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25,fade=t=in:st=0:d=${FADE}:color=black,fade=t=out:st=${CLIP_SECONDS - FADE}:d=${FADE}:color=black,drawtext=text='${text}':x=24:y=h-${timeline?.hourly ? 126 : 48}:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=8${["", ...timelineFilters(clip, timeline)].join(",")},format=yuv420p`,
-          "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-movflags", "+faststart", out]);
-        parts.push(out);
+        await run("ffmpeg", ["-y", "-ss", "2", "-i", src, "-t", String(CLIP_SECONDS + FADE), "-an",
+          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25,drawtext=text='${text}':x=24:y=h-${timeline?.hourly ? 126 : 48}:fontsize=30:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=8${["", ...timelineFilters(clip, timeline)].join(",")},format=yuv420p`,
+          "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart", out]);
+        await rm(src, { force: true });
+        const duration = await probeDuration(out);
+        if (duration < FADE * 3) throw new Error("clip too short");
+        parts.push({ file: out, duration });
       } catch (error) {
         console.error(`[daily-summary] clip ${clip.id} skipped:`, error.message || error);
       }
     }
     if (!parts.length) throw new Error("Không có clip nào dùng được");
-    const list = join(dir, "list.txt");
-    await writeFile(list, parts.map((p) => `file '${p}'`).join("\n"));
+    let level = parts;
+    let pass = 0;
+    while (level.length > 1) {
+      const next = [];
+      for (let i = 0; i < level.length; i += CHUNK) {
+        const group = level.slice(i, i + CHUNK);
+        if (group.length === 1) { next.push(group[0]); continue; }
+        const out = join(dir, `join-${pass}-${i}.mp4`);
+        await xfadeJoin(group, out, level.length <= CHUNK);
+        next.push({ file: out, duration: group.reduce((sum, g) => sum + g.duration, 0) - (group.length - 1) * FADE });
+      }
+      level = next;
+      pass += 1;
+    }
     const final = join(dir, "final.mp4");
-    await run("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", final], { timeoutMs: 180_000 });
+    await run("ffmpeg", ["-y", "-i", level[0].file, "-c", "copy", "-movflags", "+faststart", final]);
     return { bytes: await readFile(final), used: parts.length };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// Cross-dissolve consecutive clips directly into the next picture (no black).
+// offset_k = (d_0 + ... + d_{k-1}) - k * FADE.
+async function xfadeJoin(group, out, last) {
+  const inputs = group.flatMap((g) => ["-i", g.file]);
+  const chain = [];
+  let acc = group[0].duration;
+  let prev = "[0:v]";
+  for (let k = 1; k < group.length; k += 1) {
+    const label = k === group.length - 1 ? "[v]" : `[x${k}]`;
+    chain.push(`${prev}[${k}:v]xfade=transition=fade:duration=${FADE}:offset=${(acc - k * FADE).toFixed(3)}${label}`);
+    acc += group[k].duration;
+    prev = label;
+  }
+  await run("ffmpeg", ["-y", ...inputs, "-filter_complex", chain.join(";"), "-map", "[v]", "-an",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", last ? "26" : "22", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], { timeoutMs: 300_000 });
 }
 
 async function downloadClip(env, accountId, clip) {
