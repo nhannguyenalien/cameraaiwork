@@ -3,7 +3,7 @@ import { getIntegration } from "./integrations.js";
 import { getGoogleDriveRemaining } from "./objectStorage.js";
 import { evictOldestVideos } from "./storageQuota.js";
 import { storageConnections, storageProvider } from "./storagePolicy.js";
-import { cleanupExpiredVideos } from "./videoRetention.js";
+import { cleanupExpiredSummaries, cleanupExpiredVideos } from "./videoRetention.js";
 
 const MiB = 1024 * 1024;
 // Keep a Drive from ever reaching 0 bytes free (that is what made every clip
@@ -44,7 +44,7 @@ export async function reclaimLowDriveSpace(env, accountId, { low = LOW_SPACE_BYT
 // headroom on customers' Drives so writes never hit "storage full".
 export async function runStorageMaintenance(env, { budgetMs = 4 * 60_000, batch = 250 } = {}) {
   const started = Date.now();
-  const summary = { expired: 0, expiryErrors: 0, reclaimed: [] };
+  const summary = { expired: 0, expiryErrors: 0, summariesExpired: 0, reclaimed: [] };
   while (Date.now() - started < budgetMs) {
     const result = await cleanupExpiredVideos(env, batch).catch((error) => {
       console.error("[storage-maintenance] expiry failed:", error.message || error);
@@ -54,6 +54,12 @@ export async function runStorageMaintenance(env, { budgetMs = 4 * 60_000, batch 
     summary.expiryErrors += result.errors.length;
     if (result.scanned < batch || result.deleted === 0) break;
   }
+  const summaries = await cleanupExpiredSummaries(env).catch((error) => {
+    console.error("[storage-maintenance] summary expiry failed:", error.message || error);
+    return { deleted: 0, errors: [{}] };
+  });
+  summary.summariesExpired = summaries.deleted;
+  summary.expiryErrors += summaries.errors.length;
   const accounts = await getDb(env, "_lib.storageGuard").execute({
     sql: "SELECT DISTINCT account_id FROM account_integrations WHERE provider = 'storage'", args: [],
   });

@@ -223,3 +223,34 @@ test("nightly job also builds one video per camera that has daily_summary on, wi
     delete process.env.DAILY_SUMMARY_TZ; delete process.env.DAILY_SUMMARY_PER_CAMERA;
   }
 });
+
+import { PGlite } from "@electric-sql/pglite";
+import { pgliteClient } from "./helpers/pgliteClient.mjs";
+import { cleanupExpiredSummaries } from "../functions/_lib/videoRetention.js";
+
+test("expired summary videos are deleted after the account's retention days; newer ones and failed deletes stay", async () => {
+  const pg = new PGlite();
+  await pg.exec(`CREATE TABLE accounts(id text PRIMARY KEY, plan text, subscription_status text, video_retention_days integer);
+    INSERT INTO accounts VALUES ('free','free','inactive',30), ('pro','pro','active',30);
+    CREATE TABLE daily_summaries(id serial PRIMARY KEY, account_id text, day date, camera text DEFAULT '', status text, video_key text, storage_backend text);
+    INSERT INTO daily_summaries(account_id, day, status, video_key, storage_backend) VALUES
+      ('free', CURRENT_DATE - 8, 'ready', 'free/old.mp4', 'r2'),
+      ('free', CURRENT_DATE - 6, 'ready', 'free/new.mp4', 'r2'),
+      ('free', CURRENT_DATE - 9, 'empty', NULL, NULL),
+      ('pro',  CURRENT_DATE - 20, 'ready', 'pro/keep.mp4', 'r2'),
+      ('pro',  CURRENT_DATE - 31, 'ready', 'pro/old.mp4', 'r2');`);
+  const removed = [];
+  const env = { DB_CLIENT: pgliteClient(pg), DB_METRICS: "0", EVENTS_BUCKET: { delete: async (keys) => { removed.push(...keys); } } };
+  const out = await cleanupExpiredSummaries(env);
+  assert.equal(out.deleted, 3);
+  assert.deepEqual(removed.sort(), ["free/old.mp4", "pro/old.mp4"]);
+  const left = (await pg.query("SELECT video_key FROM daily_summaries ORDER BY id")).rows.map((r) => r.video_key);
+  assert.deepEqual(left, ["free/new.mp4", "pro/keep.mp4"]);
+
+  await pg.exec("INSERT INTO daily_summaries(account_id, day, status, video_key, storage_backend) VALUES ('free', CURRENT_DATE - 10, 'ready', 'free/stuck.mp4', 'r2')");
+  env.EVENTS_BUCKET.delete = async () => { throw new Error("r2 down"); };
+  const failing = await cleanupExpiredSummaries({ ...env });
+  assert.equal(failing.deleted, 0);
+  assert.equal(failing.errors.length, 1);
+  assert.equal((await pg.query("SELECT 1 FROM daily_summaries WHERE video_key = 'free/stuck.mp4'")).rows.length, 1);
+});

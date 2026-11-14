@@ -44,3 +44,51 @@ export async function cleanupExpiredVideos(env, batchSize = 250) {
   }
   return { scanned: result.rows.length, deleted, errors };
 }
+
+// Daily summary videos follow the same retention as event clips: the account's
+// configured days (Pro: video_retention_days, else 7). Rows without a video
+// (empty/error) are dropped on the same schedule. A failed delete keeps the row
+// so the next run retries it.
+export async function cleanupExpiredSummaries(env, batchSize = 200) {
+  const db = getDb(env, "_lib.videoRetention");
+  const result = await db.execute({
+    sql: `SELECT s.id, s.account_id, s.video_key, s.storage_backend
+      FROM daily_summaries s
+      JOIN accounts a ON a.id = s.account_id
+      WHERE s.day < CURRENT_DATE - (CASE
+          WHEN a.plan = 'pro' AND a.subscription_status IN ('active', 'trialing')
+            THEN LEAST(GREATEST(COALESCE(a.video_retention_days, 7), 1), 364)
+          ELSE 7
+        END)::int
+      ORDER BY s.day ASC
+      LIMIT ?`,
+    args: [Math.min(Math.max(Number(batchSize) || 200, 1), 1000)],
+  });
+  const groups = new Map();
+  const keyless = [];
+  for (const row of result.rows) {
+    if (!row.video_key) { keyless.push(row.id); continue; }
+    const groupKey = `${row.account_id}:${row.storage_backend || "r2"}`;
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey).push(row);
+  }
+  let deleted = 0;
+  const errors = [];
+  const dropRows = async (ids) => {
+    if (!ids.length) return;
+    await db.execute({ sql: `DELETE FROM daily_summaries WHERE id IN (${ids.map(() => "?").join(",")})`, args: ids });
+    deleted += ids.length;
+  };
+  await dropRows(keyless);
+  for (const rows of groups.values()) {
+    const { account_id: accountId, storage_backend: backend = "r2" } = rows[0];
+    try {
+      await deleteObjects(env, accountId, backend, rows.map((row) => row.video_key));
+      await dropRows(rows.map((row) => row.id));
+    } catch (error) {
+      console.error(`[summary-retention] account=${accountId} backend=${backend}:`, error.message || error);
+      errors.push({ accountId, backend, count: rows.length });
+    }
+  }
+  return { scanned: result.rows.length, deleted, errors };
+}
