@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { loadAiCredentials } from "./integrations.js";
 
 const TIMEOUT_MS = 30_000;
-const MAX_WORDS = 90; // ~35-40s of speech
+const MAX_WORDS = 130; // ~50s of speech
 
 function hhmm(timestamp, tz) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(timestamp));
@@ -28,19 +28,33 @@ export function narrationFacts(clips, tz) {
   });
 }
 
+// "cao điểm 10–13 giờ (210 sự kiện)": busiest 3-hour window of the whole day.
+export function peakWindow(hourly) {
+  if (!hourly?.some((n) => n > 0)) return null;
+  let best = { start: 0, count: -1 };
+  for (let h = 0; h < 22; h += 1) {
+    const count = hourly[h] + hourly[h + 1] + hourly[h + 2];
+    if (count > best.count) best = { start: h, count };
+  }
+  return { from: best.start, to: best.start + 3, count: best.count };
+}
+
 // Offline fallback so the feature still speaks without any AI key.
-export function templateNarration(day, totalEvents, facts) {
+export function templateNarration(day, totalEvents, facts, hourly) {
   const top = [...facts].sort((a, b) => b.threat - a.threat).slice(0, 4).sort((a, b) => a.time.localeCompare(b.time));
   const lines = top.map((f) => `Lúc ${f.time}, camera ${f.camera}: ${f.text}.`);
-  return `Tóm tắt ngày ${day}. Hệ thống ghi nhận ${totalEvents} sự kiện. ${lines.join(" ")}`.trim();
+  const peak = peakWindow(hourly);
+  const rhythm = peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ với ${peak.count} sự kiện.` : "";
+  return `Tóm tắt ngày ${day}. Hệ thống ghi nhận ${totalEvents} sự kiện.${rhythm} ${lines.join(" ")}`.trim();
 }
 
 const clip = (text) => String(text || "").replace(/\s+/g, " ").trim().split(" ").slice(0, MAX_WORDS).join(" ");
 
-export async function writeNarration(env, accountId, { day, totalEvents, facts, tz }, deps = {}) {
-  const fallback = templateNarration(day, totalEvents, facts);
+export async function writeNarration(env, accountId, { day, totalEvents, facts, hourly, tz }, deps = {}) {
+  const fallback = templateNarration(day, totalEvents, facts, hourly);
+  const peak = peakWindow(hourly);
   const credentials = await (deps.credentials ? deps.credentials() : loadAiCredentials(env, accountId)).catch(() => ({}));
-  const prompt = `Bạn là nhân viên bảo vệ đọc báo cáo cuối ngày cho chủ nhà. Viết lời đọc tiếng Việt, tối đa ${MAX_WORDS} từ, giọng tự nhiên, không icon, không markdown. Chỉ dùng dữ kiện dưới đây, không bịa danh tính hay chi tiết. Nêu số sự kiện, các việc đáng chú ý theo giờ, kết bằng 1 câu đánh giá chung.\nNgày ${day}, tổng ${totalEvents} sự kiện.\n` +
+  const prompt = `Bạn là nhân viên bảo vệ đọc báo cáo cuối ngày cho chủ nhà. Viết lời đọc tiếng Việt, tối đa ${MAX_WORDS} từ, giọng tự nhiên, không icon, không markdown. Chỉ dùng dữ kiện dưới đây, không bịa danh tính hay chi tiết. Nêu số sự kiện, nhịp độ trong ngày, các việc đáng chú ý theo giờ, kết bằng 1 câu đánh giá chung. Video chỉ là các cảnh tiêu biểu, không phải toàn bộ sự kiện.\nNgày ${day}, tổng ${totalEvents} sự kiện.${peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ (${peak.count} sự kiện).` : ""}\nCác cảnh tiêu biểu:\n` +
     facts.map((f) => `- ${f.time} camera ${f.camera}${f.threat >= 2 ? " [đáng ngờ]" : ""}: ${f.text}`).join("\n");
   const attempts = [];
   if (credentials.gemini?.apiKey) attempts.push(async () => {

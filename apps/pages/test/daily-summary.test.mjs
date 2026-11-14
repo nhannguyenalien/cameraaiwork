@@ -141,3 +141,25 @@ test("mixNarration adds an audio track and extends video when speech is longer",
   const duration = Number(probe(["-show_entries", "format=duration"]));
   assert.ok(duration >= 4 && duration < 5.5, `duration ${duration}`);
 });
+
+import { peakWindow } from "../functions/_lib/summaryNarration.js";
+import { hourlyCounts } from "../functions/_lib/dailySummary.js";
+
+test("default target is ~3 minutes (51 clips) spread over the whole day", () => {
+  const events = [];
+  for (let i = 0; i < 640; i += 1) events.push(ev(i, Math.floor((i / 640) * 1400), `cam${i % 16}`, i % 9 === 0 ? { people_count: 1 } : {}));
+  const picked = selectClips(events);
+  assert.equal(picked.length, 51);
+  const hours = new Set(picked.map((p) => Math.floor((p.ms - T0) / 3600_000)));
+  assert.ok(hours.size >= 18, `only ${hours.size} distinct hours covered`);
+});
+
+test("peak window and hourly counts describe the whole day", () => {
+  const hourly = new Array(24).fill(1); hourly[10] = 80; hourly[11] = 70; hourly[12] = 60;
+  assert.deepEqual(peakWindow(hourly), { from: 10, to: 13, count: 210 });
+  assert.equal(peakWindow(new Array(24).fill(0)), null);
+  process.env.DAILY_SUMMARY_TZ = "UTC";
+  const counts = hourlyCounts([ev(1, 0, "a"), ev(2, 10, "a"), ev(3, 130, "a")]);
+  delete process.env.DAILY_SUMMARY_TZ;
+  assert.deepEqual([counts[0], counts[2]], [2, 1]);
+});

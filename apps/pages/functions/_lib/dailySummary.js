@@ -26,9 +26,9 @@ export const SUMMARY_STATEMENTS = [
   "ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS narration TEXT",
 ];
 
-const CLIP_SECONDS = 4;
-const TARGET_SECONDS = 90;
-const CLUSTER_MS = 3 * 60_000;
+const CLIP_SECONDS = 3.5;
+const targetSeconds = () => Math.min(300, Math.max(30, Number(process.env.DAILY_SUMMARY_SECONDS) || 180));
+const CLUSTER_MS = 2 * 60_000;
 const TZ = () => process.env.DAILY_SUMMARY_TZ || "Asia/Ho_Chi_Minh";
 
 // Pure rule-based selection (no AI): score, de-duplicate bursts across cameras,
@@ -43,7 +43,7 @@ export function scoreEvent(event) {
   return score;
 }
 
-export function selectClips(events, { targetClips = Math.floor(TARGET_SECONDS / CLIP_SECONDS), perCamera } = {}) {
+export function selectClips(events, { targetClips = Math.floor(targetSeconds() / CLIP_SECONDS), perCamera } = {}) {
   const rows = events.map((e) => ({ ...e, ms: new Date(e.timestamp).getTime(), score: scoreEvent(e) })).sort((a, b) => a.ms - b.ms);
   // 1) burst clusters: keep the best event per ~3 minute window
   const clusters = [];
@@ -170,6 +170,15 @@ export async function mixNarration(videoBytes, speech) {
   }
 }
 
+// Events per local hour over the WHOLE day (not only the chosen clips), so the
+// voice-over can describe the day's rhythm even though the video is a highlight reel.
+export function hourlyCounts(events) {
+  const counts = new Array(24).fill(0);
+  const fmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ(), hour: "2-digit", hour12: false });
+  for (const event of events) counts[Number(fmt.format(new Date(event.timestamp))) % 24] += 1;
+  return counts;
+}
+
 export function yesterday(now = new Date()) {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ(), year: "numeric", month: "2-digit", day: "2-digit" });
   return fmt.format(new Date(now.getTime() - 24 * 3600_000));
@@ -207,7 +216,7 @@ export async function generateDailySummary(env, accountId, day, deps = {}) {
     let narration = null;
     if (env.DAILY_SUMMARY_VOICE !== "off") {
       try {
-        const written = await (deps.writeNarration || writeNarration)(env, accountId, { day, totalEvents: events.length, facts: narrationFacts(clips, TZ()), tz: TZ() });
+        const written = await (deps.writeNarration || writeNarration)(env, accountId, { day, totalEvents: events.length, facts: narrationFacts(clips, TZ()), hourly: hourlyCounts(events), tz: TZ() });
         const speech = await (deps.speech || synthesizeSpeech)(env, accountId, written.text);
         if (speech) { bytes = await (deps.mix || mixNarration)(bytes, speech); narration = written.text; }
       } catch (error) { console.error("[daily-summary] narration skipped:", error.message || error); }
