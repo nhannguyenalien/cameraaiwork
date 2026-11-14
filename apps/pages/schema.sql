@@ -314,8 +314,10 @@ CREATE TABLE IF NOT EXISTS daily_summaries (
     event_count INTEGER,
     error TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    finished_at TIMESTAMPTZ,
-    UNIQUE (account_id, day)
+    finished_at TIMESTAMPTZ
 );
 
 ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS narration TEXT;
+ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS camera TEXT NOT NULL DEFAULT '';
+ALTER TABLE daily_summaries DROP CONSTRAINT IF EXISTS daily_summaries_account_id_day_key;
+CREATE UNIQUE INDEX IF NOT EXISTS daily_summaries_acct_day_cam ON daily_summaries (account_id, day, camera);

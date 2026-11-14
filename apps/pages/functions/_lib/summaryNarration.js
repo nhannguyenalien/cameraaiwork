@@ -40,21 +40,21 @@ export function peakWindow(hourly) {
 }
 
 // Offline fallback so the feature still speaks without any AI key.
-export function templateNarration(day, totalEvents, facts, hourly) {
+export function templateNarration(day, totalEvents, facts, hourly, cameraName = "") {
   const top = [...facts].sort((a, b) => b.threat - a.threat).slice(0, 4).sort((a, b) => a.time.localeCompare(b.time));
   const lines = top.map((f) => `Lúc ${f.time}, camera ${f.camera}: ${f.text}.`);
   const peak = peakWindow(hourly);
   const rhythm = peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ với ${peak.count} sự kiện.` : "";
-  return `Tóm tắt ngày ${day}. Hệ thống ghi nhận ${totalEvents} sự kiện.${rhythm} ${lines.join(" ")}`.trim();
+  return `Tóm tắt${cameraName ? ` camera ${cameraName}` : ""} ngày ${day}. ${cameraName ? "Camera" : "Hệ thống"} ghi nhận ${totalEvents} sự kiện.${rhythm} ${lines.join(" ")}`.trim();
 }
 
 const clip = (text) => String(text || "").replace(/\s+/g, " ").trim().split(" ").slice(0, MAX_WORDS).join(" ");
 
-export async function writeNarration(env, accountId, { day, totalEvents, facts, hourly, tz }, deps = {}) {
-  const fallback = templateNarration(day, totalEvents, facts, hourly);
+export async function writeNarration(env, accountId, { day, totalEvents, facts, hourly, cameraName = "", tz }, deps = {}) {
+  const fallback = templateNarration(day, totalEvents, facts, hourly, cameraName);
   const peak = peakWindow(hourly);
   const credentials = await (deps.credentials ? deps.credentials() : loadAiCredentials(env, accountId)).catch(() => ({}));
-  const prompt = `Bạn là nhân viên bảo vệ đọc báo cáo cuối ngày cho chủ nhà. Viết lời đọc tiếng Việt, tối đa ${MAX_WORDS} từ, giọng tự nhiên, không icon, không markdown. Chỉ dùng dữ kiện dưới đây, không bịa danh tính hay chi tiết. Nêu số sự kiện, nhịp độ trong ngày, các việc đáng chú ý theo giờ, kết bằng 1 câu đánh giá chung. Video chỉ là các cảnh tiêu biểu, không phải toàn bộ sự kiện.\nNgày ${day}, tổng ${totalEvents} sự kiện.${peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ (${peak.count} sự kiện).` : ""}\nCác cảnh tiêu biểu:\n` +
+  const prompt = `Bạn là nhân viên bảo vệ đọc báo cáo cuối ngày cho chủ nhà. Viết lời đọc tiếng Việt${cameraName ? ` cho riêng camera "${cameraName}"` : ""}, tối đa ${MAX_WORDS} từ, giọng tự nhiên, không icon, không markdown. Chỉ dùng dữ kiện dưới đây, không bịa danh tính hay chi tiết. Nêu số sự kiện, nhịp độ trong ngày, các việc đáng chú ý theo giờ, kết bằng 1 câu đánh giá chung. Video chỉ là các cảnh tiêu biểu, không phải toàn bộ sự kiện.\nNgày ${day}, tổng ${totalEvents} sự kiện.${peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ (${peak.count} sự kiện).` : ""}\nCác cảnh tiêu biểu:\n` +
     facts.map((f) => `- ${f.time} camera ${f.camera}${f.threat >= 2 ? " [đáng ngờ]" : ""}: ${f.text}`).join("\n");
   const attempts = [];
   if (credentials.gemini?.apiKey) attempts.push(async () => {

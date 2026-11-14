@@ -20,10 +20,12 @@ export const SUMMARY_STATEMENTS = [
     event_count INTEGER,
     error TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    finished_at TIMESTAMPTZ,
-    UNIQUE (account_id, day)
+    finished_at TIMESTAMPTZ
   )`,
   "ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS narration TEXT",
+  "ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS camera TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE daily_summaries DROP CONSTRAINT IF EXISTS daily_summaries_account_id_day_key",
+  "CREATE UNIQUE INDEX IF NOT EXISTS daily_summaries_acct_day_cam ON daily_summaries (account_id, day, camera)",
 ];
 
 const CLIP_SECONDS = 3.5;
@@ -247,44 +249,48 @@ export function yesterday(now = new Date()) {
   return fmt.format(new Date(now.getTime() - 24 * 3600_000));
 }
 
-async function dayEvents(db, accountId, day) {
+async function dayEvents(db, accountId, day, camera = "") {
   const result = await db.execute({
     sql: `SELECT e.id, e.camera, COALESCE(NULLIF(c.name, ''), e.camera) AS camera_name, e.timestamp, e.person_id, e.threat_level, e.scene_json, e.video_key, e.storage_backend,
                  (SELECT COUNT(*) FROM event_people p WHERE p.event_id = e.id) AS people_count
           FROM events e LEFT JOIN cameras c ON c.id = e.camera AND c.account_id = e.account_id
           WHERE e.account_id = ? AND e.video_key IS NOT NULL AND e.video_status = 'ready'
             AND (e.timestamp AT TIME ZONE ?)::date = ?::date
+            AND (?::text = '' OR e.camera = ?::text)
           ORDER BY e.timestamp ASC`,
-    args: [accountId, TZ(), day],
+    args: [accountId, TZ(), day, camera, camera],
   });
   return result.rows;
 }
 
 // Build (or rebuild) one account's summary for `day` (YYYY-MM-DD).
-export async function generateDailySummary(env, accountId, day, deps = {}) {
+// camera = "" -> whole system; otherwise one camera id (shorter reel).
+export async function generateDailySummary(env, accountId, day, deps = {}, camera = "") {
   const db = getDb(env, "_lib.dailySummary");
   await db.execute({
-    sql: `INSERT INTO daily_summaries (account_id, day, status) VALUES (?, ?::date, 'running')
-          ON CONFLICT (account_id, day) DO UPDATE SET status = 'running', error = NULL`,
-    args: [accountId, day],
+    sql: `INSERT INTO daily_summaries (account_id, day, camera, status) VALUES (?, ?::date, ?, 'running')
+          ON CONFLICT (account_id, day, camera) DO UPDATE SET status = 'running', error = NULL, created_at = CURRENT_TIMESTAMP`,
+    args: [accountId, day, camera],
   });
   try {
-    const events = await dayEvents(db, accountId, day);
-    const clips = selectClips(events);
+    const events = await dayEvents(db, accountId, day, camera);
+    const cameraName = camera ? (events[0]?.camera_name || camera) : "";
+    const seconds = camera ? Math.min(300, Math.max(30, Number(process.env.DAILY_SUMMARY_CAMERA_SECONDS) || 90)) : undefined;
+    const clips = selectClips(events, camera ? { targetClips: Math.floor(seconds / CLIP_SECONDS), perCamera: Infinity } : {});
     if (!clips.length) {
-      await db.execute({ sql: "UPDATE daily_summaries SET status = 'empty', event_count = 0, clip_count = 0, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date", args: [accountId, day] });
+      await db.execute({ sql: "UPDATE daily_summaries SET status = 'empty', event_count = 0, clip_count = 0, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date AND camera = ?", args: [accountId, day, camera] });
       return { status: "empty" };
     }
     let { bytes, used } = await (deps.render || renderSummary)(env, accountId, clips, { timeline: { hourly: hourlyCounts(events), allMs: events.map((e) => new Date(e.timestamp).getTime()).sort((a, b) => a - b) } });
     let narration = null;
     if (env.DAILY_SUMMARY_VOICE !== "off") {
       try {
-        const written = await (deps.writeNarration || writeNarration)(env, accountId, { day, totalEvents: events.length, facts: narrationFacts(clips, TZ()), hourly: hourlyCounts(events), tz: TZ() });
+        const written = await (deps.writeNarration || writeNarration)(env, accountId, { day, totalEvents: events.length, facts: narrationFacts(clips, TZ()), hourly: hourlyCounts(events), cameraName, tz: TZ() });
         const speech = await (deps.speech || synthesizeSpeech)(env, accountId, written.text);
         if (speech) { bytes = await (deps.mix || mixNarration)(bytes, speech); narration = written.text; }
       } catch (error) { console.error("[daily-summary] narration skipped:", error.message || error); }
     }
-    const key = `${accountId}/summaries/${day}.mp4`;
+    const key = `${accountId}/summaries/${day}${camera ? `-${camera}` : ""}.mp4`;
     let backend;
     let lastError;
     for (const candidate of await resolveStorageChain(env, accountId)) {
@@ -293,16 +299,16 @@ export async function generateDailySummary(env, accountId, day, deps = {}) {
     }
     if (!backend) throw lastError || new Error("Không lưu được video tóm tắt");
     await db.execute({
-      sql: "UPDATE daily_summaries SET status = 'ready', video_key = ?, storage_backend = ?, clip_count = ?, event_count = ?, narration = ?, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date",
-      args: [key, backend, used, events.length, narration, accountId, day],
+      sql: "UPDATE daily_summaries SET status = 'ready', video_key = ?, storage_backend = ?, clip_count = ?, event_count = ?, narration = ?, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date AND camera = ?",
+      args: [key, backend, used, events.length, narration, accountId, day, camera],
     });
     const telegram = await getIntegration(env, accountId, "telegram").catch(() => null);
     if (telegram && bytes.length < 49 * 1024 * 1024) {
-      await (deps.sendVideo || sendVideoAlert)(telegram, bytes, (narration ? `Tóm tắt ngày ${day}: ${narration}` : `Tóm tắt ngày ${day}: ${used} cảnh từ ${events.length} sự kiện`).slice(0, 1000)).catch((e) => console.error("[daily-summary] telegram", e.message || e));
+      await (deps.sendVideo || sendVideoAlert)(telegram, bytes, (narration ? `Tóm tắt${cameraName ? ` ${cameraName}` : ""} ngày ${day}: ${narration}` : `Tóm tắt${cameraName ? ` ${cameraName}` : ""} ngày ${day}: ${used} cảnh từ ${events.length} sự kiện`).slice(0, 1000)).catch((e) => console.error("[daily-summary] telegram", e.message || e));
     }
     return { status: "ready", clips: used, events: events.length, key, backend };
   } catch (error) {
-    await db.execute({ sql: "UPDATE daily_summaries SET status = 'error', error = ?, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date", args: [String(error.message || error).slice(0, 300), accountId, day] });
+    await db.execute({ sql: "UPDATE daily_summaries SET status = 'error', error = ?, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date AND camera = ?", args: [String(error.message || error).slice(0, 300), accountId, day, camera] });
     throw error;
   }
 }
@@ -316,7 +322,7 @@ export async function runDailySummaries(env, now = new Date(), deps = {}) {
   const accounts = await db.execute({
     sql: `SELECT DISTINCT e.account_id FROM events e
           WHERE e.video_key IS NOT NULL AND (e.timestamp AT TIME ZONE ?)::date = ?::date
-            AND NOT EXISTS (SELECT 1 FROM daily_summaries s WHERE s.account_id = e.account_id AND s.day = ?::date AND s.status IN ('ready','empty','running'))`,
+            AND NOT EXISTS (SELECT 1 FROM daily_summaries s WHERE s.account_id = e.account_id AND s.camera = '' AND s.day = ?::date AND s.status IN ('ready','empty','running'))`,
     args: [TZ(), day, day],
   });
   const results = [];

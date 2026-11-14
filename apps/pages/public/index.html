@@ -416,7 +416,10 @@
               <div class="card mb-3" id="summary-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <h3 class="card-title mb-0"><i class="ti ti-movie me-2"></i>Video tóm tắt ngày</h3>
-                  <button id="summary-generate" class="btn btn-sm btn-outline-primary" type="button">Tạo cho hôm qua</button>
+                  <div class="d-flex gap-2 align-items-center">
+                    <select id="summary-camera" class="form-select form-select-sm" style="max-width:190px"><option value="">Cả hệ thống</option></select>
+                    <button id="summary-generate" class="btn btn-sm btn-outline-primary" type="button">Tạo cho hôm qua</button>
+                  </div>
                 </div>
                 <div class="card-body">
                   <video id="summary-player" class="w-100 rounded mb-3 d-none" controls playsinline style="max-height:420px;background:#000"></video>
@@ -778,9 +781,9 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.5.0/dist/js/tabler.min.js" integrity="sha384-fSOug2E78eoy8fAFcDbY60mgZb6eboMDErIUzTF1UWHQCmmN7LcTyt+uzxH8upW+" crossorigin="anonymous"></script>
 
-<script src="/ui-translations.js?v=20261114-1"></script>
-<script src="/dashboard-i18n.js?v=20261114-1"></script>
-<script src="/ui-i18n-fallback.js?v=20261114-1"></script>
+<script src="/ui-translations.js?v=20261114-2"></script>
+<script src="/dashboard-i18n.js?v=20261114-2"></script>
+<script src="/ui-i18n-fallback.js?v=20261114-2"></script>
 <script>
   function resourceText(key) {
     const language = document.documentElement.lang || 'vi';
@@ -1583,6 +1586,12 @@
   let summaryTimer = null;
   async function loadSummaries() {
     const { summaries } = await api('/api/daily-summaries');
+    const picker = document.getElementById('summary-camera');
+    if (picker.options.length - 1 !== cameras.length) {
+      const chosen = picker.value;
+      picker.innerHTML = `<option value="">${escapeHtml(window.uiText('Cả hệ thống'))}</option>` + cameras.map((c) => `<option value="${escapeHtml(c.cameraId)}">${escapeHtml(c.cameraName || c.cameraId)}</option>`).join('');
+      picker.value = chosen;
+    }
     document.getElementById('summary-empty').classList.toggle('d-none', summaries.length > 0);
     const list = document.getElementById('summary-list');
     list.innerHTML = summaries.map((row) => {
@@ -1590,7 +1599,8 @@
       const label = { ready: t('{0} cảnh / {1} sự kiện', { 0: row.clip_count, 1: row.event_count }), running: t('Đang tạo…'), empty: t('Không có video trong ngày'), error: t('Lỗi: {0}', { 0: row.error || '' }), pending: t('Đang chờ') }[row.status] || escapeHtml(row.status);
       const play = row.status === 'ready' ? `<button class="btn btn-sm btn-primary" data-summary-play="${row.id}" type="button"><i class="ti ti-player-play me-1"></i>${t('Xem')}</button>` : '';
       const note = row.narration ? `<div class="text-secondary small mt-1">${escapeHtml(row.narration)}</div>` : '';
-      return `<div class="list-group-item px-0"><div class="d-flex justify-content-between align-items-center gap-2"><div><strong>${escapeHtml(row.day)}</strong> <span class="text-secondary small ms-2">${label}</span></div><div class="d-flex gap-2">${play}</div></div>${note}</div>`;
+      const scope = row.camera ? escapeHtml(row.camera_name || row.camera) : escapeHtml(window.uiText('Cả hệ thống'));
+      return `<div class="list-group-item px-0"><div class="d-flex justify-content-between align-items-center gap-2"><div><strong>${escapeHtml(row.day)}</strong> <span class="badge bg-secondary-lt ms-1">${scope}</span> <span class="text-secondary small ms-2">${label}</span></div><div class="d-flex gap-2">${play}</div></div>${note}</div>`;
     }).join('');
     clearTimeout(summaryTimer);
     if (summaries.some((row) => row.status === 'running')) summaryTimer = setTimeout(() => loadSummaries().catch(() => {}), 8000);
@@ -1611,7 +1621,7 @@
   document.getElementById('summary-generate').addEventListener('click', async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    try { await api('/api/daily-summaries', { method: 'POST', body: '{}' }); await loadSummaries(); }
+    try { await api('/api/daily-summaries', { method: 'POST', body: JSON.stringify({ camera: document.getElementById('summary-camera').value }) }); await loadSummaries(); }
     catch (error) { alert(error.message); }
     finally { button.disabled = false; }
   });

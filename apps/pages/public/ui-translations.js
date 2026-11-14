@@ -4584,5 +4584,6 @@ window.CameraTranslations = {
   "Đang tạo…": {"en": "Creating…", "ja": "作成中…", "fr": "Création…", "ko": "만드는 중…", "es": "Creando…"},
   "Không có video trong ngày": {"en": "No video that day", "ja": "この日の動画はありません", "fr": "Aucune vidéo ce jour-là", "ko": "해당 날짜에 영상이 없습니다", "es": "No hay vídeo ese día"},
   "Đang chờ": {"en": "Waiting", "ja": "待機中", "fr": "En attente", "ko": "대기 중", "es": "En espera"},
-  "Xem": {"en": "View", "ja": "表示", "fr": "Voir", "ko": "보기", "es": "Ver"}
+  "Xem": {"en": "View", "ja": "表示", "fr": "Voir", "ko": "보기", "es": "Ver"},
+  "Cả hệ thống": {"en": "Whole system", "ja": "システム全体", "fr": "Tout le système", "ko": "전체 시스템", "es": "Todo el sistema"}
 };

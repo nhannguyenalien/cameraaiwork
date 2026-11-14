@@ -175,3 +175,22 @@ test("renderSummary cross-dissolves many clips across chunk levels with the exac
   // net = 26 * 3.5 + 0.4 (each clip contributes 3.5s, the last keeps its 0.4s tail)
   assert.ok(Math.abs(duration - 91.4) < 1, `duration ${duration}`);
 });
+
+test("per-camera summary filters by camera, uses a shorter reel and its own key", async () => {
+  const rows = Array.from({ length: 60 }, (_, i) => ({ id: i + 1, camera: "cam-x", camera_name: "Cổng", timestamp: new Date(T0 + i * 20 * 60_000).toISOString(), video_key: `k${i}`, storage_backend: "r2", people_count: 0 }));
+  const sqls = [];
+  const unsafe = async (sql, args) => {
+    sqls.push({ sql: sql.replace(/\s+/g, " "), args });
+    if (sql.includes("FROM events e") && sql.includes("people_count")) return rows;
+    return [];
+  };
+  const env = { DB_CLIENT: { unsafe, begin: async (fn) => Promise.all(fn({ unsafe })) }, DAILY_SUMMARY_VOICE: "off", EVENTS_BUCKET: { put: async () => {}, head: async () => null, list: async () => ({ objects: [], truncated: false }) } };
+  let rendered;
+  const result = await generateDailySummary(env, "a", "2026-11-13", { render: async (_e, _a, clips) => { rendered = clips; return { bytes: Buffer.from("v"), used: clips.length }; } }, "cam-x");
+  assert.equal(result.status, "ready");
+  assert.equal(rendered.length, 25); // 90s / 3.5s
+  assert.match(result.key, /summaries\/2026-11-13-cam-x\.mp4$/);
+  const select = sqls.find((q) => q.sql.includes("people_count"));
+  assert.deepEqual(select.args.slice(-2), ["cam-x", "cam-x"]);
+  assert.ok(sqls.some((q) => q.sql.includes("ON CONFLICT (account_id, day, camera)") && q.args.includes("cam-x")));
+});
