@@ -7,8 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadAiCredentials } from "./integrations.js";
 
-const TIMEOUT_MS = 30_000;
-const MAX_WORDS = 130; // ~50s of speech
 
 function hhmm(timestamp, tz) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(timestamp));
@@ -16,16 +14,6 @@ function hhmm(timestamp, tz) {
 
 function sceneOf(event) {
   try { const scene = JSON.parse(event.scene_json || "null"); return scene && !scene.pending ? scene : null; } catch { return null; }
-}
-
-// One factual line per chosen clip. Never invents identities: only the stored
-// scene summary or the "known/unknown person" flag.
-export function narrationFacts(clips, tz) {
-  return clips.map((event) => {
-    const scene = sceneOf(event);
-    const what = scene?.summary || (Number(event.people_count) > 0 ? (event.person_id ? "có người quen đi qua" : "có người lạ xuất hiện") : "có chuyển động");
-    return { time: hhmm(event.timestamp, tz), camera: event.camera_name || event.camera || "camera", text: what, threat: Number(event.threat_level) || 0 };
-  });
 }
 
 // "cao điểm 10–13 giờ (210 sự kiện)": busiest 3-hour window of the whole day.
@@ -39,47 +27,23 @@ export function peakWindow(hourly) {
   return { from: best.start, to: best.start + 3, count: best.count };
 }
 
-// Offline fallback so the feature still speaks without any AI key.
-export function templateNarration(day, totalEvents, facts, hourly, cameraName = "") {
-  const top = [...facts].sort((a, b) => b.threat - a.threat).slice(0, 4).sort((a, b) => a.time.localeCompare(b.time));
-  const lines = top.map((f) => `Lúc ${f.time}, camera ${f.camera}: ${f.text}.`);
+// General facts only (no AI): totals, busiest window, number of flagged scenes.
+export function introText({ day, totalEvents, hourly, cameraName = "", alerts = 0 }) {
   const peak = peakWindow(hourly);
-  const rhythm = peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ với ${peak.count} sự kiện.` : "";
-  return `Tóm tắt${cameraName ? ` camera ${cameraName}` : ""} ngày ${day}. ${cameraName ? "Camera" : "Hệ thống"} ghi nhận ${totalEvents} sự kiện.${rhythm} ${lines.join(" ")}`.trim();
+  const parts = [`Tóm tắt ngày ${day}${cameraName ? `, camera ${cameraName}` : ""}.`, `${totalEvents} sự kiện.`];
+  if (peak) parts.push(`Cao điểm từ ${peak.from} đến ${peak.to} giờ.`);
+  if (alerts) parts.push(`Có ${alerts} cảnh cần chú ý.`);
+  return parts.join(" ");
 }
 
-const clip = (text) => String(text || "").replace(/\s+/g, " ").trim().split(" ").slice(0, MAX_WORDS).join(" ");
-
-export async function writeNarration(env, accountId, { day, totalEvents, facts, hourly, cameraName = "", tz }, deps = {}) {
-  const fallback = templateNarration(day, totalEvents, facts, hourly, cameraName);
-  const peak = peakWindow(hourly);
-  const credentials = await (deps.credentials ? deps.credentials() : loadAiCredentials(env, accountId)).catch(() => ({}));
-  const prompt = `Bạn là nhân viên bảo vệ đọc báo cáo cuối ngày cho chủ nhà. Viết lời đọc tiếng Việt${cameraName ? ` cho riêng camera "${cameraName}"` : ""}, tối đa ${MAX_WORDS} từ, giọng tự nhiên, không icon, không markdown. Chỉ dùng dữ kiện dưới đây, không bịa danh tính hay chi tiết. Nêu số sự kiện, nhịp độ trong ngày, các việc đáng chú ý theo giờ, kết bằng 1 câu đánh giá chung. Video chỉ là các cảnh tiêu biểu, không phải toàn bộ sự kiện.\nNgày ${day}, tổng ${totalEvents} sự kiện.${peak ? ` Cao điểm từ ${peak.from} đến ${peak.to} giờ (${peak.count} sự kiện).` : ""}\nCác cảnh tiêu biểu:\n` +
-    facts.map((f) => `- ${f.time} camera ${f.camera}${f.threat >= 2 ? " [đáng ngờ]" : ""}: ${f.text}`).join("\n");
-  const attempts = [];
-  if (credentials.gemini?.apiKey) attempts.push(async () => {
-    const model = credentials.gemini.model || "gemini-2.5-flash";
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST", headers: { "x-goog-api-key": credentials.gemini.apiKey, "Content-Type": "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS),
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } } }),
-    });
-    if (!r.ok) throw new Error(`Gemini HTTP ${r.status}`);
-    return (await r.json()).candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("");
-  });
-  if (credentials.openai?.apiKey) attempts.push(async () => {
-    const r = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST", headers: { Authorization: `Bearer ${credentials.openai.apiKey}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS),
-      body: JSON.stringify({ model: credentials.openai.model || "gpt-5-mini", store: false, max_output_tokens: 600, input: prompt }),
-    });
-    if (!r.ok) throw new Error(`OpenAI HTTP ${r.status}`);
-    const p = await r.json();
-    return p.output_text || (p.output || []).flatMap((i) => i.content || []).map((c) => c.text || "").join("");
-  });
-  for (const attempt of attempts) {
-    try { const text = clip(await attempt()); if (text.length > 20) return { text, source: "ai" }; }
-    catch (error) { console.error("[summary-narration] text:", error.message || error); }
-  }
-  return { text: clip(fallback), source: "template" };
+// A spoken line ONLY for scenes the high-security analysis already described
+// (stored scene_json). Everything else stays silent: no guessing from metadata.
+export function sceneCue(event, tz) {
+  const scene = sceneOf(event);
+  if (!scene?.summary) return null;
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(event.timestamp)).split(":");
+  const level = Number(scene.threat) >= 2 ? "Đáng ngờ. " : "";
+  return `${time[0]} giờ ${time[1]}. ${level}${String(scene.summary).split(" ").slice(0, 28).join(" ")}`;
 }
 
 // Speech providers, tried in order (DAILY_SUMMARY_TTS="edge,gtts,piper,gemini,openai").

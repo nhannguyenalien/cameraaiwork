@@ -8,7 +8,7 @@ const ev = (id, minutes, camera, extra = {}) => ({ id, camera, timestamp: new Da
 
 test("bursts across cameras collapse to the best event", () => {
   const picked = selectClips([ev(1, 0, "a"), ev(2, 1, "b", { threat_level: 3 }), ev(3, 2, "c"), ev(4, 60, "a")], { targetClips: 10 });
-  assert.deepEqual(picked.map((p) => p.id), [2, 4]);
+  assert.deepEqual(picked.map((p) => p.id), [1, 2, 4]); // 1 & 3 merge (2 min apart); the alert is always kept
 });
 
 test("unknown person beats plain motion; result is capped and in time order", () => {
@@ -71,29 +71,17 @@ test("runDailySummaries only fires at the configured local hour unless forced", 
   assert.equal(forced.results[0].status, "empty");
 });
 
-import { narrationFacts, templateNarration, writeNarration, synthesizeSpeech, splitForTts } from "../functions/_lib/summaryNarration.js";
-import { mixNarration } from "../functions/_lib/dailySummary.js";
+import { introText, sceneCue, synthesizeSpeech, splitForTts } from "../functions/_lib/summaryNarration.js";
+import { mixNarration, mixCues } from "../functions/_lib/dailySummary.js";
 
-test("narration facts use stored scene summary and never invent identities", () => {
-  const facts = narrationFacts([
-    ev(1, 0, "cong", { scene_json: JSON.stringify({ summary: "Shipper đưa kiện hàng", threat: 0 }), threat_level: 0 }),
-    ev(2, 30, "san", { people_count: 1 }),
-    ev(3, 60, "sau", { threat_level: 3, scene_json: '{"pending":true}' }),
-  ], "UTC");
-  assert.deepEqual(facts.map((f) => f.text), ["Shipper đưa kiện hàng", "có người lạ xuất hiện", "có chuyển động"]);
-  assert.match(templateNarration("2026-11-13", 3, facts), /Tóm tắt ngày 2026-11-13\. Hệ thống ghi nhận 3 sự kiện\./);
-});
-
-test("writeNarration falls back to the template without AI keys or when the API fails", async (t) => {
-  t.mock.method(console, "error", () => {});
-  const args = { day: "2026-11-13", totalEvents: 3, facts: [{ time: "08:00", camera: "cong", text: "có người lạ", threat: 1 }], tz: "UTC" };
-  assert.equal((await writeNarration({}, "a", args, { credentials: async () => ({}) })).source, "template");
-  t.mock.method(globalThis, "fetch", async () => new Response("no", { status: 500 }));
-  assert.equal((await writeNarration({}, "a", args, { credentials: async () => ({ gemini: { apiKey: "k" } }) })).source, "template");
-  t.mock.restoreAll();
-  t.mock.method(globalThis, "fetch", async () => Response.json({ candidates: [{ content: { parts: [{ text: "Hôm nay có ba sự kiện, đáng chú ý nhất là lúc tám giờ ở cổng." }] } }] }));
-  const ok = await writeNarration({}, "a", args, { credentials: async () => ({ gemini: { apiKey: "k" } }) });
-  assert.equal(ok.source, "ai");
+test("voice speaks only the general intro and scenes already analysed by high security", () => {
+  assert.equal(sceneCue(ev(1, 0, "cong", { people_count: 1 }), "UTC"), null);
+  assert.equal(sceneCue(ev(2, 30, "cong", { scene_json: '{"pending":true}' }), "UTC"), null);
+  const cue = sceneCue(ev(3, 60 * 7 + 23, "cong", { scene_json: JSON.stringify({ summary: "Người lạ đứng trước cổng", threat: 3 }) }), "UTC");
+  assert.equal(cue, "07 giờ 23. Đáng ngờ. Người lạ đứng trước cổng");
+  const hourly = new Array(24).fill(1); hourly[15] = 50; hourly[16] = 40; hourly[17] = 30;
+  assert.equal(introText({ day: "2026-11-13", totalEvents: 639, hourly, alerts: 2 }), "Tóm tắt ngày 2026-11-13. 639 sự kiện. Cao điểm từ 15 đến 18 giờ. Có 2 cảnh cần chú ý.");
+  assert.match(introText({ day: "d", totalEvents: 5, hourly: new Array(24).fill(0), cameraName: "Cổng" }), /camera Cổng\. 5 sự kiện\.$/);
 });
 
 test("synthesizeSpeech tries providers in order, skips failures, null when all fail", async (t) => {
@@ -193,4 +181,19 @@ test("per-camera summary filters by camera, uses a shorter reel and its own key"
   const select = sqls.find((q) => q.sql.includes("people_count"));
   assert.deepEqual(select.args.slice(-2), ["cam-x", "cam-x"]);
   assert.ok(sqls.some((q) => q.sql.includes("ON CONFLICT (account_id, day, camera)") && q.args.includes("cam-x")));
+});
+
+test("high-security alert events are never merged away by the burst de-duplication", () => {
+  const picked = selectClips([ev(1, 0, "a"), ev(2, 1, "b", { threat_level: 3 }), ev(3, 2, "c", { threat_level: 3 }), ev(4, 3, "d")], { targetClips: 10 });
+  assert.ok([2, 3].every((id) => picked.some((p) => p.id === id))); // both alerts kept
+});
+
+test("mixCues places scene cues at their time without overlapping and keeps the video length", { skip: !hasFfmpeg }, async () => {
+  const video = spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=15:duration=20", "-pix_fmt", "yuv420p", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1"], { maxBuffer: 50e6 }).stdout;
+  const pcm = (s) => Buffer.alloc(24000 * 2 * s);
+  const mixed = await mixCues(video, [{ at: 0, speech: { bytes: pcm(3), format: "pcm" } }, { at: 1, speech: { bytes: pcm(2), format: "pcm" } }, { at: 12, speech: { bytes: pcm(2), format: "pcm" } }]);
+  const dur = Number(String(spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", "-i", "pipe:0"], { input: mixed }).stdout).trim());
+  assert.ok(dur >= 19.5 && dur < 21, `duration ${dur}`);
+  const a = String(spawnSync("ffprobe", ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name", "-of", "csv=p=0", "-i", "pipe:0"], { input: mixed }).stdout);
+  assert.match(a, /aac/);
 });

@@ -6,7 +6,7 @@ import { getDb } from "./db.js";
 import { getIntegration } from "./integrations.js";
 import { getObject, putObject, resolveStorageChain } from "./objectStorage.js";
 import { sendVideoAlert } from "./telegram.js";
-import { narrationFacts, synthesizeSpeech, writeNarration } from "./summaryNarration.js";
+import { introText, sceneCue, synthesizeSpeech } from "./summaryNarration.js";
 
 export const SUMMARY_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS daily_summaries (
@@ -48,7 +48,10 @@ export function scoreEvent(event) {
 }
 
 export function selectClips(events, { targetClips = Math.floor(targetSeconds() / CLIP_SECONDS), perCamera } = {}) {
-  const rows = events.map((e) => ({ ...e, ms: new Date(e.timestamp).getTime(), score: scoreEvent(e) })).sort((a, b) => a.ms - b.ms);
+  const all = events.map((e) => ({ ...e, ms: new Date(e.timestamp).getTime(), score: scoreEvent(e) })).sort((a, b) => a.ms - b.ms);
+  // High-security alerts (threat >= 2) are never merged away by the burst de-duplication.
+  const alerts = all.filter((e) => Number(e.threat_level) >= 2);
+  const rows = all.filter((e) => !(Number(e.threat_level) >= 2));
   // 1) burst clusters: keep the best event per ~3 minute window
   const clusters = [];
   for (const row of rows) {
@@ -56,7 +59,7 @@ export function selectClips(events, { targetClips = Math.floor(targetSeconds() /
     if (last && row.ms - last.end <= CLUSTER_MS) { last.end = row.ms; if (row.score > last.best.score) last.best = row; }
     else clusters.push({ end: row.ms, best: row });
   }
-  let picks = clusters.map((c) => c.best);
+  let picks = [...clusters.map((c) => c.best), ...alerts];
   // 2) per-camera cap so one noisy camera cannot own the video
   const cameras = new Set(picks.map((p) => p.camera)).size || 1;
   const cap = perCamera || Math.max(2, Math.ceil((targetClips / cameras) * 1.5));
@@ -149,7 +152,7 @@ export async function renderSummary(env, accountId, clips, { fetchClip = downloa
         await rm(src, { force: true });
         const duration = await probeDuration(out);
         if (duration < FADE * 3) throw new Error("clip too short");
-        parts.push({ file: out, duration });
+        parts.push({ file: out, duration, clip });
       } catch (error) {
         console.error(`[daily-summary] clip ${clip.id} skipped:`, error.message || error);
       }
@@ -171,7 +174,7 @@ export async function renderSummary(env, accountId, clips, { fetchClip = downloa
     }
     const final = join(dir, "final.mp4");
     await run("ffmpeg", ["-y", "-i", level[0].file, "-c", "copy", "-movflags", "+faststart", final]);
-    return { bytes: await readFile(final), used: parts.length };
+    return { bytes: await readFile(final), used: parts.length, usedClips: parts.map((p) => p.clip) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -212,28 +215,43 @@ function probeDuration(path) {
 
 // Lay the voice-over on the finished video. The shorter track is padded
 // (frozen last frame / silence) so neither is cut off.
-export async function mixNarration(videoBytes, speech) {
+// Voice cues: [{at: seconds, speech: {bytes, format}}]. Each cue starts at its
+// scene (or right after the previous cue ends, never overlapping); the video is
+// extended with a frozen last frame only if speech runs past its end.
+export async function mixCues(videoBytes, cues) {
   const dir = await mkdtemp(join(tmpdir(), "daymix-"));
   try {
     const video = join(dir, "v.mp4");
-    const audio = join(dir, `a.${speech.format === "pcm" ? "pcm" : speech.format}`);
     const out = join(dir, "out.mp4");
     await writeFile(video, videoBytes);
-    await writeFile(audio, speech.bytes);
-    const input = speech.format === "pcm" ? ["-f", "s16le", "-ar", "24000", "-ac", "1", "-i", audio] : ["-i", audio];
-    const wav = join(dir, "n.wav");
-    await run("ffmpeg", ["-y", ...input, "-ar", "44100", "-ac", "1", wav]);
-    const [vd, ad] = await Promise.all([probeDuration(video), probeDuration(wav)]);
-    const extra = Math.max(0, ad - vd + 0.5);
-    const total = Math.max(vd, ad + 0.5);
-    await run("ffmpeg", ["-y", "-i", video, "-i", wav,
+    const wavs = [];
+    for (const [i, cue] of cues.entries()) {
+      const audio = join(dir, `a${i}.${cue.speech.format}`);
+      await writeFile(audio, cue.speech.bytes);
+      const input = cue.speech.format === "pcm" ? ["-f", "s16le", "-ar", "24000", "-ac", "1", "-i", audio] : ["-i", audio];
+      const wav = join(dir, `n${i}.wav`);
+      await run("ffmpeg", ["-y", ...input, "-ar", "44100", "-ac", "1", wav]);
+      wavs.push({ wav, duration: await probeDuration(wav), at: cue.at });
+    }
+    let cursor = 0;
+    for (const w of wavs) { w.start = Math.max(w.at, cursor); cursor = w.start + w.duration + 0.3; }
+    const vd = await probeDuration(video);
+    const speechEnd = wavs.length ? wavs.at(-1).start + wavs.at(-1).duration : 0;
+    const extra = Math.max(0, speechEnd - vd + 0.5);
+    const total = Math.max(vd, speechEnd + 0.5);
+    const delays = wavs.map((w, i) => `[${i + 1}:a]adelay=${Math.round(w.start * 1000)}|${Math.round(w.start * 1000)}[a${i}]`);
+    const mixIn = wavs.map((_, i) => `[a${i}]`).join("");
+    const graph = [...delays, wavs.length > 1 ? `${mixIn}amix=inputs=${wavs.length}:normalize=0:duration=longest,apad[aout]` : `${mixIn}apad[aout]`].join(";");
+    await run("ffmpeg", ["-y", "-i", video, ...wavs.flatMap((w) => ["-i", w.wav]), "-filter_complex", graph,
       ...(extra > 0 ? ["-vf", `tpad=stop_mode=clone:stop_duration=${extra.toFixed(2)}`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p"] : ["-c:v", "copy"]),
-      "-af", "apad", "-c:a", "aac", "-b:a", "96k", "-t", total.toFixed(2), "-map", "0:v:0", "-map", "1:a:0", "-movflags", "+faststart", out], { timeoutMs: 180_000 });
+      "-c:a", "aac", "-b:a", "96k", "-t", total.toFixed(2), "-map", "0:v:0", "-map", "[aout]", "-movflags", "+faststart", out], { timeoutMs: 180_000 });
     return await readFile(out);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+export const mixNarration = (videoBytes, speech) => mixCues(videoBytes, [{ at: 0, speech }]);
 
 // Events per local hour over the WHOLE day (not only the chosen clips), so the
 // voice-over can describe the day's rhythm even though the video is a highlight reel.
@@ -281,14 +299,23 @@ export async function generateDailySummary(env, accountId, day, deps = {}, camer
       await db.execute({ sql: "UPDATE daily_summaries SET status = 'empty', event_count = 0, clip_count = 0, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date AND camera = ?", args: [accountId, day, camera] });
       return { status: "empty" };
     }
-    let { bytes, used } = await (deps.render || renderSummary)(env, accountId, clips, { timeline: { hourly: hourlyCounts(events), allMs: events.map((e) => new Date(e.timestamp).getTime()).sort((a, b) => a - b) } });
-    let narration = null;
+    let { bytes, used, usedClips = clips } = await (deps.render || renderSummary)(env, accountId, clips, { timeline: { hourly: hourlyCounts(events), allMs: events.map((e) => new Date(e.timestamp).getTime()).sort((a, b) => a - b) } });
+    // Voice: a short general intro, plus one line per scene that the high-security
+    // analysis already described. No AI call here, nothing is guessed from frames.
+    const cueTexts = [];
+    usedClips.forEach((clip, i) => { const text = sceneCue(clip, TZ()); if (text) cueTexts.push({ at: i * CLIP_SECONDS, text }); });
+    const intro = introText({ day, totalEvents: events.length, hourly: hourlyCounts(events), cameraName, alerts: cueTexts.length });
+    let narration = intro;
+    if (cueTexts.length) narration += "\n" + cueTexts.map((c) => c.text).join("\n");
     if (env.DAILY_SUMMARY_VOICE !== "off") {
       try {
-        const written = await (deps.writeNarration || writeNarration)(env, accountId, { day, totalEvents: events.length, facts: narrationFacts(clips, TZ()), hourly: hourlyCounts(events), cameraName, tz: TZ() });
-        const speech = await (deps.speech || synthesizeSpeech)(env, accountId, written.text);
-        if (speech) { bytes = await (deps.mix || mixNarration)(bytes, speech); narration = written.text; }
-      } catch (error) { console.error("[daily-summary] narration skipped:", error.message || error); }
+        const cues = [];
+        for (const item of [{ at: 0, text: intro }, ...cueTexts]) {
+          const speech = await (deps.speech || synthesizeSpeech)(env, accountId, item.text);
+          if (speech) cues.push({ at: item.at, speech });
+        }
+        if (cues.length) bytes = await (deps.mix || mixCues)(bytes, cues);
+      } catch (error) { console.error("[daily-summary] voice skipped:", error.message || error); }
     }
     const key = `${accountId}/summaries/${day}${camera ? `-${camera}` : ""}.mp4`;
     let backend;
@@ -304,7 +331,7 @@ export async function generateDailySummary(env, accountId, day, deps = {}, camer
     });
     const telegram = await getIntegration(env, accountId, "telegram").catch(() => null);
     if (telegram && bytes.length < 49 * 1024 * 1024) {
-      await (deps.sendVideo || sendVideoAlert)(telegram, bytes, (narration ? `Tóm tắt${cameraName ? ` ${cameraName}` : ""} ngày ${day}: ${narration}` : `Tóm tắt${cameraName ? ` ${cameraName}` : ""} ngày ${day}: ${used} cảnh từ ${events.length} sự kiện`).slice(0, 1000)).catch((e) => console.error("[daily-summary] telegram", e.message || e));
+      await (deps.sendVideo || sendVideoAlert)(telegram, bytes, narration.slice(0, 1000)).catch((e) => console.error("[daily-summary] telegram", e.message || e));
     }
     return { status: "ready", clips: used, events: events.length, key, backend };
   } catch (error) {
