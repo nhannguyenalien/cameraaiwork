@@ -24,7 +24,7 @@ export function narrationFacts(clips, tz) {
   return clips.map((event) => {
     const scene = sceneOf(event);
     const what = scene?.summary || (Number(event.people_count) > 0 ? (event.person_id ? "có người quen đi qua" : "có người lạ xuất hiện") : "có chuyển động");
-    return { time: hhmm(event.timestamp, tz), camera: event.camera || "camera", text: what, threat: Number(event.threat_level) || 0 };
+    return { time: hhmm(event.timestamp, tz), camera: event.camera_name || event.camera || "camera", text: what, threat: Number(event.threat_level) || 0 };
   });
 }
 

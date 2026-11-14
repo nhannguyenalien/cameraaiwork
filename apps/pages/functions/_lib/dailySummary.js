@@ -94,7 +94,7 @@ function run(cmd, args, { timeoutMs = 120_000 } = {}) {
 
 function label(event) {
   const time = new Intl.DateTimeFormat("en-GB", { timeZone: TZ(), hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(event.timestamp));
-  return `${time}  ${String(event.camera || "").replace(/[^\w\- ]/g, "")}`.trim();
+  return `${time}  ${String(event.camera_name || event.camera || "").replace(/[^\p{L}\p{N}\- ]/gu, "")}`.trim();
 }
 
 // Cut CLIP_SECONDS from the middle of each clip, normalise to 720p/25fps
@@ -177,9 +177,9 @@ export function yesterday(now = new Date()) {
 
 async function dayEvents(db, accountId, day) {
   const result = await db.execute({
-    sql: `SELECT e.id, e.camera, e.timestamp, e.person_id, e.threat_level, e.scene_json, e.video_key, e.storage_backend,
+    sql: `SELECT e.id, e.camera, COALESCE(NULLIF(c.name, ''), e.camera) AS camera_name, e.timestamp, e.person_id, e.threat_level, e.scene_json, e.video_key, e.storage_backend,
                  (SELECT COUNT(*) FROM event_people p WHERE p.event_id = e.id) AS people_count
-          FROM events e
+          FROM events e LEFT JOIN cameras c ON c.id = e.camera AND c.account_id = e.account_id
           WHERE e.account_id = ? AND e.video_key IS NOT NULL AND e.video_status = 'ready'
             AND (e.timestamp AT TIME ZONE ?)::date = ?::date
           ORDER BY e.timestamp ASC`,
