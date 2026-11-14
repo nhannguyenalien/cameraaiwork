@@ -35,7 +35,8 @@ test("renderSummary joins clips with ffmpeg and skips unreadable ones", { skip: 
   const sample = spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=15:duration=8", "-pix_fmt", "yuv420p", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1"], { maxBuffer: 50e6 }).stdout;
   assert.ok(sample.length > 1000);
   const clips = [ev(1, 0, "cam1"), ev(2, 10, "cam2"), ev(3, 20, "cam3")];
-  const { bytes, used } = await renderSummary({}, "a", clips, { fetchClip: async (_e, _a, clip) => { if (clip.id === 2) throw new Error("gone"); return sample; } });
+  const hourly = new Array(24).fill(0); hourly[0] = 5; hourly[7] = 20;
+  const { bytes, used } = await renderSummary({}, "a", clips, { timeline: { hourly, allMs: clips.map((c) => Date.parse(c.timestamp)) }, fetchClip: async (_e, _a, clip) => { if (clip.id === 2) throw new Error("gone"); return sample; } });
   assert.equal(used, 2);
   const probe = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", "-i", "pipe:0"], { input: bytes });
   const duration = Number(String(probe.stdout).trim());

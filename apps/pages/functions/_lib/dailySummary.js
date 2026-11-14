@@ -100,7 +100,35 @@ function label(event) {
 // Cut CLIP_SECONDS from the middle of each clip, normalise to 720p/25fps
 // h264 (no audio) and concatenate. Clips that fail to download/convert are
 // skipped. Returns the mp4 bytes and how many clips were used.
-export async function renderSummary(env, accountId, clips, { fetchClip = downloadClip } = {}) {
+function minuteOfDay(timestamp) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: TZ(), hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(timestamp));
+  return (Number(parts.find((p) => p.type === "hour").value) % 24) * 60 + Number(parts.find((p) => p.type === "minute").value);
+}
+
+// ffmpeg filters for the bottom timeline: one bar per hour sized by the number
+// of events in that hour (ALL events of the day), a red marker at this clip's
+// time, hour ticks, and "so far X/Y events" so the whole day is represented.
+export function timelineFilters(clip, timeline) {
+  if (!timeline?.hourly) return [];
+  const W = 1280, H = 720, stripH = 56, y0 = H - stripH, bar = W / 24, maxBar = 34;
+  const max = Math.max(1, ...timeline.hourly);
+  const filters = [`drawbox=x=0:y=${y0}:w=${W}:h=${stripH}:color=black@0.55:t=fill`];
+  timeline.hourly.forEach((count, hour) => {
+    if (!count) return;
+    const h = Math.max(2, Math.round((count / max) * maxBar));
+    filters.push(`drawbox=x=${Math.round(hour * bar + 3)}:y=${H - 18 - h}:w=${Math.round(bar - 6)}:h=${h}:color=white@0.6:t=fill`);
+  });
+  const x = Math.min(W - 4, Math.round((minuteOfDay(clip.timestamp) / 1440) * W));
+  filters.push(`drawbox=x=${x}:y=${y0}:w=4:h=${stripH}:color=red@0.95:t=fill`);
+  for (const hour of [0, 6, 12, 18]) filters.push(`drawtext=text='${hour}h':x=${Math.round(hour * bar + 4)}:y=${H - 18}:fontsize=14:fontcolor=white@0.8`);
+  if (timeline.allMs?.length) {
+    const sofar = timeline.allMs.filter((ms) => ms <= new Date(clip.timestamp).getTime()).length;
+    filters.push(`drawtext=text='${sofar}/${timeline.allMs.length} sự kiện':x=w-tw-24:y=${y0 - 40}:fontsize=26:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=8`);
+  }
+  return filters;
+}
+
+export async function renderSummary(env, accountId, clips, { fetchClip = downloadClip, timeline } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "daysum-"));
   try {
     const parts = [];
@@ -111,7 +139,7 @@ export async function renderSummary(env, accountId, clips, { fetchClip = downloa
         const out = join(dir, `part-${parts.length}.mp4`);
         const text = label(clip).replace(/:/g, "\\:");
         await run("ffmpeg", ["-y", "-ss", "2", "-i", src, "-t", String(CLIP_SECONDS), "-an",
-          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25,drawtext=text='${text}':x=24:y=h-48:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=8,format=yuv420p`,
+          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=25,drawtext=text='${text}':x=24:y=h-${timeline?.hourly ? 100 : 48}:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=8${["", ...timelineFilters(clip, timeline)].join(",")},format=yuv420p`,
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-movflags", "+faststart", out]);
         parts.push(out);
       } catch (error) {
@@ -212,7 +240,7 @@ export async function generateDailySummary(env, accountId, day, deps = {}) {
       await db.execute({ sql: "UPDATE daily_summaries SET status = 'empty', event_count = 0, clip_count = 0, finished_at = CURRENT_TIMESTAMP WHERE account_id = ? AND day = ?::date", args: [accountId, day] });
       return { status: "empty" };
     }
-    let { bytes, used } = await (deps.render || renderSummary)(env, accountId, clips);
+    let { bytes, used } = await (deps.render || renderSummary)(env, accountId, clips, { timeline: { hourly: hourlyCounts(events), allMs: events.map((e) => new Date(e.timestamp).getTime()).sort((a, b) => a - b) } });
     let narration = null;
     if (env.DAILY_SUMMARY_VOICE !== "off") {
       try {
