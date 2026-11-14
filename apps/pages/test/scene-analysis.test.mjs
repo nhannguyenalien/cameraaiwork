@@ -5,14 +5,16 @@ import { analyzeScene, parseScene, runSceneCheck, sceneAllowance } from "../func
 const camera = { account_id: "a", site_id: "s", stream: "cam1", name: "Cổng", security_level: "high" };
 const sceneText = JSON.stringify({ threat: 2, role: "suspicious", people: 1, carrying: "túi", behavior: "nhìn vào nhà", summary: "Một người lảng vảng trước cổng", opening: "Xin chào, anh cần gì ạ?" });
 
-function makeEnv({ recent = false, todayCount = 0, gemini = true, openai = false } = {}) {
+function makeEnv({ recent = false, todayCount = 0, gemini = true, openai = false, plan = "pro", platformUsed = 0, customerGemini = false } = {}) {
   const log = { updates: [], queries: [] };
   const env = { SCENE_ANALYSIS_DAILY_CAP: "5" };
   if (gemini) env.GEMINI_API_KEY = "g-key";
   if (openai) env.OPENAI_API_KEY = "o-key";
   env.DB_CLIENT = { unsafe: async (sql, args) => {
     log.queries.push(sql);
-    if (sql.includes("SELECT encrypted_config")) return [];
+    if (sql.includes("SELECT encrypted_config")) return customerGemini && args[1] === "gemini" ? [{ encrypted_config: customerGemini }] : [];
+    if (sql.includes("FROM accounts")) return [{ plan, subscription_status: plan === "pro" ? "active" : "inactive" }];
+    if (sql.includes("scene_json LIKE")) return [{ n: platformUsed }];
     if (sql.includes("LIMIT 1")) return recent ? [{ "?column?": 1 }] : [];
     if (sql.includes("COUNT(*)")) return [{ n: todayCount }];
     if (sql.includes("UPDATE events")) { log.updates.push({ sql, args }); return []; }
@@ -108,4 +110,53 @@ test("butler gets recent finished scene as context and summary mentions it", asy
   assert.equal(sceneContext(null), "");
   assert.match(summarize([{ who: "scene", text: "Một người lảng vảng" }, { who: "visitor", text: "giao hàng" }], false), /Khách nói: giao hàng Camera thấy: Một người lảng vảng/);
   assert.match(summarize([{ who: "scene", text: "Một người lảng vảng" }], false), /chưa nói gì rõ ràng\. Camera thấy/);
+});
+
+import { encryptConfig } from "../functions/_lib/integrations.js";
+
+const bytes = Buffer.from([0xff, 0xd8, 1]);
+const geminiOk = () => Response.json({ candidates: [{ content: { parts: [{ text: sceneText }] } }] });
+
+test("Pro accounts use the platform key first and the scene is tagged source=platform", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, init) => { calls.push(init.headers["x-goog-api-key"]); return geminiOk(); });
+  const scene = await analyzeScene(makeEnv({ plan: "pro" }).env, "a", bytes);
+  assert.equal(scene.source, "platform");
+  assert.deepEqual(calls, ["g-key"]);
+});
+
+test("Free accounts never use the platform key (only their own, if any)", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, init) => { calls.push(init.headers["x-goog-api-key"]); return geminiOk(); });
+  assert.equal(await analyzeScene(makeEnv({ plan: "free" }).env, "a", bytes), null);
+  assert.deepEqual(calls, []);
+  const own = makeEnv({ plan: "free", gemini: false });
+  own.env.CUSTOMER_SECRETS_KEY = Buffer.alloc(32, 7).toString("base64");
+  const encrypted = await encryptConfig(own.env, { apiKey: "own-key" });
+  const withOwn = makeEnv({ plan: "free", customerGemini: encrypted });
+  withOwn.env.CUSTOMER_SECRETS_KEY = own.env.CUSTOMER_SECRETS_KEY;
+  const scene = await analyzeScene(withOwn.env, "a", bytes);
+  assert.equal(scene.source, "customer");
+  assert.deepEqual(calls, ["own-key"]);
+});
+
+test("when the platform call fails a Pro account falls back to its own key; the platform daily cap fails closed", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    const key = init.headers["x-goog-api-key"]; calls.push(key);
+    return key === "g-key" ? new Response("quota", { status: 429 }) : geminiOk();
+  });
+  const base = makeEnv({ plan: "pro" });
+  base.env.CUSTOMER_SECRETS_KEY = Buffer.alloc(32, 7).toString("base64");
+  const encrypted = await encryptConfig(base.env, { apiKey: "own-key" });
+  const env2 = makeEnv({ plan: "pro", customerGemini: encrypted });
+  env2.env.CUSTOMER_SECRETS_KEY = base.env.CUSTOMER_SECRETS_KEY;
+  const scene = await analyzeScene(env2.env, "a", bytes);
+  assert.equal(scene.source, "customer");
+  assert.deepEqual(calls, ["g-key", "own-key"]);
+
+  calls.length = 0;
+  assert.equal(await analyzeScene(makeEnv({ plan: "pro", platformUsed: 1500 }).env, "a", bytes), null, "cap reached: no platform call");
+  assert.deepEqual(calls, []);
 });

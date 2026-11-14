@@ -3,7 +3,8 @@
 // scene like a security guard would. One call per visit, never per frame:
 // per-camera cooldown + per-account daily cap, and named (known) people skip it.
 import { getDb } from "./db.js";
-import { getIntegration, loadAiCredentials } from "./integrations.js";
+import { getIntegration } from "./integrations.js";
+import { effectivePlanForAccount } from "./plans.js";
 import { sendTextAlert } from "./telegram.js";
 
 // Idempotent columns this feature needs. Lives under functions/ (not migrations/)
@@ -77,17 +78,48 @@ async function callOpenAI(config, jpeg, signal) {
   return { text, model };
 }
 
-// Tries the account's configured providers (Gemini first: cheapest) and
-// returns the parsed scene, or null when none is configured / all fail.
+const PLATFORM_DAILY_CAP = 1500; // all Pro accounts together, per rolling day
+
+// Who pays: Pro accounts use the PLATFORM keys (GEMINI_API_KEY / OPENAI_API_KEY in
+// the server env) first, so customers need no key of their own; their own saved
+// key is only a fallback. Free accounts only ever use their own key. A global
+// daily cap bounds what the platform key can spend.
+async function sceneProviders(env, accountId) {
+  const [customerGemini, customerOpenAI, plan] = await Promise.all([
+    getIntegration(env, accountId, "gemini").catch(() => null),
+    getIntegration(env, accountId, "openai").catch(() => null),
+    effectivePlanForAccount(env, accountId).catch(() => "free"),
+  ]);
+  const list = [];
+  if (plan === "pro" && (env.GEMINI_API_KEY || env.OPENAI_API_KEY) && await platformBudgetLeft(env)) {
+    if (env.GEMINI_API_KEY) list.push({ name: "gemini", call: callGemini, source: "platform", config: { apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL } });
+    if (env.OPENAI_API_KEY) list.push({ name: "openai", call: callOpenAI, source: "platform", config: { apiKey: env.OPENAI_API_KEY, model: env.OPENAI_MODEL } });
+  }
+  if (customerGemini?.apiKey) list.push({ name: "gemini", call: callGemini, source: "customer", config: customerGemini });
+  if (customerOpenAI?.apiKey) list.push({ name: "openai", call: callOpenAI, source: "customer", config: customerOpenAI });
+  return list;
+}
+
+async function platformBudgetLeft(env) {
+  const cap = Number(env.SCENE_PLATFORM_DAILY_CAP) || PLATFORM_DAILY_CAP;
+  try {
+    const result = await getDb(env, "_lib.sceneAnalysis").execute({
+      sql: `SELECT COUNT(*) AS n FROM events WHERE scene_json LIKE '%"source":"platform"%' AND timestamp > CURRENT_TIMESTAMP - INTERVAL '1 day'`,
+      args: [],
+    });
+    return Number(result.rows[0]?.n) < cap;
+  } catch (error) { console.error("[scene] platform budget check failed:", error.message || error); return false; } // fail closed
+}
+
+// Tries the providers in order and returns the parsed scene (tagged with the
+// provider/source that produced it), or null when none is available / all fail.
 export async function analyzeScene(env, accountId, jpeg) {
-  const credentials = await loadAiCredentials(env, accountId);
-  const attempts = [["gemini", callGemini], ["openai", callOpenAI]].filter(([name]) => credentials[name]?.apiKey);
-  for (const [name, call] of attempts) {
+  for (const provider of await sceneProviders(env, accountId)) {
     try {
-      const { text, model } = await call(credentials[name], jpeg, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
+      const { text, model } = await provider.call(provider.config, jpeg, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
       const scene = parseScene(text);
-      if (scene) return { ...scene, provider: name, model };
-    } catch (error) { console.error(`[scene] ${name} lỗi:`, error.message || error); }
+      if (scene) return { ...scene, provider: provider.name, source: provider.source, model };
+    } catch (error) { console.error(`[scene] ${provider.source}/${provider.name} lỗi:`, error.message || error); }
   }
   return null;
 }
