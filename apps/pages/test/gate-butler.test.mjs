@@ -15,7 +15,7 @@ async function setup() {
   const pg = new PGlite();
   await pg.exec(`CREATE TABLE sites(id text PRIMARY KEY, account_id text, relay_secret text);
     CREATE TABLE accounts(id text PRIMARY KEY, plan text DEFAULT 'free', subscription_status text, clip_duration_seconds integer, video_retention_days integer DEFAULT 7);
-    CREATE TABLE cameras(id text PRIMARY KEY, site_id text, account_id text, stream text, name text, record_on_person integer DEFAULT 1, clip_duration_seconds integer);
+    CREATE TABLE cameras(id text PRIMARY KEY, site_id text, account_id text, stream text, name text, record_on_person integer DEFAULT 1, clip_duration_seconds integer, daily_summary boolean NOT NULL DEFAULT true);
     CREATE TABLE agent_messages(id serial PRIMARY KEY, account_id text, role text, content text, source text, created_at timestamptz DEFAULT now());
     CREATE TABLE account_integrations(account_id text, provider text, encrypted_config text, updated_at timestamptz DEFAULT now(), PRIMARY KEY(account_id, provider));
     INSERT INTO accounts VALUES ('acc','free','inactive',10);
@@ -102,4 +102,18 @@ test('gate butler: enabling needs a valid key, relay endpoints enforce auth, tur
     await patch({ securityLevel: 'normal' });
     assert.equal((await greeting(relay('greeting', env, { type: null }))).status, 403, 'normal camera has no butler');
   } finally { globalThis.fetch = realFetch; await pg.close(); }
+});
+
+test('camera setting dailySummary can be turned off and on (default on)', async () => {
+  const { pg, env } = await setup();
+  const patch = body => saveSettings({ env, data: { accountId: 'acc' }, params: { site: 'site1', camera: 'cam1' },
+    request: new Request('https://t', { method: 'PATCH', body: JSON.stringify(body) }) });
+  assert.equal((await pg.query("SELECT daily_summary FROM cameras WHERE id='cam1'")).rows[0].daily_summary, true);
+  const off = await patch({ dailySummary: false });
+  assert.equal(off.status, 200);
+  assert.equal((await off.json()).dailySummary, false);
+  assert.equal((await pg.query("SELECT daily_summary FROM cameras WHERE id='cam1'")).rows[0].daily_summary, false);
+  assert.equal((await patch({ dailySummary: 'yes' })).status, 400);
+  assert.equal((await (await patch({ recordOnPerson: true })).json()).dailySummary, false, 'other edits keep the value');
+  assert.equal((await (await patch({ dailySummary: true })).json()).dailySummary, true);
 });

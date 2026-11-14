@@ -4585,5 +4585,7 @@ window.CameraTranslations = {
   "Không có video trong ngày": {"en": "No video that day", "ja": "この日の動画はありません", "fr": "Aucune vidéo ce jour-là", "ko": "해당 날짜에 영상이 없습니다", "es": "No hay vídeo ese día"},
   "Đang chờ": {"en": "Waiting", "ja": "待機中", "fr": "En attente", "ko": "대기 중", "es": "En espera"},
   "Xem": {"en": "View", "ja": "表示", "fr": "Voir", "ko": "보기", "es": "Ver"},
-  "Cả hệ thống": {"en": "Whole system", "ja": "システム全体", "fr": "Tout le système", "ko": "전체 시스템", "es": "Todo el sistema"}
+  "Cả hệ thống": {"en": "Whole system", "ja": "システム全体", "fr": "Tout le système", "ko": "전체 시스템", "es": "Todo el sistema"},
+  "Tự tạo video tóm tắt mỗi đêm": {"en": "Create a summary video every night", "ja": "毎晩ダイジェスト動画を自動作成", "fr": "Créer une vidéo récapitulative chaque nuit", "ko": "매일 밤 요약 영상 자동 생성", "es": "Crear un vídeo resumen cada noche"},
+  "Mỗi đêm hệ thống ghép các cảnh chính của camera này trong ngày hôm trước thành một video ngắn.": {"en": "Every night the system stitches this camera's main scenes from the previous day into one short video.", "ja": "毎晩、前日のこのカメラの主なシーンをつなげて短い動画を作成します。", "fr": "Chaque nuit, le système assemble les principales scènes de cette caméra de la veille en une courte vidéo.", "ko": "매일 밤 전날 이 카메라의 주요 장면을 이어 붙여 짧은 영상을 만듭니다.", "es": "Cada noche el sistema une las escenas principales de esta cámara del día anterior en un vídeo corto."}
 };

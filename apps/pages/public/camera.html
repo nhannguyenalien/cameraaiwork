@@ -107,6 +107,8 @@
             <select id="clip-duration" class="form-select"><option value="default">Theo cấu hình chung</option><option value="10">10 giây</option><option value="30">30 giây · Pro</option><option value="60">1 phút · Pro</option></select>
             <div id="clip-duration-note" class="form-hint"></div>
             <hr class="my-3" />
+            <label class="form-check form-switch m-0"><input id="daily-summary" class="form-check-input" type="checkbox" checked /><span class="form-check-label"><strong>Tự tạo video tóm tắt mỗi đêm</strong><br><span class="text-secondary small">Mỗi đêm hệ thống ghép các cảnh chính của camera này trong ngày hôm trước thành một video ngắn.</span></span></label>
+            <hr class="my-3" />
             <label class="form-check form-switch m-0"><input id="gate-butler" class="form-check-input" type="checkbox" /><span class="form-check-label"><strong>High security · quản gia cổng</strong><br><span class="text-secondary small">Khi có người đến, camera chào và hỏi qua loa (nói chuyện theo lượt), rồi tóm tắt cho chủ nhà. Quản gia chỉ trò chuyện và báo cáo, không mở được cổng.</span></span></label>
             <div id="gate-butler-key-row" class="mt-2">
               <label class="form-label" for="gate-butler-key">Khóa API SchoolsAI của camera này</label>
@@ -190,8 +192,8 @@
 </main>
 <div id="timeline-preview" class="timeline-preview" role="tooltip" aria-hidden="true"></div>
 
-<script src="/ui-translations.js?v=20261114-2"></script>
-<script src="/ui-i18n-fallback.js?v=20261114-2"></script>
+<script src="/ui-translations.js?v=20261114-3"></script>
+<script src="/ui-i18n-fallback.js?v=20261114-3"></script>
 <script>
 const API_KEY_STORAGE = 'cameraaiwork_logged_in';
 localStorage.removeItem('cameraaiwork_api_key');
@@ -259,6 +261,7 @@ async function init() {
   document.getElementById('camera-name').textContent = camera.cameraName || camera.cameraId;
   document.getElementById('camera-name-input').value = camera.cameraName || '';
   document.getElementById('record-person').checked = Number(camera.recordOnPerson ?? 1) === 1;
+  document.getElementById('daily-summary').checked = camera.dailySummary !== false;
   renderGateButler();
   const duration = document.getElementById('clip-duration');
   duration.value = camera.clipDurationOverrideSeconds == null ? 'default' : String(camera.clipDurationOverrideSeconds);
@@ -405,6 +408,13 @@ document.getElementById('gate-butler-key-save').addEventListener('click', async 
 document.getElementById('record-person').addEventListener('change', async event => {
   const input = event.currentTarget; input.disabled=true;
   try { await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({recordOnPerson:input.checked})}); }
+  catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
+  finally { input.disabled=false; }
+});
+
+document.getElementById('daily-summary').addEventListener('change', async event => {
+  const input = event.currentTarget; input.disabled=true;
+  try { const saved = await api(endpoint('settings'), {method:'PATCH', body:JSON.stringify({dailySummary:input.checked})}); camera.dailySummary = saved.dailySummary; }
   catch (error) { input.checked=!input.checked; document.getElementById('camera-status').textContent=error.message; }
   finally { input.disabled=false; }
 });

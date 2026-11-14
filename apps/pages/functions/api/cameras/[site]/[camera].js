@@ -16,6 +16,7 @@ export const onRequestGet = withErrorHandling(async ({ params, env, data }) => {
     stream: camera.stream,
     name: camera.name,
     recordOnPerson: Boolean(Number(camera.record_on_person)),
+    dailySummary: camera.daily_summary !== false,
     clipDurationSeconds: normalizeClipDuration(summary.plan, override ?? summary.clipDurationSeconds),
     clipDurationOverrideSeconds: override,
   });

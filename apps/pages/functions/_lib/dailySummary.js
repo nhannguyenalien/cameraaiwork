@@ -26,6 +26,7 @@ export const SUMMARY_STATEMENTS = [
   "ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS camera TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE daily_summaries DROP CONSTRAINT IF EXISTS daily_summaries_account_id_day_key",
   "CREATE UNIQUE INDEX IF NOT EXISTS daily_summaries_acct_day_cam ON daily_summaries (account_id, day, camera)",
+  "ALTER TABLE cameras ADD COLUMN IF NOT EXISTS daily_summary BOOLEAN NOT NULL DEFAULT true",
 ];
 
 const CLIP_SECONDS = 3.5;
@@ -341,21 +342,46 @@ export async function generateDailySummary(env, accountId, day, deps = {}, camer
 }
 
 // Nightly job: accounts with video yesterday and no finished summary, one at a time.
+// A summary blocks the nightly job while it is done, empty, still plausibly
+// running, or failed recently (no endless auto-retry; retry by hand).
+const BLOCKING = `(s.status IN ('ready','empty')
+  OR (s.status = 'running' AND s.created_at > CURRENT_TIMESTAMP - INTERVAL '30 minutes')
+  OR (s.status = 'error' AND s.finished_at > CURRENT_TIMESTAMP - INTERVAL '2 hours'))`;
+
+// Nightly job. Idempotent, so it may run on every tick inside a 4-hour window
+// (default 02:00-06:00 local) and simply picks up what is still missing:
+// 1) one whole-system video per account, 2) one per camera with daily_summary on.
 export async function runDailySummaries(env, now = new Date(), deps = {}) {
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: TZ(), hour: "2-digit", hour12: false }).format(now));
-  if (!deps.force && hour !== Number(process.env.DAILY_SUMMARY_HOUR || 2)) return { skipped: true };
+  const start = Number(process.env.DAILY_SUMMARY_HOUR || 2);
+  if (!deps.force && !(hour >= start && hour < start + 4)) return { skipped: true };
   const day = yesterday(now);
   const db = getDb(env, "_lib.dailySummary");
   const accounts = await db.execute({
     sql: `SELECT DISTINCT e.account_id FROM events e
           WHERE e.video_key IS NOT NULL AND (e.timestamp AT TIME ZONE ?)::date = ?::date
-            AND NOT EXISTS (SELECT 1 FROM daily_summaries s WHERE s.account_id = e.account_id AND s.camera = '' AND s.day = ?::date AND s.status IN ('ready','empty','running'))`,
+            AND NOT EXISTS (SELECT 1 FROM daily_summaries s WHERE s.account_id = e.account_id AND s.camera = '' AND s.day = ?::date AND ${BLOCKING})`,
     args: [TZ(), day, day],
   });
   const results = [];
   for (const row of accounts.rows) {
     try { results.push({ accountId: row.account_id, ...(await generateDailySummary(env, row.account_id, day, deps)) }); }
     catch (error) { results.push({ accountId: row.account_id, status: "error", error: String(error.message || error) }); }
+  }
+  if (process.env.DAILY_SUMMARY_PER_CAMERA !== "off") {
+    const cameras = await db.execute({
+      sql: `SELECT DISTINCT e.account_id, e.camera FROM events e
+            JOIN cameras c ON c.id = e.camera AND c.account_id = e.account_id
+            WHERE c.daily_summary AND e.video_key IS NOT NULL AND e.video_status = 'ready'
+              AND (e.timestamp AT TIME ZONE ?)::date = ?::date
+              AND NOT EXISTS (SELECT 1 FROM daily_summaries s WHERE s.account_id = e.account_id AND s.camera = e.camera AND s.day = ?::date AND ${BLOCKING})
+            ORDER BY e.account_id, e.camera`,
+      args: [TZ(), day, day],
+    });
+    for (const row of cameras.rows) {
+      try { results.push({ accountId: row.account_id, camera: row.camera, ...(await generateDailySummary(env, row.account_id, day, deps, row.camera)) }); }
+      catch (error) { results.push({ accountId: row.account_id, camera: row.camera, status: "error", error: String(error.message || error) }); }
+    }
   }
   return { day, results };
 }

@@ -197,3 +197,29 @@ test("mixCues places scene cues at their time without overlapping and keeps the 
   const a = String(spawnSync("ffprobe", ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name", "-of", "csv=p=0", "-i", "pipe:0"], { input: mixed }).stdout);
   assert.match(a, /aac/);
 });
+
+test("nightly job also builds one video per camera that has daily_summary on, within the 4h window", async () => {
+  const seen = [];
+  const unsafe = async (sql, args) => {
+    seen.push(sql.replace(/\s+/g, " "));
+    if (sql.includes("SELECT DISTINCT e.account_id, e.camera")) {
+      assert.match(sql, /c\.daily_summary/);
+      return [{ account_id: "a", camera: "cam-1" }, { account_id: "a", camera: "cam-2" }];
+    }
+    return [];
+  };
+  const env = { DB_CLIENT: { unsafe, begin: async (fn) => Promise.all(fn({ unsafe })) } };
+  const at = (h) => new Date(`2026-11-13T${String(h).padStart(2, "0")}:30:00Z`); // UTC+7 => local = h+7
+  process.env.DAILY_SUMMARY_TZ = "UTC";
+  try {
+    assert.deepEqual(await runDailySummaries(env, at(1)), { skipped: true });
+    assert.deepEqual(await runDailySummaries(env, at(6)), { skipped: true });
+    const out = await runDailySummaries(env, at(4));
+    assert.deepEqual(out.results.map((r) => r.camera), ["cam-1", "cam-2"]);
+    assert.ok(out.results.every((r) => r.status === "empty"));
+    process.env.DAILY_SUMMARY_PER_CAMERA = "off";
+    assert.deepEqual((await runDailySummaries(env, at(4))).results, []);
+  } finally {
+    delete process.env.DAILY_SUMMARY_TZ; delete process.env.DAILY_SUMMARY_PER_CAMERA;
+  }
+});
