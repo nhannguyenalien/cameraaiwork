@@ -9,6 +9,7 @@ import { loadRoutes, matchRoute } from "./router.js";
 import { createStatic, loadHeaders } from "./static.js";
 import { runStorageMaintenance } from "../functions/_lib/storageGuard.js";
 import { getDb } from "../functions/_lib/db.js";
+import { SUMMARY_STATEMENTS, runDailySummaries } from "../functions/_lib/dailySummary.js";
 import { SCENE_COLUMN_STATEMENTS as sceneColumns } from "../functions/_lib/sceneAnalysis.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -20,7 +21,7 @@ if (env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY) env.EVENTS_BUCKET = create
 else console.warn("R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY not set: event media storage is disabled");
 
 // Idempotent column additions the code depends on (also kept in schema.sql).
-try { for (const statement of sceneColumns) await getDb(env, "server.boot").execute(statement); }
+try { for (const statement of [...sceneColumns, ...SUMMARY_STATEMENTS]) await getDb(env, "server.boot").execute(statement); }
 catch (error) { console.error("boot migration failed:", error.message || error); }
 
 const { routes, middleware } = await loadRoutes(join(root, "functions"));
@@ -88,6 +89,18 @@ if (process.env.STORAGE_MAINTENANCE !== "off") {
   };
   setTimeout(tick, 60_000).unref();
   setInterval(tick, 10 * 60_000).unref();
+}
+
+// Nightly daily-summary video (hour set by DAILY_SUMMARY_HOUR, default 02:00 local).
+if (process.env.DAILY_SUMMARY !== "off") {
+  let busy = false;
+  setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try { const r = await runDailySummaries(env); if (!r.skipped) console.log("[daily-summary]", JSON.stringify(r)); }
+    catch (error) { console.error("[daily-summary] failed:", error.message || error); }
+    finally { busy = false; }
+  }, 10 * 60_000).unref();
 }
 
 for (const signal of ["SIGTERM", "SIGINT"]) {

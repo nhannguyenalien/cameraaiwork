@@ -302,3 +302,18 @@ CREATE INDEX IF NOT EXISTS idx_gate_visits_account ON gate_visits(account_id, st
 ALTER TABLE events ADD COLUMN IF NOT EXISTS scene_json TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS threat_level SMALLINT;
 CREATE INDEX IF NOT EXISTS idx_events_scene ON events(account_id, timestamp DESC) WHERE scene_json IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS daily_summaries (
+    id BIGSERIAL PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    day DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    video_key TEXT,
+    storage_backend TEXT,
+    clip_count INTEGER,
+    event_count INTEGER,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMPTZ,
+    UNIQUE (account_id, day)
+);

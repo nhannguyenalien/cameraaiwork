@@ -45,3 +45,17 @@ export async function sendTextAlert(config, text) {
   const cleanChatId = config.chatId.toString().replace("-100", "");
   return `https://t.me/c/${cleanChatId}/${msgId}`;
 }
+
+// Video file (daily summary). Bot API limit is 50 MB; callers check size.
+export async function sendVideoAlert(config, bytes, caption) {
+  if (!config?.botToken || !config?.chatId) return null;
+  const form = new FormData();
+  form.append("chat_id", config.chatId);
+  form.append("video", new Blob([bytes], { type: "video/mp4" }), "summary.mp4");
+  form.append("caption", caption);
+  form.append("supports_streaming", "true");
+  const res = await fetch(`https://api.telegram.org/bot${config.botToken}/sendVideo`, { method: "POST", body: form });
+  const data = await res.json();
+  if (!data.ok) throw new Error(`Telegram lỗi: ${JSON.stringify(data)}`);
+  return data.result.message_id;
+}
